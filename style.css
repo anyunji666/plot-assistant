@@ -1,0 +1,643 @@
+/* ===== 地图标记模块样式（已合并进「剧情助手」插件） ===== */
+
+/* ---- 右下角悬浮方形快捷按钮：最基础的 position:fixed 的 <div>。
+   之前用过 <dialog>.show() 想借助 top layer 避开祖先 transform 的影响，
+   但实测这个环境祖先链没有 transform 问题，dialog 反而自己的定位/命中测试不稳定
+   （出现过按钮被算到屏幕外、点哪都误触发的情况），所以退回最简单可控的写法。 ---- */
+#mm-fab {
+    position: fixed;
+    margin: 0;
+    padding: 0;
+    width: 44px;
+    height: 44px;
+    z-index: 999999;
+    background: var(--SmartThemeBlurTintColor, #2a2a2a);
+    color: var(--SmartThemeBodyColor, #eee);
+    border: 1px solid var(--SmartThemeBorderColor, rgba(255,255,255,0.15));
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+    user-select: none;
+    touch-action: none;
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+#mm-fab:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.55);
+    transform: scale(1.05);
+}
+
+#mm-fab:active {
+    cursor: grabbing;
+}
+
+#mm-fab .fa-map-location-dot {
+    font-size: 1.3em;
+    pointer-events: none;
+}
+
+/* dialog 元素本身渲染在浏览器"top layer"，天然不受任何祖先元素 transform/
+   filter/contain 影响定位（这正是之前用 position:fixed 的 div 在部分移动端
+   环境里会被挤到页面中间、无法铺满全屏的原因）。样式上把它撑满视口，
+   内部用 flex 把 #mm-modal 居中/铺满即可。 */
+#mm-modal-overlay {
+    margin: 0;
+    padding: 0;
+    border: none;
+    max-width: none;
+    max-height: none;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    background: transparent;
+    display: none;
+}
+
+#mm-modal-overlay[open] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#mm-modal-overlay::backdrop {
+    background: rgba(0, 0, 0, 0.55);
+}
+
+#mm-modal {
+    width: 92vw;
+    height: 88vh;
+    background: var(--SmartThemeBlurTintColor, #1e1e1e);
+    color: var(--SmartThemeBodyColor, #eee);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+}
+
+#mm-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+    flex-wrap: wrap;
+}
+
+#mm-toolbar .mm-title {
+    font-weight: bold;
+    margin-right: auto;
+}
+
+#mm-toolbar button, #mm-toolbar label.mm-file-btn, #mm-toolbar select {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: inherit;
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 0.85em;
+}
+
+#mm-toolbar select {
+    max-width: 180px;
+}
+
+#mm-toolbar button:hover, #mm-toolbar label.mm-file-btn:hover {
+    background: rgba(255,255,255,0.18);
+}
+
+#mm-close-btn {
+    background: rgba(255,80,80,0.25) !important;
+}
+
+/* 移动端侧栏抽屉开关按钮：桌面端侧栏常驻显示，不需要这个按钮 */
+#mm-sidebar-toggle-btn {
+    display: none;
+}
+
+/* 移动端侧栏遮罩层：桌面端侧栏常驻显示，不需要遮罩，避免作为空 flex 子项占位 */
+#mm-sidebar-backdrop {
+    display: none;
+}
+
+/* 危险操作按钮（工具栏/侧边栏级别，区别于表单弹层内的 .mm-danger） */
+#mm-toolbar button.mm-danger,
+#mm-sidebar button.mm-danger {
+    background: rgba(255,80,80,0.18);
+    border-color: rgba(255,80,80,0.5);
+    color: #ff8080;
+}
+
+#mm-toolbar button.mm-danger:hover,
+#mm-sidebar button.mm-danger:hover {
+    background: rgba(255,80,80,0.32);
+}
+
+/* 通用隐藏类，用于按当前地图类型显隐路线相关 UI */
+.mm-hidden {
+    display: none !important;
+}
+
+/* ---- 当前角色数据指示条（数据自动跟随角色卡，不再需要手动绑定） ---- */
+#mm-char-indicator {
+    padding: 5px 12px;
+    font-size: 0.82em;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+#mm-char-indicator.mm-char-indicator-ok {
+    background: rgba(255,255,255,0.06);
+    opacity: 0.8;
+}
+
+#mm-char-indicator.mm-char-indicator-warn {
+    background: rgba(255,180,0,0.15);
+    color: #ffcf66;
+}
+
+#mm-body {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+}
+
+#mm-map-container {
+    flex: 1;
+    background: #111;
+    position: relative;
+}
+
+#mm-map {
+    width: 100%;
+    height: 100%;
+    background: #222;
+}
+
+#mm-map.mm-empty::after {
+    content: "请先上传一张地图图片";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #888;
+    font-size: 1.1em;
+    pointer-events: none;
+}
+
+#mm-sidebar {
+    width: 280px;
+    border-left: 1px solid rgba(255,255,255,0.15);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.mm-sidebar-header {
+    padding: 8px 10px;
+    font-weight: bold;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.mm-sidebar-subheader {
+    border-top: 1px solid rgba(255,255,255,0.15);
+}
+
+#mm-marker-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px;
+}
+
+/* ---- 小地图设置面板（名称 / 是否加载 / 布局说明）---- */
+.mm-map-meta-block {
+    padding: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mm-map-meta-block label {
+    font-size: 0.8em;
+    opacity: 0.8;
+    margin-top: 4px;
+}
+
+.mm-map-meta-block input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: inherit;
+    border-radius: 4px;
+    font-size: 0.85em;
+}
+
+.mm-map-meta-block textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 110px;
+    resize: vertical;
+    padding: 6px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: inherit;
+    border-radius: 4px;
+    font-size: 0.82em;
+    line-height: 1.4;
+}
+
+.mm-checkbox-label {
+    display: flex !important;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 0.85em !important;
+    opacity: 1 !important;
+}
+
+.mm-map-meta-block button.mm-danger {
+    margin-top: 4px;
+    align-self: flex-start;
+}
+
+.mm-map-meta-block label.mm-file-btn {
+    display: inline-block;
+    align-self: flex-start;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: inherit;
+    border-radius: 4px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 0.82em;
+    margin-top: 4px;
+}
+
+.mm-map-meta-block label.mm-file-btn:hover {
+    background: rgba(255,255,255,0.18);
+}
+
+.mm-faction-group {
+    margin-bottom: 10px;
+}
+
+/* ---- 管理势力弹层 ---- */
+/* 宽度用 min() 做响应式上限，不再是写死的 260px：窄屏下会自动收缩到
+   "视口宽度减一点边距"，不会整体溢出到屏幕外。 */
+#mm-faction-manager {
+    position: absolute;
+    top: 50px;
+    right: 20px;
+    background: #222;
+    color: #eee;
+    border: 1px solid #555;
+    border-radius: 6px;
+    padding: 12px;
+    width: min(260px, calc(100vw - 40px));
+    max-width: calc(100% - 16px);
+    box-sizing: border-box;
+    z-index: 10000;
+}
+
+.mm-faction-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+/* 关键修复：input 默认 min-width 是按内容（约20个字符）撑开的，
+   在 flex 行里会把这个撑开的宽度当成"最小宽度"，哪怕外层给了 flex:1，
+   遇到窄容器时还是会把删除按钮挤到可视区域外面看不见、点不到。
+   显式设 min-width:0 才能真正让它跟着 flex 容器收缩。 */
+.mm-faction-name {
+    flex: 1;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.mm-faction-color {
+    flex: 0 0 auto;
+}
+
+.mm-faction-del {
+    flex: 0 0 auto;
+}
+
+.mm-faction-group-title {
+    font-size: 0.8em;
+    opacity: 0.75;
+    padding: 2px 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.mm-color-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.mm-marker-item {
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.88em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.mm-marker-item:hover {
+    background: rgba(255,255,255,0.08);
+}
+
+.mm-marker-item .mm-marker-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#mm-sidebar-footer {
+    padding: 8px 10px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    font-size: 0.78em;
+    opacity: 0.7;
+    line-height: 1.4;
+}
+
+/* ---- Leaflet 自定义标记 ---- */
+.mm-leaflet-icon {
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 3px rgba(0,0,0,0.6);
+}
+
+/* ---- 路线（队伍行进方向）---- */
+#mm-add-route-btn.mm-active {
+    background: rgba(59,130,246,0.55) !important;
+    border-color: #3b82f6 !important;
+}
+
+#mm-route-hint {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.78);
+    color: #fff;
+    padding: 6px 10px 6px 14px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 1000;
+    white-space: nowrap;
+}
+
+#mm-route-hint.mm-hidden {
+    display: none;
+}
+
+#mm-route-hint button {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: #fff;
+    border-radius: 4px;
+    padding: 2px 10px;
+    cursor: pointer;
+    font-size: 0.9em;
+}
+
+#mm-route-hint button:hover {
+    background: rgba(255,255,255,0.28);
+}
+
+.mm-routehead-icon svg {
+    filter: drop-shadow(0 0 1px rgba(0,0,0,0.6));
+    pointer-events: auto;
+}
+
+.mm-route-item {
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.mm-route-item:hover {
+    background: rgba(255,255,255,0.08);
+}
+
+.mm-route-item-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.mm-route-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mm-route-sublabel {
+    font-size: 0.85em;
+    opacity: 0.65;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mm-route-del {
+    background: transparent;
+    border: none;
+    color: #b00;
+    cursor: pointer;
+    font-size: 0.9em;
+    padding: 0 2px;
+}
+
+/* ---- 表单弹层 ---- */
+.mm-form-popup {
+    min-width: 220px;
+    color: #222;
+}
+
+.mm-form-popup label {
+    display: block;
+    font-size: 0.8em;
+    margin-top: 6px;
+    margin-bottom: 2px;
+}
+
+.mm-form-popup input[type="text"],
+.mm-form-popup select,
+.mm-form-popup textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px;
+    font-size: 0.85em;
+}
+
+.mm-form-popup textarea {
+    resize: vertical;
+    min-height: 50px;
+}
+
+.mm-form-popup .mm-form-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.mm-form-popup .mm-form-actions button {
+    font-size: 0.8em;
+    padding: 3px 10px;
+    cursor: pointer;
+}
+
+.mm-form-popup .mm-danger {
+    color: #b00;
+    border-color: #b00;
+}
+
+.mm-route-form-title {
+    font-weight: bold;
+    font-size: 0.9em;
+    margin-bottom: 4px;
+}
+
+/* ===== 移动端适配（窄屏：手机竖屏/大部分手机横屏） ===== */
+@media (max-width: 700px) {
+    /* 悬浮球在部分移动端环境下经常被输入栏/工具栏遮挡或定位错乱，
+       PC 端默认常显，移动端这里直接隐藏，不再提供开关。 */
+    #mm-fab {
+        display: none;
+    }
+
+    #mm-modal-overlay {
+        padding: 0;
+    }
+
+    /* 弹窗占满可视区域，减少窄屏下的无谓留白 */
+    #mm-modal {
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh;
+        border-radius: 0;
+    }
+
+    /* 工具栏改回自动换行：单行横向滚动会把按钮（尤其是新增的侧栏开关）滑出屏幕外，
+       用户根本发现不了要横向滑动，体验等于按钮消失。换行虽然多占一点竖直空间，
+       但保证任何时候所有按钮都直接可见、可点。 */
+    #mm-toolbar {
+        flex-wrap: wrap;
+        padding: 6px 8px;
+        gap: 6px;
+    }
+
+    #mm-toolbar .mm-title {
+        flex: 0 0 auto;
+        margin-right: 6px;
+    }
+
+    #mm-toolbar button,
+    #mm-toolbar label.mm-file-btn,
+    #mm-toolbar select {
+        font-size: 0.8em;
+        padding: 4px 8px;
+    }
+
+    #mm-toolbar select {
+        max-width: 120px;
+    }
+
+    /* 侧栏开关按钮在窄屏下显示出来 */
+    #mm-sidebar-toggle-btn {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    #mm-body {
+        position: relative;
+    }
+
+    /* 侧栏（标记列表/路线列表/地图设置）在窄屏下从常驻并排改为可收起的右侧抽屉，
+       避免固定 280px 宽度把地图挤没。默认收起，点工具栏「列表」按钮滑出。 */
+    #mm-sidebar {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 85vw;
+        max-width: 320px;
+        height: 100vh;
+        height: 100dvh;
+        border-left: 1px solid rgba(255,255,255,0.15);
+        background: var(--SmartThemeBlurTintColor, #1e1e1e);
+        transform: translateX(100%);
+        transition: transform 0.25s ease;
+        z-index: 1500;
+        box-shadow: -4px 0 16px rgba(0,0,0,0.4);
+    }
+
+    #mm-sidebar.mm-sidebar-open {
+        transform: translateX(0);
+    }
+
+    /* 之前侧栏只有"标记列表"那一块能单独内部滚动（继承自桌面端布局），
+       地图设置/路线列表/底部说明文字挤不下时会被直接裁掉，够不着也滑不到。
+       移动端窄屏下改成整个侧栏统一滚动，所有内容都能划到。 */
+    #mm-sidebar {
+        overflow-y: auto;
+        overflow-x: hidden;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+    }
+
+    #mm-marker-list {
+        flex: none;
+        overflow-y: visible;
+    }
+
+    #mm-sidebar-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.45);
+        z-index: 1400;
+    }
+
+    #mm-sidebar-backdrop.mm-sidebar-open {
+        display: block;
+    }
+
+    /* 表单弹层在窄屏下也别太窄，撑满一点更好点 */
+    .mm-form-popup {
+        min-width: 200px;
+        max-width: 78vw;
+    }
+}
+
