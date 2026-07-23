@@ -1,23 +1,11 @@
 # 剧情助手
 
-不依赖「酒馆助手」插件，直接使用 SillyTavern 原生扩展接口。包含四块功能，共用同一本按"角色名 + 总结"命名的世界书：
+使用 SillyTavern 原生扩展接口。包含四块功能，共用同一本按"角色名 + 总结"命名的世界书：
 
 - **总结/状态表**（总结功能）
 - **对话前强调**（输出强调）
 - **创建角色**（角色卡）
 - **地图标记**
-
-## 可选安装方法
-
-1. 找到你的酒馆数据目录下的 `data/<你的用户名>/extensions/` 文件夹
-   （比如 `SillyTavern/data/default-user/extensions/`）。
-2. 把整个 `plot-assistant` 文件夹复制进去，得到：
-   `data/<你的用户名>/extensions/plot-assistant/manifest.json`
-   `data/<你的用户名>/extensions/plot-assistant/index.js`
-   `data/<你的用户名>/extensions/plot-assistant/style.css`
-   `data/<你的用户名>/extensions/plot-assistant/lib/leaflet/...`
-3. 重新加载酒馆网页（或在"扩展"面板点刷新）。
-4. 打开扩展菜单（顶部三个格子的图标），应该能看到「剧情助手」一项，点开即弹出控制面板。
 
 ## 总结功能（总结/状态表）
 
