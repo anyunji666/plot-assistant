@@ -7,7 +7,7 @@
 - **创建角色**（角色卡）
 - **地图标记**
 
-## 安装方法
+## 可选安装方法
 
 1. 找到你的酒馆数据目录下的 `data/<你的用户名>/extensions/` 文件夹
    （比如 `SillyTavern/data/default-user/extensions/`）。
