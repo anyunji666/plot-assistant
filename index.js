@@ -51,8 +51,8 @@ const DEFAULT_PRE_EMPHASIS_CONTENT = `### [MANDATORY] Summary Output Protocol
 ---
 <details><summary>摘要</summary>
 (字段标签——Time/Location/Relationships/Inventory/Setups/Overview——必须保持英文原样，\${...}中的实际内容必须是中文)
-Time: \${故事内当前日期/时间}
-Location: \${当前场景地点}
+Time: \${本轮发生的时间跨度；需具体到年月日，若文本未提供日期则自拟符合故事背景的纪年/日期}
+Location: \${本轮结束时角色所在的场景地点；若本轮内多次转场，写最后停留的地点即可}
 Relationships: \${{{user}}→角色: 关系词}
 Inventory: \${角色名·物品名: 数量}
 Setups: \${角色名·关键词: 值}
@@ -61,38 +61,57 @@ Overview: \${本轮关键事件按时间顺序列出}
 \`\`\`
 
 ---
-**字段判定规则：**
+**字段判定规则（伪代码）：**
 
 **Relationships**（只写本轮发生变化的关系，多组分号分隔）
-
-| 条件（按顺序判断，命中即用） | 取值 |
-|---|---|
-| 本轮死亡 或 明确永久离场 | \`[REMOVE]\`（仅此情况用REMOVE，其余覆盖式改写） |
-| 与{{user}}存在身份/血亲关系 | 该身份词；如有阶段性变化，括号补充阶段词，如"师徒(暧昧)" |
-| 以上都不满足 | 当前阶段词（单个词） |
-
-身份/名分词：师徒 / 师兄弟 / 师兄妹 / 师姐妹 / 师姐弟 / 同门 / 同学 / 同事 / 邻居 / 网友 / 战友 / 上下级 / 继亲 / 主仆
-血亲词：父女 / 父子 / 母女 / 母子 / 兄弟 / 兄妹 / 姐弟 / 姐妹 / 祖孙 / 叔侄 / 舅甥 / 姑侄 / 姨甥 / 表兄弟 / 表兄妹 / 表姐弟 / 表姐妹 / 堂兄弟 / 堂兄妹 / 堂姐弟 / 堂姐妹
-阶段词：陌生 / 相识 / 相熟 / 好感 / 暧昧 / 恋人 / 未婚夫妻 / 夫妻 / 对手 / 仇人 / 宿敌 / 同伴 / 盟友 / 朋友 / 挚友
-（值必须是纯净词：身份/血亲词本身，或阶段词表中单个词，禁止自造词/组合词如"好感升温""半师半友"）
+\`\`\`
+for 角色 in 本轮关系有变化的角色:
+    if 本轮死亡 or 明确永久离场:
+        值 = [REMOVE]  # 仅此情况使用REMOVE，其余一律覆盖式改写
+    elif 与{{user}}存在身份/血亲关系:
+        值 = 该身份词  # 若同时有阶段性变化，用括号在身份词后补充
+        # 身份/名分词：师徒 / 师兄弟 / 师兄妹 / 师姐妹 / 师姐弟 / 主仆 / 上下级 / 继亲
+        # 血亲词：父女 / 父子 / 母女 / 母子 / 兄弟 / 兄妹 / 姐弟 / 姐妹 / 祖孙 / 叔侄 / 舅甥 / 姑侄 / 姨甥 / 表兄弟 / 表兄妹 / 表姐弟 / 表姐妹 / 堂兄弟 / 堂兄妹 / 堂姐弟 / 堂姐妹
+    else:
+        值 = 当前阶段词
+        # 可选阶段词：陌生 / 相识 / 相熟
+        #                    好感 / 暧昧 / 恋人 / 未婚夫妻 / 夫妻
+        #                    对手 / 仇人 / 宿敌
+        #                    同伴 / 盟友
+        #                    朋友 / 挚友  
+# 【值必须是纯净词】只能是：
+#   (a) 身份词本身，如需标注阶段可在身份词后用括号补充阶段词——如"师徒(暧昧)"
+#   (b) 阶段词列表中的单个词，禁止自造词/组合词
+# 反例(禁止)："朋友(渐生好感中)" "好感升温" "半师半友"　正例："朋友" "暧昧" "师徒(暧昧)"
+\`\`\`
 
 **Inventory**（只写本轮变化的道具，本轮无变化则字段留空，不写"无"）
-
-| 条件（按顺序判断，命中即用） | 取值 |
-|---|---|
-| 不是可随身携带的实体物品 | 跳过（状态/情形类归Setups或Overview） |
-| 用尽 / 丢失 / 送出 | \`[REMOVE]\`（裸写，不带单位/备注） |
-| 首次记录 或 需硬修正历史值 | \`=N\`（绝对值，不带单位/备注） |
-| 以上都不满足（本轮增减） | \`+N\` 或 \`-N\`（增量，不带单位/备注） |
-
-格式：角色名·物品名: 值；多条分号分隔。值必须是 \`[REMOVE]\`/\`=N\`/\`+N\`/\`-N\` 四种之一（N为纯数字，禁止带单位如"+2瓶"）。
-
-**Setups**（角色名·关键词: 值，多条分号分隔；以下步骤按顺序执行，前一步结果影响后一步）
 \`\`\`
-Step0 级联清理：角色本轮Relationships标记[REMOVE] → 其Setups/Inventory条目一并[REMOVE]
-Step1 存量清理：旧条目已兑现/已作废/不可能再被拾起 → [REMOVE]
-Step2 新增：仅记已发生的长线伏笔/线索/未解约定；不记单纯意图("她想…")、关系变化(归Relationships)、纯事件叙述(归Overview)、本轮已解决的伏笔(归Overview)
-Step3 格式："(日期·地点)+一句话钩子"，日期具体到年月日(无历法设定则自拟)，整体(含日期)≤30字
+for 道具变化 in 本轮:
+    if not 可随身携带的实体物品:
+        跳过  # 状态/情形类归Setups或Overview，不进Inventory
+    if 用尽/丢失/送出:
+        值 = [REMOVE]  # 裸写，不带单位/备注
+    elif 首次记录 or 需硬修正历史值:
+        值 = "=N"  # 绝对值，不带单位/备注
+    else:
+        值 = "+N" 或 "-N"  # 增量，不带单位/备注
+# 格式：角色名·物品名: 值；多条分号分隔
+# 【值必须是纯净格式】只能是 [REMOVE] / =N / +N / -N 四种之一，N为纯数字
+# 反例(禁止)："+2瓶" "=3个" "-1(剩余)" "+1(备用)"　正例："+2" "=3" "-1" "+1"
+\`\`\`
+
+**Setups**（角色名·关键词: 值，多条分号分隔）
+\`\`\`
+Step0 级联清理: 若该角色本轮在Relationships中标记[REMOVE] → 其名下所有Setups(及Inventory)条目一并标记[REMOVE]
+Step1 存量清理: 检查当前状态表中每条旧条目，已兑现/已作废/剧情推进到不可能再被拾起 → 标记[REMOVE]
+Step2 新增判断: 本轮是否出现值得长线追踪的伏笔/线索/未解约定？
+    以下情况不记录：
+      - 单纯的意图/打算（"她想...""他计划..."）不记 → 需要记录的是已发生的事实
+      - 单纯关系状态变化(归Relationships) / 纯事件叙述(归Overview) / 本轮内已解决的伏笔(归Overview)
+Step3 格式: "(日期·地点)+一句话钩子"；日期需具体到年月日(若文本未提供日期则自拟符合故事背景的纪年/日期)；整体(含日期)不超过30字
+# 删除格式同Inventory：角色名·关键词: [REMOVE]（key在前、冒号分隔、[REMOVE]写在值的位置）
+# 反例(禁止)："[REMOVE]角色名·关键词"（REMOVE写在key前、缺冒号）　正例："角色名·关键词: [REMOVE]"
 \`\`\`
 
 **Overview**（本轮无实质进展则留空，不超过150字）
@@ -103,7 +122,7 @@ Step3 格式："(日期·地点)+一句话钩子"，日期具体到年月日(无
 
 ---
 **REFERENCE: 状态表**（注入的只读上下文）
-Relationships/Inventory/Setups 会自动合并进持久化"状态表"，注入内容为只读快照，供你核对当前关系/道具/伏笔是否该清理。
+每轮Summary Block中的Relationships/Inventory/Setups会自动解析并合并进持久化的"状态表"，你只从注入内容中读取，用于：①核对与{{user}}的当前关系 ②核对各角色当前Inventory ③核对现有Setups条目是否该清理。状态表始终显示的是快照值。
 
 ---
 **示例（仅供格式参考，人名/道具/剧情均为占位内容，不得带入正文实际叙事）：**
@@ -112,10 +131,10 @@ Relationships/Inventory/Setups 会自动合并进持久化"状态表"，注入�
 <details><summary>摘要</summary>
 Time: 武定三年三月十五,未时-申时
 Location: 云隐山洞穴
-Relationships: {{user}}→角色A: 师徒; {{user}}→角色B: 恋人
+Relationships: {{user}}→角色A: 师徒; {{user}}→角色B: 恋人; {{user}}→角色C: [REMOVE]
 Inventory: {{user}}·金创药: -1; {{user}}·玉佩: =1; 角色A·干粮: +3; {{user}}·解药: [REMOVE]
-Setups: {{user}}·玉佩纹路之谜: (武定三年三月十五·云隐山洞穴)背面刻着一行字,含义不明; 角色B·家族隐秘: (武定三年三月十五·云隐山洞穴)听闻了家族隐秘往事
-Overview: {{user}}与角色A切磋,角色A对其身手更加信服,师徒情谊加深,并当场兑现此前承诺传授的绝学;{{user}}向角色B表明心意,两人确定恋人关系;{{user}}在洞穴深处拾得一块玉佩,来历不明;{{user}}服下最后一瓶解药后瓶身破碎。
+Setups: {{user}}·玉佩纹路之谜: (武定三年三月十五·云隐山洞穴)背面刻着一行字,含义不明; 角色B·家族隐秘: (武定三年三月十五·云隐山洞穴)听闻了家族隐秘往事; 角色A·旧日承诺: [REMOVE]
+Overview: {{user}}与角色A切磋,角色A对其身手更加信服,师徒情谊加深,并当场兑现此前承诺传授的绝学;{{user}}向角色B表明心意,两人确定恋人关系;{{user}}在洞穴深处拾得一块玉佩,来历不明;{{user}}服下最后一瓶解药后瓶身破碎;角色C在混战中被敌人所杀,永久离场。
 </details>
 \`\`\``;
 
@@ -516,15 +535,44 @@ function detectMalformedSummaryBlock(mesText) {
 // 额外收集"解析不出 key:value 结构"的原始片段供状态表合并时做格式校验 ===
 // 分隔符/冒号同时兼容半角(; :)和中文全角(； ：)——中文语境下 AI 输出全角标点是常态，
 // 只认半角会导致多组内容拆不开、被错误地整体塞进前一个 key 的 value 里（曾实际复现过此问题）。
+// 容错：识别"[REMOVE]key"这类缺冒号、REMOVE写在key前面的错误格式（正确格式应为"key: [REMOVE]"）。
+// 兼容半角/全角方括号及中文方头括号，REMOVE 大小写不敏感。
+const REMOVE_PREFIX_PATTERN = /^[\[［【]\s*remove\s*[\]］】]\s*(.+)$/i;
+// 容错：识别"key[REMOVE]"这类缺冒号、REMOVE写在key后面（紧跟或隔空格）的错误格式。
+const REMOVE_SUFFIX_PATTERN = /^(.+?)\s*[\[［【]\s*remove\s*[\]］】]$/i;
+
 function parseKeyValueListWithSkipped(str) {
   const map = new Map();
   const skipped = [];
-  if (!str) return { map, skipped };
+  const corrected = [];
+  if (!str) return { map, skipped, corrected };
   str.split(/[;；]/).forEach((part) => {
     const trimmed = part.trim();
     if (!trimmed) return;
     const idx = trimmed.search(/[:：]/);
     if (idx === -1) {
+      const removePrefixMatch = trimmed.match(REMOVE_PREFIX_PATTERN);
+      if (removePrefixMatch) {
+        const key = removePrefixMatch[1].trim();
+        if (key) {
+          map.set(key, "[REMOVE]");
+          corrected.push(
+            `"${trimmed}" 缺少冒号分隔，已按 "${key}: [REMOVE]" 处理`,
+          );
+          return;
+        }
+      }
+      const removeSuffixMatch = trimmed.match(REMOVE_SUFFIX_PATTERN);
+      if (removeSuffixMatch) {
+        const key = removeSuffixMatch[1].trim();
+        if (key) {
+          map.set(key, "[REMOVE]");
+          corrected.push(
+            `"${trimmed}" 缺少冒号分隔，已按 "${key}: [REMOVE]" 处理`,
+          );
+          return;
+        }
+      }
       skipped.push(trimmed);
       return;
     }
@@ -536,7 +584,7 @@ function parseKeyValueListWithSkipped(str) {
       skipped.push(trimmed);
     }
   });
-  return { map, skipped };
+  return { map, skipped, corrected };
 }
 
 // === Helper: 键值 Map 序列化回 "key: value; key2: value2" ===
@@ -626,15 +674,9 @@ const RELATIONSHIP_RANK_WORDS = [
   "师兄妹",
   "师姐妹",
   "师姐弟",
-  "同门",
-  "同学",
-  "同事",
-  "邻居",
-  "网友",
-  "战友",
+  "主仆",
   "上下级",
   "继亲",
-  "主仆",
 ];
 const RELATIONSHIP_KIN_WORDS = [
   "父女",
@@ -835,6 +877,9 @@ function mergeFloorIntoStatusTable(state, floorFields, warnings) {
         `Relationships 中的片段 "${fragment}" 无法解析出 key:value 结构，已跳过`,
       ),
     );
+    relParsed.corrected.forEach((msg) =>
+      warnings.push(`Relationships：${msg}`),
+    );
   }
   const removedCharacters = [];
   relParsed.map.forEach((value, key) => {
@@ -860,11 +905,15 @@ function mergeFloorIntoStatusTable(state, floorFields, warnings) {
         `Inventory 中的片段 "${fragment}" 无法解析出 key:value 结构，已跳过`,
       ),
     );
+    inventoryParsed.corrected.forEach((msg) =>
+      warnings.push(`Inventory：${msg}`),
+    );
     setupsParsed.skipped.forEach((fragment) =>
       warnings.push(
         `Setups 中的片段 "${fragment}" 无法解析出 key:value 结构，已跳过`,
       ),
     );
+    setupsParsed.corrected.forEach((msg) => warnings.push(`Setups：${msg}`));
   }
 
   applyNumericMapUpdates(
