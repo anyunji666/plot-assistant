@@ -820,9 +820,29 @@ function applyNumericMapUpdates(
       const delta = sign * parseFloat(deltaMatch[2]);
       const oldValue = parseFloat(baseMap.get(key));
       const base = Number.isFinite(oldValue) ? oldValue : 0;
-      baseMap.set(key, formatNumericValue(base + delta));
+      const result = base + delta;
+      if (result <= 0) {
+        baseMap.delete(key);
+        if (warnings) {
+          warnings.push(
+            `${fieldLabel || ""} "${key}" 数值计算后为 ${formatNumericValue(result)}（≤0），已自动移除该条目`,
+          );
+        }
+      } else {
+        baseMap.set(key, formatNumericValue(result));
+      }
     } else if (hardsetMatch) {
-      baseMap.set(key, formatNumericValue(parseFloat(hardsetMatch[1])));
+      const result = parseFloat(hardsetMatch[1]);
+      if (result <= 0) {
+        baseMap.delete(key);
+        if (warnings) {
+          warnings.push(
+            `${fieldLabel || ""} "${key}" 被硬修正为 ${formatNumericValue(result)}（≤0），已自动移除该条目`,
+          );
+        }
+      } else {
+        baseMap.set(key, formatNumericValue(result));
+      }
     } else if (looksLikeAttemptedNumericButMalformed(rawValue)) {
       if (warnings) {
         warnings.push(
