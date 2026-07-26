@@ -1,21 +1,24 @@
 /* ===== 地图标记模块样式（已合并进「剧情助手」插件） ===== */
 
-/* ---- 右下角悬浮方形快捷按钮：最基础的 position:fixed 的 <div>。
+/* ---- 右上角悬浮方形快捷按钮：最基础的 position:fixed 的 <div>。
    之前用过 <dialog>.show() 想借助 top layer 避开祖先 transform 的影响，
    但实测这个环境祖先链没有 transform 问题，dialog 反而自己的定位/命中测试不稳定
    （出现过按钮被算到屏幕外、点哪都误触发的情况），所以退回最简单可控的写法。 ---- */
 #mm-fab {
     position: fixed;
+    /* 默认贴右上角，跟音效插件的悬浮窗一致：纯 CSS 写死，不依赖 JS 在注入那一刻
+       去读 window.innerWidth/innerHeight 现算坐标——部分浏览器/WebView 在脚本执行时
+       报的窗口尺寸不一定准，现算坐标可能把按钮塞到屏幕外或算错位置。JS 现在只在
+       "用户之前拖拽过、本地存了坐标"时才会用内联样式覆盖这个默认值（见
+       injectFloatingButton 里 rawPos 的判断）。 */
+    top: 16px;
+    right: 16px;
     margin: 0;
     padding: 0;
     width: 44px;
     height: 44px;
     z-index: 999999;
-    /* 不再用 --SmartThemeBlurTintColor 做背景色：这个变量语义上是给"模糊面板"用的，
-       部分主题下自带低透明度/毛玻璃效果，用在悬浮球这种孤立小方块上，实测可能会
-       在手机上"融进背景"看不见。这里直接写死一个不透明深色，不依赖任何主题变量，
-       保证悬浮球在任何主题下都有稳定对比度。 */
-    background-color: #2a2a2a;
+    background: var(--SmartThemeBlurTintColor, #222);
     color: var(--SmartThemeBodyColor, #eee);
     border: 1px solid var(--SmartThemeBorderColor, rgba(255,255,255,0.15));
     border-radius: 10px;
@@ -537,8 +540,8 @@
 
 /* ===== 移动端适配（窄屏：手机竖屏/大部分手机横屏） ===== */
 @media (pointer: coarse), (max-width: 700px) {
-    /* 悬浮球本身不再在移动端隐藏——默认停靠位置早已改成左上角（见 injectFloatingButton
-       里的 FAB_POS_KEY 注释），能避开底部输入栏/工具栏；显隐现在交给控制面板里的
+    /* 悬浮球本身不再在移动端隐藏——默认停靠位置是右上角（见 #mm-fab 的
+       top/right 静态样式），能避开底部输入栏/工具栏；显隐现在交给控制面板里的
        「悬浮球开/悬浮球关」按钮，用户自己决定，不再由 CSS 强制砍掉。 */
 
     #mm-modal-overlay {

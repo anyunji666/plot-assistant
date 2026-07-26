@@ -3540,15 +3540,18 @@ function injectFloatingButton() {
 
   const fab = document.getElementById("mm-fab");
 
-  // 默认贴右上角：跟音效插件的移动端默认停靠位置保持一致。之前贴左上角是为了
-  // 躲开底部输入栏/工具栏，但左上角正好是酒馆自身侧栏开关等 UI 常驻的位置，
-  // 手机上实测容易被挤在一起、找不到，所以换到右上角，同样能避开底部遮挡。
+  // 默认位置（右上角）完全交给 style.css 里 #mm-fab 的静态样式，这里不再用
+  // window.innerWidth/innerHeight 现算一个初始坐标——部分浏览器/WebView 在这个脚本
+  // 执行的时刻报的窗口尺寸不一定可靠，现算出来的坐标可能有误差甚至把按钮塞到屏幕外。
+  // JS 只在"用户之前真的拖拽过、本地存了坐标"时才用内联样式覆盖 CSS 默认值；
+  // 没拖过的话完全不碰 fab.style.right/bottom，让 CSS 说了算，跟音效插件悬浮窗的
+  // 默认定位方式保持一致。
   const FAB_MARGIN = 16;
   const FAB_SIZE = 44;
 
-  // 把 right/bottom 夹到"当前屏幕范围内"，不管是刚算出来的默认值还是从本地存储
-  // 读到的旧坐标——旧坐标可能是在别的屏幕尺寸/方向下存的，直接套用可能会把按钮
-  // 顶到屏幕外看不见（这次自检就实测到了这个情况）。
+  // 把 right/bottom 夹到"当前屏幕范围内"：用于套用本地存储的旧坐标，或者拖拽结束时
+  // 夹取新坐标，避免坐标落到屏幕外找不到按钮（拖拽这时候窗口尺寸已经渲染稳定，
+  // 读 window.innerWidth/innerHeight 比脚本刚注入那一刻更可靠）。
   function clampPos(right, bottom) {
     const maxRight = Math.max(
       FAB_MARGIN,
@@ -3564,14 +3567,12 @@ function injectFloatingButton() {
     };
   }
 
-  const defaultPos = {
-    right: FAB_MARGIN,
-    bottom: Math.max(FAB_MARGIN, window.innerHeight - FAB_MARGIN - FAB_SIZE),
-  };
-  const rawPos = loadFabPos() || defaultPos;
-  const pos = clampPos(rawPos.right, rawPos.bottom);
-  fab.style.right = `${pos.right}px`;
-  fab.style.bottom = `${pos.bottom}px`;
+  const savedPos = loadFabPos();
+  if (savedPos) {
+    const pos = clampPos(savedPos.right, savedPos.bottom);
+    fab.style.right = `${pos.right}px`;
+    fab.style.bottom = `${pos.bottom}px`;
+  }
   // 显隐由控制面板里的「悬浮球开/悬浮球关」按钮控制（见 setFabVisibleSetting /
   // applyFabVisibility），这里只负责套用启动时已保存的状态，PC/移动端同一套逻辑。
   applyFabVisibility();
