@@ -107,7 +107,7 @@ Step3 格式：角色名·关键词: (日期·地点)+一句话钩子；（日�
 \`\`\`
 
 ---
-**REFERENCE**：上文已注入Relationships/Inventory/Setups的只读快照，供你核对是否该填[REMOVE]清理。
+**Snapshot Table**：上文已注入Relationships/Inventory/Setups的只读快照表，仅用于查看当前状态及填写[REMOVE]清除过期条目。
 
 ---
 **示例（仅供格式参考）：**
