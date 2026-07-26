@@ -2592,9 +2592,9 @@ async function showSummaryPopup() {
 
         <div style="margin-bottom: 20px;">
           <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">地图</p>
-          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
             <button id="${POPUP_ID}-map-marker" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">地图标记</button>
-            <button id="${POPUP_ID}-fab-toggle" style="border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;"></button>
+            <button id="${POPUP_ID}-fab-toggle" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
           </div>
         </div>
 
