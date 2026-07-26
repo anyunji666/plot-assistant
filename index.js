@@ -2801,6 +2801,9 @@ async function showSummaryPopup() {
     $fabToggleBtn.on("click", () => {
       const nowVisible = !getFabVisible();
       setFabVisibleSetting(nowVisible);
+      // 关闭悬浮球时顺带重置位置：不管之前拖到哪、坐标有没有问题，
+      // 下次点「悬浮球开」都能回到干净的默认位置，等于顺手兼职一个重置入口。
+      if (!nowVisible) resetFabPos();
       applyFabVisibility();
       renderFabToggleButton($fabToggleBtn, nowVisible);
     });
@@ -3516,6 +3519,25 @@ function saveFabPos(right, bottom) {
     localStorage.setItem(FAB_POS_KEY, JSON.stringify({ right, bottom }));
   } catch (e) {
     /* 存储失败不影响功能 */
+  }
+}
+
+// 清掉本地存的拖拽坐标，并把 fab 身上覆盖过 CSS 的内联定位样式一并清空，
+// 让 #mm-fab 的静态 CSS（右上角）重新生效。用在「关闭悬浮球」这个动作上：
+// 不管之前拖到了哪、算出来的坐标有没有问题，关了再开永远回到一个干净的默认位置，
+// 相当于顺手给了一个"重置"的入口，不用再额外加按钮。
+function resetFabPos() {
+  try {
+    localStorage.removeItem(FAB_POS_KEY);
+  } catch (e) {
+    /* 忽略 */
+  }
+  const fab = document.getElementById("mm-fab");
+  if (fab) {
+    fab.style.top = "";
+    fab.style.left = "";
+    fab.style.right = "";
+    fab.style.bottom = "";
   }
 }
 
