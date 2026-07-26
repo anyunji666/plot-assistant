@@ -3494,19 +3494,17 @@ function updateCharIndicatorUI() {
 // 注：默认位置几经调整——右下角会被酒馆自身的底部输入栏/工具栏遮住；改成左上角后
 // 又发现容易和酒馆自身侧栏开关等常驻 UI 挤在一起、找不到；现在改成右上角，跟音效
 // 插件的移动端默认停靠位置一致，同样能避开底部遮挡。
-// 存储 key 换成新的 v4：v3 阶段拖拽逻辑有个 bug——只改了 right/bottom，没清掉 CSS
-// 默认的 top，导致纵向拖拽一直被浏览器无视（上下方向的位置其实没真正生效），
-// 但拖拽时依然会把算出来的 bottom 值存进本地存储。这次把这个 bug 修了之后，
-// 悬浮球才会开始真正读取这个坐标——而 v3 时期存的坐标本身就是在 bug 状态下拖出来的、
-// 未必可靠，所以升级 key 让旧坐标作废，重新从右上角默认值开始。
-const FAB_POS_KEY = "mm_fab_pos_v4";
+// 存储 key 换成新的 v5：拖拽逻辑改成跟音效插件悬浮窗一致的 left/top + clientX/clientY
+// 写法（不再走 right/bottom 换算），存储字段也从 {right, bottom} 换成 {left, top}，
+// 旧版本存的坐标格式对不上了，升级 key 让旧坐标作废，重新从右上角默认值开始。
+const FAB_POS_KEY = "mm_fab_pos_v5";
 
 function loadFabPos() {
   try {
     const raw = localStorage.getItem(FAB_POS_KEY);
     if (!raw) return null;
     const pos = JSON.parse(raw);
-    if (typeof pos.right === "number" && typeof pos.bottom === "number")
+    if (typeof pos.left === "number" && typeof pos.top === "number")
       return pos;
   } catch (e) {
     /* 忽略，用默认位置 */
@@ -3514,15 +3512,15 @@ function loadFabPos() {
   return null;
 }
 
-function saveFabPos(right, bottom) {
+function saveFabPos(left, top) {
   try {
-    localStorage.setItem(FAB_POS_KEY, JSON.stringify({ right, bottom }));
+    localStorage.setItem(FAB_POS_KEY, JSON.stringify({ left, top }));
   } catch (e) {
     /* 存储失败不影响功能 */
   }
 }
 
-// 清掉本地存的拖拽坐标，并把 fab 身上覆盖过 CSS 的内联定位样式一并清空，
+// 清掉本地存的拖拽坐标（left/top），并把 fab 身上覆盖过 CSS 的内联定位样式一并清空，
 // 让 #mm-fab 的静态 CSS（右上角）重新生效。用在「关闭悬浮球」这个动作上：
 // 不管之前拖到了哪、算出来的坐标有没有问题，关了再开永远回到一个干净的默认位置，
 // 相当于顺手给了一个"重置"的入口，不用再额外加按钮。
@@ -3575,46 +3573,51 @@ function injectFloatingButton() {
   const FAB_MARGIN = 16;
   const FAB_SIZE = 44;
 
-  // 把 right/bottom 夹到"当前屏幕范围内"：用于套用本地存储的旧坐标，或者拖拽结束时
+  // 把 left/top 夹到"当前屏幕范围内"：用于套用本地存储的旧坐标，或者拖拽结束时
   // 夹取新坐标，避免坐标落到屏幕外找不到按钮（拖拽这时候窗口尺寸已经渲染稳定，
   // 读 window.innerWidth/innerHeight 比脚本刚注入那一刻更可靠）。
-  function clampPos(right, bottom) {
-    const maxRight = Math.max(
+  function clampPos(left, top) {
+    const maxLeft = Math.max(
       FAB_MARGIN,
       window.innerWidth - FAB_MARGIN - FAB_SIZE,
     );
-    const maxBottom = Math.max(
+    const maxTop = Math.max(
       FAB_MARGIN,
       window.innerHeight - FAB_MARGIN - FAB_SIZE,
     );
     return {
-      right: Math.min(Math.max(right, FAB_MARGIN), maxRight),
-      bottom: Math.min(Math.max(bottom, FAB_MARGIN), maxBottom),
+      left: Math.min(Math.max(left, FAB_MARGIN), maxLeft),
+      top: Math.min(Math.max(top, FAB_MARGIN), maxTop),
     };
   }
 
   const savedPos = loadFabPos();
   if (savedPos) {
-    const pos = clampPos(savedPos.right, savedPos.bottom);
-    // 同时把 top/left 清成 auto：CSS 默认样式写的是 top（不是 bottom），
-    // 如果只改 right/bottom、不清掉 top，浏览器会认为上下方向被"top+bottom+height
-    // 三个都定死"，直接无视 bottom，只按 top 算——垂直位置就会一直卡在 CSS 默认值上。
-    fab.style.top = "auto";
-    fab.style.left = "auto";
-    fab.style.right = `${pos.right}px`;
-    fab.style.bottom = `${pos.bottom}px`;
+    const pos = clampPos(savedPos.left, savedPos.top);
+    // 直接写 left/top，right/bottom 置 auto：跟音效插件悬浮窗一致的写法，
+    // 不再需要像以前 right/bottom 那套那样额外操心"top 没清掉导致纵向位置被吃掉"的坑。
+    fab.style.right = "auto";
+    fab.style.bottom = "auto";
+    fab.style.left = `${pos.left}px`;
+    fab.style.top = `${pos.top}px`;
   }
   // 显隐由控制面板里的「悬浮球开/悬浮球关」按钮控制（见 setFabVisibleSetting /
   // applyFabVisibility），这里只负责套用启动时已保存的状态，PC/移动端同一套逻辑。
   applyFabVisibility();
 
-  // 拖拽逻辑：区分"点击"和"拖动"，避免拖完松手误触发打开面板
+  // 拖拽逻辑：跟音效插件悬浮窗（floating-panel.js 的 onDragStart/onDragMove）保持
+  // 一致的写法——全程只用 clientX/clientY 换算 left/top，不反过来推算 right/bottom。
+  // 之前那套「按下时读一次 innerWidth 算 startRight，移动时又读一次 innerWidth 做
+  // clamp」的写法，在地址栏收起/展开导致 innerWidth/innerHeight 拖拽途中变化时，
+  // 两次读到的值对不上，算出来的坐标就可能直接跳出屏幕——这才是"一拖就没影"的真正
+  // 原因。改成 left/top 之后，move 阶段只在同一帧里读一次窗口尺寸做 clamp，从根上
+  // 绕开了这个问题；区分"点击"和"拖动"避免拖完松手误触发打开面板的逻辑不变。
   let dragging = false;
   let moved = false;
   let startX = 0,
     startY = 0;
-  let startRight = 0,
-    startBottom = 0;
+  let offsetX = 0,
+    offsetY = 0;
 
   const DRAG_THRESHOLD = 6; // 像素，超过这个位移才算拖拽而不是点击
 
@@ -3622,11 +3625,11 @@ function injectFloatingButton() {
     dragging = true;
     moved = false;
     const point = e.touches ? e.touches[0] : e;
+    const rect = fab.getBoundingClientRect();
+    offsetX = point.clientX - rect.left;
+    offsetY = point.clientY - rect.top;
     startX = point.clientX;
     startY = point.clientY;
-    const rect = fab.getBoundingClientRect();
-    startRight = window.innerWidth - rect.right;
-    startBottom = window.innerHeight - rect.bottom;
     document.addEventListener("mousemove", onPointerMove);
     document.addEventListener("mouseup", onPointerUp);
     document.addEventListener("touchmove", onPointerMove, { passive: false });
@@ -3636,36 +3639,35 @@ function injectFloatingButton() {
   function onPointerMove(e) {
     if (!dragging) return;
     const point = e.touches ? e.touches[0] : e;
-    const dx = point.clientX - startX;
-    const dy = point.clientY - startY;
-    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+    if (
+      Math.abs(point.clientX - startX) > DRAG_THRESHOLD ||
+      Math.abs(point.clientY - startY) > DRAG_THRESHOLD
+    ) {
       moved = true;
       if (e.touches) e.preventDefault();
     }
     if (!moved) return;
 
-    let newRight = startRight - dx;
-    let newBottom = startBottom - dy;
+    const x = point.clientX - offsetX;
+    const y = point.clientY - offsetY;
 
-    // 限制在可视区域内，留一点边距，避免拖出屏幕外找不到
+    // 限制在可视区域内，留一点边距，避免拖出屏幕外找不到；这里的
+    // window.innerWidth/innerHeight 只在这一帧读一次，不存在跟按下时的读数对不上的问题。
     const margin = 4;
     const size = fab.offsetWidth;
-    newRight = Math.min(
-      Math.max(newRight, margin),
+    const newLeft = Math.min(
+      Math.max(x, margin),
       window.innerWidth - size - margin,
     );
-    newBottom = Math.min(
-      Math.max(newBottom, margin),
+    const newTop = Math.min(
+      Math.max(y, margin),
       window.innerHeight - size - margin,
     );
 
-    // 拖拽第一次真正开始移动时，把 top/left 清成 auto：原因同上（恢复保存坐标那段的
-    // 注释），不清的话 CSS 默认的 top:16px 会一直"赢过"这里改的 bottom，纵向拖拽会
-    // 看起来完全没反应，只有横向（right）在动。
-    fab.style.top = "auto";
-    fab.style.left = "auto";
-    fab.style.right = `${newRight}px`;
-    fab.style.bottom = `${newBottom}px`;
+    fab.style.right = "auto";
+    fab.style.bottom = "auto";
+    fab.style.left = `${newLeft}px`;
+    fab.style.top = `${newTop}px`;
   }
 
   function onPointerUp() {
@@ -3677,9 +3679,9 @@ function injectFloatingButton() {
     document.removeEventListener("touchend", onPointerUp);
 
     if (moved) {
-      const right = parseFloat(fab.style.right) || 0;
-      const bottom = parseFloat(fab.style.bottom) || 0;
-      saveFabPos(right, bottom);
+      const left = parseFloat(fab.style.left) || 0;
+      const top = parseFloat(fab.style.top) || 0;
+      saveFabPos(left, top);
     } else {
       // 没有明显位移，视为一次点击
       openModal();
