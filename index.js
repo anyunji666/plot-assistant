@@ -3570,6 +3570,11 @@ function injectFloatingButton() {
   const savedPos = loadFabPos();
   if (savedPos) {
     const pos = clampPos(savedPos.right, savedPos.bottom);
+    // 同时把 top/left 清成 auto：CSS 默认样式写的是 top（不是 bottom），
+    // 如果只改 right/bottom、不清掉 top，浏览器会认为上下方向被"top+bottom+height
+    // 三个都定死"，直接无视 bottom，只按 top 算——垂直位置就会一直卡在 CSS 默认值上。
+    fab.style.top = "auto";
+    fab.style.left = "auto";
     fab.style.right = `${pos.right}px`;
     fab.style.bottom = `${pos.bottom}px`;
   }
@@ -3628,6 +3633,11 @@ function injectFloatingButton() {
       window.innerHeight - size - margin,
     );
 
+    // 拖拽第一次真正开始移动时，把 top/left 清成 auto：原因同上（恢复保存坐标那段的
+    // 注释），不清的话 CSS 默认的 top:16px 会一直"赢过"这里改的 bottom，纵向拖拽会
+    // 看起来完全没反应，只有横向（right）在动。
+    fab.style.top = "auto";
+    fab.style.left = "auto";
     fab.style.right = `${newRight}px`;
     fab.style.bottom = `${newBottom}px`;
   }
