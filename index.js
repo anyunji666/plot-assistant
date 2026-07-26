@@ -114,7 +114,7 @@ Step3 格式：角色名·关键词: (日期·地点)+一句话钩子；（日�
 \`\`\`
 ---
 <details><summary>摘要</summary>
-Time: 武定三年三月十五,未时-申时
+Time: 武定三年三月十五,申时
 Location: 云隐山洞穴
 Relationships: {{user}}→角色A: 恋人; {{user}}→角色B: 师徒(暧昧); {{user}}→角色C: [REMOVE]
 Inventory: {{user}}·玉佩: =1; {{user}}·金创药: -1; {{user}}·解药: [REMOVE]
@@ -338,6 +338,24 @@ async function buildMessagesText(start, end) {
     .join("\n\n");
 }
 
+// === Helper: 从 fromIdx 开始沿 direction（-1 向前找上文，+1 向后找下文）逐层扫描聊天记录，
+// 找到第一个能成功解析出摘要模块的 AI 楼层，作为逐层还原时的时间/地点锚点。
+// 扫描范围不受当前批次(batchStart/batchEnd)限制，只受聊天记录本身边界限制，纯本地遍历不产生额外AI调用；
+// 找不到（比如已经到聊天开头/结尾都没有摘要模块）时返回 null，由调用方决定留空锚点，不报错、不阻断。===
+function findNearestAnchorFloor(chat, fromIdx, direction) {
+  if (!Array.isArray(chat)) return null;
+  let i = fromIdx;
+  while (i >= 0 && i < chat.length) {
+    const message = chat[i];
+    if (message && !message.is_user) {
+      const parsed = parseFloorSummaryFields(message.mes);
+      if (parsed) return { idx: i, parsed };
+    }
+    i += direction;
+  }
+  return null;
+}
+
 // === Helper: 缺失摘要模块的楼层区间，让AI逐层还原 Time/Location/Overview（不合并、不压缩条数），
 // 使这部分楼层产出的字段结构跟正常楼层（对话前强调规则写出的摘要模块）完全一致，方便 buildRangeSummaryContent
 // 用同一套逻辑合并整个batch（合并时间跨度、取末尾地点、逐层列关键事件）和提取关键词（按"年/月"字面切分）。
@@ -347,7 +365,7 @@ function buildFloorRestoreInstruction() {
 现在请你对归属于AI的楼层逐层还原缺失的摘要字段（Time/Location/Overview），不要续写故事，不要输出 <summary> 标签之外的任何文字。
 还原规则：
 - 目标楼层逐层单独输出，不合并多层、不跳过任何一层、不把一层拆成多组
-- Time: 该层故事场景结束时的时刻；需具体到年月日
+- Time: 该层故事场景结束时的时刻；精确到年月日+时分
 - Location: 该层场景最后所在地点
 - Overview: 按时间顺序列出关键事件+实际改变(关系/处境/认知)，平铺直叙不用比喻/形容词，写成一段话不换行；无实质进展留空，不超150字
 请严格按照下面的格式输出，每层楼一个区块，区块之间空一行：
@@ -359,14 +377,32 @@ Overview: {...}
 </summary>`;
 }
 
+// anchors 可选，形如 { prev: {idx, parsed:{time,location,overview}}, next: {idx, parsed:{time,location}} }：
+// prev（上文）给完整三项，帮AI判断是否与上文重复、避免时间倒退；
+// next（下文）只给 Time，当作"本段时间不能超过这个点"的边界约束，不泄露下文 Location/Overview 以免剧透干扰本段还原。
 function buildFloorRestoreUserContent(
   start,
   end,
   messagesText,
   targetFloorIndices,
+  anchors,
 ) {
   const targetListStr = (targetFloorIndices || []).join("、");
-  return `以下是第${start}楼到第${end}楼的对话原文（其中用户发言楼层仅供参考，不需要输出摘要）：\n\n${messagesText}\n\n请只针对第 ${targetListStr} 楼分别还原摘要字段，不要遗漏其中任何一层，也不要为用户发言楼层输出内容。`;
+  const { prev, next } = anchors || {};
+  let anchorBlock = "";
+  if (prev || next) {
+    const lines = [];
+    if (prev) {
+      lines.push(
+        `已知上文（第${prev.idx}楼）：Time: ${prev.parsed.time || "未知"}　Location: ${prev.parsed.location || "未知"}　Overview: ${prev.parsed.overview || "（无）"}`,
+      );
+    }
+    if (next) {
+      lines.push(`已知下文（第${next.idx}楼）：Time: ${next.parsed.time || "未知"}`);
+    }
+    anchorBlock = `${lines.join("\n")}\n（以上仅供你判断本段所处时间点和地点参考，不要照抄，需结合本段对话实际内容推进）\n\n`;
+  }
+  return `${anchorBlock}以下是第${start}楼到第${end}楼的对话原文（其中用户发言楼层仅供参考，不需要输出摘要）：\n\n${messagesText}\n\n请只针对第 ${targetListStr} 楼分别还原摘要字段，不要遗漏其中任何一层，也不要为用户发言楼层输出内容。`;
 }
 
 // === Helper: 按标签取单行字段值，如 "Time: xxx" 中取出 "xxx"。
@@ -1110,11 +1146,16 @@ async function buildRangeSummaryContent(batchStart, batchEnd, overlayOptions) {
       const messagesText = await buildMessagesText(run.start, run.end);
       if (!messagesText) continue;
       const systemPrompt = buildFloorRestoreInstruction();
+      // 锚点扫描不受当前批次边界限制，直接在完整 chat 数组里向前/向后找最近的已知摘要楼层，
+      // 避免"缺失段恰好卡在批次开头/结尾"导致本该有的锚点被批次边界截断。
+      const prevAnchor = findNearestAnchorFloor(chat, run.start - 1, -1);
+      const nextAnchor = findNearestAnchorFloor(chat, run.end + 1, 1);
       const userContent = buildFloorRestoreUserContent(
         run.start,
         run.end,
         messagesText,
         targetFloorIndices,
+        { prev: prevAnchor, next: nextAnchor },
       );
       const rawResult = await generateSummaryWithOverlay(
         systemPrompt,
