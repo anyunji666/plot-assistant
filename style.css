@@ -531,12 +531,10 @@
 }
 
 /* ===== 移动端适配（窄屏：手机竖屏/大部分手机横屏） ===== */
-@media (max-width: 700px) {
-    /* 悬浮球在部分移动端环境下经常被输入栏/工具栏遮挡或定位错乱，
-       PC 端默认常显，移动端这里直接隐藏，不再提供开关。 */
-    #mm-fab {
-        display: none;
-    }
+@media (pointer: coarse), (max-width: 700px) {
+    /* 悬浮球本身不再在移动端隐藏——默认停靠位置早已改成左上角（见 injectFloatingButton
+       里的 FAB_POS_KEY 注释），能避开底部输入栏/工具栏；显隐现在交给控制面板里的
+       「悬浮球开/悬浮球关」按钮，用户自己决定，不再由 CSS 强制砍掉。 */
 
     #mm-modal-overlay {
         padding: 0;

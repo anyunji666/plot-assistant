@@ -2594,6 +2594,7 @@ async function showSummaryPopup() {
           <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">地图</p>
           <div style="display: flex; flex-wrap: wrap; gap: 8px;">
             <button id="${POPUP_ID}-map-marker" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">地图标记</button>
+            <button id="${POPUP_ID}-fab-toggle" style="border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;"></button>
           </div>
         </div>
 
@@ -2783,6 +2784,26 @@ async function showSummaryPopup() {
           $(this).css("background", "#3a7bd5");
         },
       );
+
+    // 悬浮球显示开关：点击只切换状态，不关闭弹窗，方便连续切换/立刻在屏幕上看到效果。
+    const FAB_TOGGLE_ON_STYLE = { background: "#3a9d5a" };
+    const FAB_TOGGLE_OFF_STYLE = { background: "#555" };
+
+    function renderFabToggleButton($btn, visible) {
+      $btn
+        .text(visible ? "悬浮球开" : "悬浮球关")
+        .css(visible ? FAB_TOGGLE_ON_STYLE : FAB_TOGGLE_OFF_STYLE);
+    }
+
+    const $fabToggleBtn = $(`#${POPUP_ID}-fab-toggle`);
+    renderFabToggleButton($fabToggleBtn, getFabVisible());
+
+    $fabToggleBtn.on("click", () => {
+      const nowVisible = !getFabVisible();
+      setFabVisibleSetting(nowVisible);
+      applyFabVisibility();
+      renderFabToggleButton($fabToggleBtn, nowVisible);
+    });
 
     // 移动端优化：两个开关按钮，点击只切换状态，不关闭弹窗
     const MOBILE_OPT_ON_STYLE = { background: "#3a9d5a" };
@@ -3212,15 +3233,27 @@ function makeCharacterMapData() {
   };
 }
 
-// extension_settings[MAP_MODULE_NAME] 顶层结构：{ byCharacter: { 角色名: 单角色数据 } }
-// 悬浮球 PC 端默认常显、移动端用 CSS 直接隐藏，不需要开关，也不需要 fabVisible 字段。
+// extension_settings[MAP_MODULE_NAME] 顶层结构：{ byCharacter: { 角色名: 单角色数据 }, fabVisible: boolean }
+// fabVisible 是全局开关（不分角色、不分设备），控制地图悬浮球是否显示，默认开启。
 function getMapExtRoot() {
   if (!extension_settings[MAP_MODULE_NAME]) {
     extension_settings[MAP_MODULE_NAME] = { byCharacter: {} };
   }
   const root = extension_settings[MAP_MODULE_NAME];
   if (!root.byCharacter) root.byCharacter = {};
+  if (typeof root.fabVisible !== "boolean") root.fabVisible = true;
   return root;
+}
+
+// 读取悬浮球是否应该显示（默认 true）
+function getFabVisible() {
+  return getMapExtRoot().fabVisible !== false;
+}
+
+// 写入悬浮球显示开关并立即持久化
+function setFabVisibleSetting(visible) {
+  getMapExtRoot().fabVisible = !!visible;
+  saveSettingsDebounced();
 }
 
 // 群聊 / 未选中角色卡时，地图数据只临时存在这个内存变量里，不写入 extension_settings，
@@ -3481,6 +3514,15 @@ function saveFabPos(right, bottom) {
   }
 }
 
+// 根据 fabVisible 设置切换悬浮球的显隐；只是 display:none/""，不销毁 DOM，
+// 拖拽记住的位置不会丢。悬浮球还没注入时（例如还没到初始化那一步）静默跳过即可，
+// 后面 injectFloatingButton() 里会再调用一次自己套用当前设置。
+function applyFabVisibility() {
+  const fab = document.getElementById("mm-fab");
+  if (!fab) return;
+  fab.style.display = getFabVisible() ? "" : "none";
+}
+
 function injectFloatingButton() {
   if (document.getElementById("mm-fab")) return;
 
@@ -3529,8 +3571,9 @@ function injectFloatingButton() {
   const pos = clampPos(rawPos.right, rawPos.bottom);
   fab.style.right = `${pos.right}px`;
   fab.style.bottom = `${pos.bottom}px`;
-  // 不再有可勾选的“显示悬浮球”开关：PC 端默认直接显示，移动端由 style.css 里
-  // 的媒体查询隐藏（见 #mm-fab 的 @media (max-width: 700px) 规则）。
+  // 显隐由控制面板里的「悬浮球开/悬浮球关」按钮控制（见 setFabVisibleSetting /
+  // applyFabVisibility），这里只负责套用启动时已保存的状态，PC/移动端同一套逻辑。
+  applyFabVisibility();
 
   // 拖拽逻辑：区分"点击"和"拖动"，避免拖完松手误触发打开面板
   let dragging = false;
