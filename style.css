@@ -11,7 +11,11 @@
     width: 44px;
     height: 44px;
     z-index: 999999;
-    background: var(--SmartThemeBlurTintColor, #2a2a2a);
+    /* 不再用 --SmartThemeBlurTintColor 做背景色：这个变量语义上是给"模糊面板"用的，
+       部分主题下自带低透明度/毛玻璃效果，用在悬浮球这种孤立小方块上，实测可能会
+       在手机上"融进背景"看不见。这里直接写死一个不透明深色，不依赖任何主题变量，
+       保证悬浮球在任何主题下都有稳定对比度。 */
+    background-color: #2a2a2a;
     color: var(--SmartThemeBodyColor, #eee);
     border: 1px solid var(--SmartThemeBorderColor, rgba(255,255,255,0.15));
     border-radius: 10px;
@@ -34,8 +38,9 @@
     cursor: grabbing;
 }
 
-#mm-fab .fa-map-location-dot {
+#mm-fab .mm-fab-icon {
     font-size: 1.3em;
+    line-height: 1;
     pointer-events: none;
 }
 

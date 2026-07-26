@@ -3488,10 +3488,11 @@ function updateCharIndicatorUI() {
 // 以及下面这个右下角悬浮球。
 
 // ---- 悬浮按钮（快捷入口，可拖拽，位置记忆） ----
-// 注：默认位置从右下角改为左上角（右下角在部分手机端会被酒馆自身的底部输入栏/工具栏遮住，
-// 导致关闭地图面板后也看不到悬浮球）。存储 key 换成新的 v2，避免老用户本地存的右下角坐标
-// 继续生效，盖过这次改的新默认值。
-const FAB_POS_KEY = "mm_fab_pos_v2";
+// 注：默认位置几经调整——右下角会被酒馆自身的底部输入栏/工具栏遮住；改成左上角后
+// 又发现容易和酒馆自身侧栏开关等常驻 UI 挤在一起、找不到；现在改成右上角，跟音效
+// 插件的移动端默认停靠位置一致，同样能避开底部遮挡。存储 key 换成新的 v3，避免
+// 老用户本地存的左上角坐标继续生效，盖过这次改的新默认值。
+const FAB_POS_KEY = "mm_fab_pos_v3";
 
 function loadFabPos() {
   try {
@@ -3533,15 +3534,15 @@ function injectFloatingButton() {
   // 以及"点哪都误触发"的问题。所以换回普通 div，逻辑更简单可控。
   const html = `
         <div id="mm-fab" title="地图标记">
-            <div class="fa-solid fa-map-location-dot"></div>
+            <div class="mm-fab-icon">🗺️</div>
         </div>`;
   document.body.insertAdjacentHTML("beforeend", html);
 
   const fab = document.getElementById("mm-fab");
 
-  // 默认贴左上角：留 16px 边距，44px 是按钮自身宽高（见 style.css #mm-fab）。
-  // 用 right/bottom 表达是为了跟下面拖拽逻辑的坐标系保持一致，数值上换算成
-  // "左边缘距左 16px、上边缘距顶 16px" 的等效 right/bottom。
+  // 默认贴右上角：跟音效插件的移动端默认停靠位置保持一致。之前贴左上角是为了
+  // 躲开底部输入栏/工具栏，但左上角正好是酒馆自身侧栏开关等 UI 常驻的位置，
+  // 手机上实测容易被挤在一起、找不到，所以换到右上角，同样能避开底部遮挡。
   const FAB_MARGIN = 16;
   const FAB_SIZE = 44;
 
@@ -3564,7 +3565,7 @@ function injectFloatingButton() {
   }
 
   const defaultPos = {
-    right: Math.max(FAB_MARGIN, window.innerWidth - FAB_MARGIN - FAB_SIZE),
+    right: FAB_MARGIN,
     bottom: Math.max(FAB_MARGIN, window.innerHeight - FAB_MARGIN - FAB_SIZE),
   };
   const rawPos = loadFabPos() || defaultPos;
