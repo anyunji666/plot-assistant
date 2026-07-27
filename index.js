@@ -4264,10 +4264,10 @@ async function deletePhoneChatBackground(characterName) {
 
 // 把背景 dataURL 套用到对应容器：传 null/空则清空自定义背景，露出下层默认样式。
 // 全局背景套在 #pa-phone-modal 内专门的背景图层上（z-index 在内容之下）：
-//   没设置自定义背景时，图层本身没有背景图，保持 style.css 里默认的 opacity: 0.9，
-//   露出 #pa-phone-modal 的纯蓝底，还原原来的半透明蓝底效果；
-//   一旦设置了自定义背景图，就把图层调成完全不透明（opacity: 1），彻底盖住下面的蓝底，
-//   避免蓝色透过 10% 的透明度叠加到图片上，导致背景图发暗发闷。
+//   这一层和它下面的纯色底层 #pa-phone-base-color-layer 现在都固定是完全不透明的，
+//   不管有没有设置自定义背景图，弹窗本体都只会露出纯色或者背景图，不会透出外面小说的文字；
+//   没设置自定义背景时，图层本身没有 background-image，直接露出下面同样不透明的纯蓝底；
+//   设置了自定义背景图后，就在这一层上显示图片即可，不需要再额外调 opacity。
 // 聊天页背景只套在消息滚动区域 #pa-phone-chat-messages 上（即头部标题栏和输入栏这两条线之间），
 // 因为要跟气泡文字保持足够对比度，这里保留一层浅色蒙层，本身就是不透明的，本来就不会漏出全局背景层。
 function applyPhoneGlobalBackground(dataUrl) {
@@ -4275,10 +4275,8 @@ function applyPhoneGlobalBackground(dataUrl) {
   if (!layer) return;
   if (dataUrl) {
     layer.style.backgroundImage = `url("${dataUrl}")`;
-    layer.style.opacity = "1";
   } else {
     layer.style.backgroundImage = "";
-    layer.style.opacity = "";
   }
 }
 
@@ -4999,20 +4997,20 @@ function makeCharacterMapData() {
 }
 
 // extension_settings[MAP_MODULE_NAME] 顶层结构：{ byCharacter: { 角色名: 单角色数据 }, fabVisible: boolean }
-// fabVisible 是全局开关（不分角色、不分设备），控制地图悬浮球是否显示，默认开启。
+// fabVisible 是全局开关（不分角色、不分设备），控制地图悬浮球是否显示，默认关闭。
 function getMapExtRoot() {
   if (!extension_settings[MAP_MODULE_NAME]) {
     extension_settings[MAP_MODULE_NAME] = { byCharacter: {} };
   }
   const root = extension_settings[MAP_MODULE_NAME];
   if (!root.byCharacter) root.byCharacter = {};
-  if (typeof root.fabVisible !== "boolean") root.fabVisible = true;
+  if (typeof root.fabVisible !== "boolean") root.fabVisible = false;
   return root;
 }
 
-// 读取悬浮球是否应该显示（默认 true）
+// 读取悬浮球是否应该显示（默认 false）
 function getFabVisible() {
-  return getMapExtRoot().fabVisible !== false;
+  return getMapExtRoot().fabVisible === true;
 }
 
 // 写入悬浮球显示开关并立即持久化
