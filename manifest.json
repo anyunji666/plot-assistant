@@ -6,7 +6,7 @@
     "js": "index.js",
     "css": "style.css",
     "author": "用户自定义 / Claude (Anthropic)",
-    "version": "3.2.2",
-    "homePage": "https://github.com/anyunji666/plot-assistant",
+    "version": "3.4.0",
+    "homePage": "",
     "auto_update": false
 }

@@ -27,6 +27,11 @@ const SMALL_SUMMARY_TITLE_PREFIX = "小总结："; // 小总结世界书条目�
 const LARGE_SUMMARY_TITLE = "大总结"; // 大总结世界书条目固定标题
 const PRE_EMPHASIS_TITLE = "对话前强调"; // 对话前强调世界书条目固定标题
 const MAP_INFO_TITLE = "地图信息"; // 地图标记模块自动生成/覆盖的世界书条目固定标题，跟其他总结条目同级存在
+const PHONE_PRESET_TITLE = "私信预设"; // 手机私信开场白预设世界书条目固定标题，跟角色卡条目一样 disable:true 常驻、不参与主线注入，插件直接读取内容使用
+// "私信预设"条目首次创建前用于预填编辑框的默认内容——手机私信生成提示词里唯一可编辑的部分（开场白/扮演指令），
+// 其余结构（人设/最新正文/私信历史块）和输出格式要求都写死在代码里，不放进这段可编辑文本。
+// "联系人"是占位符，实际调用时会被替换成真实联系人姓名。
+const DEFAULT_PHONE_PRESET_CONTENT = `请你在<private_letter="联系人">中扮演联系人和{{user}}聊天，注意俩人当前关系，口吻参考角色性格背景。`;
 // 对话前强调条目的默认位置设置：@D 在深度0、order 999、概率100%，仅在条目首次创建时生效；
 // 已存在的条目只更新标题/内容/启用状态，
 // 不会覆盖你之后在世界书面板里手动调整过的位置/深度等设置。
@@ -56,6 +61,7 @@ Location: \${本轮场景最后所在地点}
 Relationships: \${{{user}}→角色: 关系词}
 Inventory: \${角色名·物品名: 数量}
 Setups: \${角色名·关键词: 简介}
+Busy: \${仅当Snapshot Table的Busy快照里列出的角色本轮未出现或拿“通讯器”回复消息时才输出，格式见下方Busy规则}
 Overview: \${本轮关键事件按时间顺序列出}
 </details>
 \`\`\`
@@ -101,13 +107,22 @@ Step2 新增：本轮是否出现值得长线追踪的伏笔/线索/未解约定
 Step3 格式：角色名·关键词: (日期·地点)+一句话钩子；（日期具体到年月日，整体不超30字）
 \`\`\`
 
+**Busy**（Busy条目唯一要做的是添加[REMOVE]标记，清除本轮未出现或拿起“通讯器”查看并回复消息的角色，多组分号分隔）
+\`\`\`
+for 角色 in Snapshot Table当前Busy快照里列出的角色:
+    if 角色本轮没有出现在正文场景里（不在场/未登场/未被提及活动）或角色察觉到了“通讯器”有新消息并回复了: 值 = [REMOVE]
+    else: 跳过，不输出这个角色
+# 格式：角色名: [REMOVE]；
+# 值只能是[REMOVE]，这是Busy字段唯一合法的值；不要自己新增角色到Busy、不要写"忙"这类其它取值
+\`\`\`
+
 **Overview**（无实质进展留空，不超150字）
 \`\`\`
 按时间顺序列出关键事件+其造成的实际改变(关系/处境/认知)，平铺直叙，不用比喻/形容词。
 \`\`\`
 
 ---
-**Snapshot Table**：上文已注入Relationships/Inventory/Setups的只读快照表，仅用于查看当前状态及填写[REMOVE]清除过期条目。
+**Snapshot Table**：上文已注入Relationships/Inventory/Setups/Busy的只读快照表，仅用于查看当前状态及填写[REMOVE]清除过期条目。其中Busy列出的是"被判定为忙碌、暂时没空回复私信"的角色——本轮如果这些角色没有出现在正文场景或回复消息了，需要在Busy字段里写"角色名: [REMOVE]"，把它从忙碌状态里清掉。
 
 ---
 **示例（仅供格式参考）：**
@@ -162,6 +177,27 @@ const CHARACTER_ENTRY_DEFAULTS = {
   probability: 100,
 };
 
+// === 手机（通讯器）私信系统相关常量 ===
+// 本地对话缓存（LOCAL_CHAT_STORE_KEY）里存放"忙/闲判定缓存 + 待注入私信槽位标记"的 key，
+// 跟起始楼层偏移量同一套持久化方式（浏览器本地存储），按"角色卡+对话文件"区分，换对话/换角色卡互不干扰。
+const PHONE_CHAT_META_KEY = "plotAssistant_phoneChatState";
+// 私信正文本地库（IndexedDB），跟地图图片库（mm_map_marker_db）是两个独立的库，互不影响。
+const PHONE_IDB_NAME = "plot_assistant_phone_db";
+const PHONE_IDB_STORE = "messages";
+// 头像库：key 按"当前角色卡::联系人名"存一张压缩后的 dataURL，换角色卡不互相影响。
+const PHONE_AVATAR_STORE = "avatars";
+// 图片库（原"表情包"）：不分联系人/角色卡，全局公用一份，整份列表存在同一个 key 下（数量不大，不用建索引）。
+const PHONE_STICKER_STORE = "stickers";
+const PHONE_STICKER_LIST_KEY = "list";
+// 背景库：分两类共用一个 store——
+//   全局背景（通讯录/动态/设置三页共用）存在固定 key 下；
+//   聊天页背景按"当前角色卡::联系人名"分别存，换角色卡/换联系人互不影响，跟头像库同一套 key 规则。
+const PHONE_BACKGROUND_STORE = "backgrounds";
+const PHONE_GLOBAL_BACKGROUND_KEY = "__global__";
+// 私信槽位注入正文时用的 extension prompt key，平时为空，只有"今天有新私信"时临时写入内容，
+// AI 生成完这一轮后立即清空（一次性注入，不常驻）。
+const PHONE_SLOT_PROMPT_KEY = "plotAssistant_phoneSlot";
+
 const SUMMARY_BUTTON_ID = "summary-assistant-menu-button";
 const SUMMARY_BUTTON_ICON = "fa-solid fa-book";
 const SUMMARY_BUTTON_TOOLTIP = "剧情助手";
@@ -169,8 +205,10 @@ const SUMMARY_BUTTON_TEXT = "剧情助手";
 const SUMMARY_POPUP_ID = "summary-assistant-popup";
 const GENERATING_OVERLAY_ID = "summary-assistant-generating-overlay";
 
-// 起始楼层（原"接续小总结"的偏移量）：持久化存到"当前对话"的 chatMetadata 里（跟着这个对话/存档走，
-// 重开同一个对话不会丢，换到别的对话也不会互相干扰；只有你再次点击"设定起始楼层"并确认新值时才会覆盖）。
+// 起始楼层（原"接续小总结"的偏移量）：持久化存在浏览器本地（localStorage），按"角色卡+对话文件"
+// 区分不同对话，重开同一个对话不会丢，换到别的对话也不会互相干扰；只有你再次点击"设定起始楼层"
+// 并确认新值时才会覆盖。注意：这是存在浏览器本地的，换浏览器/清浏览器数据/控制面板里点"清空数据"都会丢，
+// 不跟着对话文件本身走（不会随导出/分享对话文件带走）。
 // 语义：本对话新写入的小总结，世界书楼层号从这个值开始编号。默认/未设置视为 0（不偏移）。
 const OFFSET_META_KEY = "plotAssistant_summaryOffset";
 
@@ -214,36 +252,77 @@ function errorCatched(fn) {
   };
 }
 
-// === Helper: 拿到"当前对话"的 chatMetadata 对象（跟随聊天文件本身持久化，不是跟随世界书） ===
-function getChatMetadataStore() {
-  const context = getCtx();
-  if (!context.chatMetadata || typeof context.chatMetadata !== "object") {
-    context.chatMetadata = {};
+// === 本地对话缓存：起始楼层记录 + 私信忙闲缓存都存在这一份 localStorage 里 ===
+// 原来存在酒馆的 chatMetadata 里（跟着对话文件本身持久化），现在改成存浏览器本地，
+// 换来的好处是控制面板"清空数据"能一次性清掉所有对话的这两项缓存；代价是这份数据
+// 不再跟着对话文件走（不会随导出/复制对话文件带走，换浏览器/清浏览器数据会丢）。
+// 整份 JSON 存一个 key 下面，按"对话" 分别存一份小对象，key 用
+// "角色卡 avatar 文件名::当前对话文件名" 区分不同对话（暂不支持群聊）。
+const LOCAL_CHAT_STORE_KEY = "plotAssistant_localChatStore";
+
+let localChatStoreCache = null; // 惰性加载：整份 JSON 只解析一次，后续都在内存里改，改完整份写回
+let transientChatMetadataStore = null; // 拿不到稳定 key（比如没选中角色卡）时的内存兜底，不持久化
+
+// 从 localStorage 读整份本地对话缓存到内存，只在第一次调用时真正解析 JSON
+function loadLocalChatStore() {
+  if (localChatStoreCache) return localChatStoreCache;
+  try {
+    const raw = localStorage.getItem(LOCAL_CHAT_STORE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    localChatStoreCache =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed
+        : {};
+  } catch (error) {
+    console.error("[剧情助手] 读取本地对话缓存失败，已重置为空:", error);
+    localChatStoreCache = {};
   }
-  return context.chatMetadata;
+  return localChatStoreCache;
 }
 
-// === Helper: 把 chatMetadata 的改动写回酒馆（原生扩展常用 saveMetadataDebounced/saveMetadata，
-// 这里做了兼容性探测；如果你的酒馆版本接口名不一样，控制台会有警告，把日志发我调整）===
-async function persistChatMetadata() {
-  const context = getCtx();
+// 拼一个能区分"具体某个对话"的稳定 key：角色卡 avatar 文件名 + 当前对话文件名。
+// 拿不到（未选中角色卡、群聊、或酒馆版本没暴露 getCurrentChatId 等）时返回 null，
+// 调用方会退化到内存兜底（不持久化，仅本次页面会话有效）。
+function getStableChatKey() {
   try {
-    if (typeof context.saveMetadata === "function") {
-      await context.saveMetadata();
-    } else if (typeof context.saveMetadataDebounced === "function") {
-      context.saveMetadataDebounced();
-    } else if (typeof context.saveChatDebounced === "function") {
-      context.saveChatDebounced();
-    } else {
-      console.warn(
-        "[剧情助手] 未找到可用的聊天元数据保存接口（saveMetadata/saveMetadataDebounced/saveChatDebounced 均不存在），接续偏移量可能无法持久化，仅本次页面会话内存有效。",
-      );
-    }
+    const context = getCtx();
+    if (context.groupId) return null; // 暂不支持群聊
+    if (typeof context.getCurrentChatId !== "function") return null;
+    const chatId = context.getCurrentChatId();
+    if (!chatId) return null;
+    const charId = context.characterId;
+    if (charId === undefined || charId === null) return null;
+    const avatar = context.characters?.[charId]?.avatar;
+    if (!avatar) return null;
+    return `${avatar}::${chatId}`;
   } catch (error) {
-    console.warn(
-      "[剧情助手] 保存聊天元数据时出错，接续偏移量可能未持久化:",
-      error,
+    return null;
+  }
+}
+
+// === Helper: 拿到"当前对话"的本地缓存对象（起始楼层记录 + 私信忙闲缓存都存在这里）===
+function getChatMetadataStore() {
+  const key = getStableChatKey();
+  if (!key) {
+    if (!transientChatMetadataStore) transientChatMetadataStore = {};
+    return transientChatMetadataStore;
+  }
+  const root = loadLocalChatStore();
+  if (!root[key] || typeof root[key] !== "object") root[key] = {};
+  return root[key];
+}
+
+// === Helper: 把 getChatMetadataStore() 的改动写回 localStorage（内存兜底的情况没地方可写，直接跳过）===
+async function persistChatMetadata() {
+  const key = getStableChatKey();
+  if (!key) return;
+  try {
+    localStorage.setItem(
+      LOCAL_CHAT_STORE_KEY,
+      JSON.stringify(loadLocalChatStore()),
     );
+  } catch (error) {
+    console.error("[剧情助手] 保存本地对话缓存失败:", error);
   }
 }
 
@@ -398,7 +477,9 @@ function buildFloorRestoreUserContent(
       );
     }
     if (next) {
-      lines.push(`已知下文（第${next.idx}楼）：Time: ${next.parsed.time || "未知"}`);
+      lines.push(
+        `已知下文（第${next.idx}楼）：Time: ${next.parsed.time || "未知"}`,
+      );
     }
     anchorBlock = `${lines.join("\n")}\n（以上仅供你判断本段所处时间点和地点参考，不要照抄，需结合本段对话实际内容推进）\n\n`;
   }
@@ -522,6 +603,7 @@ function parseFloorSummaryFields(mesText) {
     relationships: extractLabelLine(inner, "Relationships"),
     inventory: extractLabelLine(inner, "Inventory"),
     setups: extractLabelLine(inner, "Setups"),
+    busy: extractLabelLine(inner, "Busy"), // 仅供手机私信插件读取"角色: [REMOVE]"信号，不参与状态表 Relationships/Inventory/Setups 的常规合并
     overview: overviewMatch ? overviewMatch[1].trim() : "",
   };
 }
@@ -906,18 +988,30 @@ function extractOtherPartyName(relationshipKey) {
 }
 
 // === Helper: 把状态表结构化对象序列化回世界书条目文本 ===
-function serializeStatusTableContent(state) {
+// busyMap 为可选参数：手机私信插件维护的"当前忙碌角色"表（{角色名: true, ...}），
+// 不来自聊天记录全量重放（跟 Relationships/Inventory/Setups 不同源），只在序列化这一步拼进状态表末尾，
+// 让正文 AI 每轮都能看到"谁正忙"，从而在这些角色不再登场时输出 Busy: 角色名: [REMOVE] 清除标记。
+function serializeStatusTableContent(state, busyMap) {
   const lines = [
     `Relationships: ${serializeKeyValueList(state.relationships)}`,
     `Inventory: ${serializeKeyValueList(state.inventory)}`,
     `Setups: ${serializeKeyValueList(state.setups)}`,
   ];
+  const busyNames = busyMap
+    ? Object.keys(busyMap).filter((name) => busyMap[name])
+    : [];
+  lines.push(`Busy: ${busyNames.map((name) => `${name}: 忙`).join("; ")}`);
   // 固定提醒行：每次序列化都重新生成，不写进任何 Map、不参与解析（不匹配任何字段标签的正则），
   // 纯粹是"贴在状态表末尾、每轮都会被 AI 看到"的复核提示，防止旧 Setups 条目（伏笔/未解线索）被长上下文遗忘。
   // 只在 Setups 非空时附加，避免空列表时提醒显得多余。
   if (state.setups && state.setups.size > 0) {
     lines.push(
       "（提醒：以上 Setups 每轮需逐条复核——已回收/已兑现/已废弃的，或因场景/时间线推进已不再可能被回收的，本轮请用 [REMOVE] 清除）",
+    );
+  }
+  if (busyNames.length > 0) {
+    lines.push(
+      '（提醒：以上 Busy 中的角色若本轮未出现在正文场景里，请在摘要块的 Busy 字段输出"角色名: [REMOVE]"清除）',
     );
   }
   return lines.join("\n");
@@ -1044,7 +1138,28 @@ async function rebuildStatusTableFromChat() {
     });
   });
 
-  const newContent = serializeStatusTableContent(state);
+  // 手机私信插件的 Busy 状态不参与上面的全量重放（它的来源是用户在手机里主动发消息，不是从聊天记录解析出来的），
+  // 只在这里"读取当前值 → 拼进序列化结果"；REMOVE 信号只看【最新一层】AI 楼层，不回溯整段历史——
+  // 忙碌状态本身只在"当前"有意义，没必要像 Relationships 那样重放整个对话。
+  const phoneState = getPhoneChatState();
+  const freedCharacters = [];
+  const latestAiMessage = [...chat].reverse().find((m) => m && !m.is_user);
+  if (latestAiMessage) {
+    const latestFields = parseFloorSummaryFields(latestAiMessage.mes);
+    if (latestFields && latestFields.busy) {
+      const { map: busyRemoveMap } = parseKeyValueListWithSkipped(
+        latestFields.busy,
+      );
+      busyRemoveMap.forEach((value, name) => {
+        if (isRemoveMarker(value) && phoneState.busy[name]) {
+          delete phoneState.busy[name];
+          freedCharacters.push(name);
+        }
+      });
+    }
+  }
+
+  const newContent = serializeStatusTableContent(state, phoneState.busy);
   const lorebookName = await getOrCreateSummaryLorebook();
   await saveOrOverwriteLorebookEntry(
     lorebookName,
@@ -1053,6 +1168,13 @@ async function rebuildStatusTableFromChat() {
     true,
     STATUS_TABLE_ENTRY_DEFAULTS,
   );
+
+  if (freedCharacters.length > 0) {
+    await persistChatMetadata();
+    for (const name of freedCharacters) {
+      await handleCharacterBecameFree(name);
+    }
+  }
 
   if (newIssues.length > 0) {
     notify(
@@ -1884,7 +2006,7 @@ function extractCharacterKeywords(name) {
 }
 
 // === Helper: 新建一条角色卡条目（重名会报错，请去下方世界书条目列表里直接编辑） ===
-async function saveNewCharacterEntry(lorebookName, name, extra) {
+async function saveNewCharacterEntry(lorebookName, name, gender, other) {
   const context = getCtx();
   const data = await context.loadWorldInfo(lorebookName);
   if (!data || !data.entries)
@@ -1896,21 +2018,23 @@ async function saveNewCharacterEntry(lorebookName, name, extra) {
   );
   if (existing) {
     throw new Error(
-      `角色「${name}」已存在，请在下方"世界书条目"列表里直接编辑，或换一个名字`,
+      `联系人「${name}」已存在，请在下方"世界书条目"列表里直接编辑，或换一个名字`,
     );
   }
 
   const newUid = getFreeUid(data);
   if (newUid === null) throw new Error("无法为新世界书条目分配 uid。");
 
-  const content = `<character_information character="${name}">\n${extra || ""}\n</character_information>`;
+  // 固定存 gender / other 两个字段（配合手机私信面板"读取姓名/性别/其它"，姓名已经在 comment/character 属性里了）。
+  // other 支持多行文本，原样拼在 "other:" 之后，作为整个标签内最后一个字段。
+  const content = `<character_information character="${name}">\ngender: ${gender || ""}\nother: ${other || ""}\n</character_information>`;
 
   data.entries[newUid] = {
     uid: newUid,
     comment: title,
     content,
-    disable: false,
-    constant: false, // 关键词触发，不常驻
+    disable: true, // 默认关闭：不会自动注入正文，手机插件需要时直接读取内容即可
+    constant: false, // 关键词触发，不常驻（关闭状态下这个也不生效，留着方便你以后手动开启）
     key: extractCharacterKeywords(name),
     position: 0, // 角色定义之前
     useGroupScoring: false,
@@ -1965,7 +2089,7 @@ async function openCreateCharacterDialog() {
       WebkitOverflowScrolling: "touch",
     });
 
-    const $title = $("<div>").text("创建新角色").css({
+    const $title = $("<div>").text("添加联系人").css({
       fontSize: "1.05em",
       fontWeight: "600",
       color: "#f0f0f0",
@@ -1985,6 +2109,12 @@ async function openCreateCharacterDialog() {
       outline: "none",
     };
 
+    const $errorMsg = $("<div>").css({
+      fontSize: "0.82em",
+      color: "#f28b82",
+      display: "none",
+    });
+
     const $nameWrap = $("<div>").css({
       display: "flex",
       flexDirection: "column",
@@ -1992,34 +2122,41 @@ async function openCreateCharacterDialog() {
     });
     $nameWrap.append(
       $("<label>")
-        .html('角色名 <span style="color:#f28b82">*</span>')
+        .html('联系人姓名 <span style="color:#f28b82">*</span>')
         .css({ fontSize: "0.82em", color: "#999" }),
     );
     const $nameInput = $('<input type="text">')
-      .attr("placeholder", "请输入角色名")
+      .attr("placeholder", "姓名")
       .css(inputCss);
     $nameWrap.append($nameInput);
 
-    const $extraWrap = $("<div>").css({
+    const $genderWrap = $("<div>").css({
       display: "flex",
       flexDirection: "column",
       gap: "4px",
-      minHeight: 0,
     });
-    $extraWrap.append(
+    $genderWrap.append(
       $("<label>")
-        .text("其他信息（可选）")
+        .html('性别 <span style="color:#f28b82">*</span>')
         .css({ fontSize: "0.82em", color: "#999" }),
     );
-    const $extraInput = $("<textarea>")
-      .attr({ rows: 7, placeholder: "age: 25\ngender: 女\noccupation: 侦探" })
-      .css({
-        ...inputCss,
-        resize: "vertical",
-        minHeight: "120px",
-        maxHeight: "min(40vh, 40dvh)",
-      });
-    $extraWrap.append($extraInput);
+    const $genderInput = $('<input type="text">')
+      .attr("placeholder", "男/女")
+      .css(inputCss);
+    $genderWrap.append($genderInput);
+
+    const $otherWrap = $("<div>").css({
+      display: "flex",
+      flexDirection: "column",
+      gap: "4px",
+    });
+    $otherWrap.append(
+      $("<label>").text("其它").css({ fontSize: "0.82em", color: "#999" }),
+    );
+    const $otherInput = $("<textarea>")
+      .attr("placeholder", "性格、背景、说话习惯等，选填")
+      .css({ ...inputCss, minHeight: "90px", resize: "vertical" });
+    $otherWrap.append($otherInput);
 
     const $btnRow = $("<div>").css({
       display: "flex",
@@ -2055,7 +2192,7 @@ async function openCreateCharacterDialog() {
       });
     $btnRow.append($cancel, $confirm);
 
-    $box.append($title, $nameWrap, $extraWrap, $btnRow);
+    $box.append($title, $nameWrap, $genderWrap, $otherWrap, $errorMsg, $btnRow);
     $overlay.append($box);
     $("body").append($overlay);
     setTimeout(() => $nameInput.trigger("focus"), 50);
@@ -2066,12 +2203,32 @@ async function openCreateCharacterDialog() {
       $bodyEl.css("overflow", prevBodyOverflow || "");
       resolve(
         confirmed
-          ? { name: $nameInput.val().trim(), extra: $extraInput.val().trim() }
+          ? {
+              name: $nameInput.val().trim(),
+              gender: $genderInput.val().trim(),
+              other: $otherInput.val().trim(),
+            }
           : null,
       );
     };
 
-    $confirm.on("click", () => done(true));
+    // 姓名 + 性别必填，留空时不关闭弹窗，标红对应输入框并提示。
+    const tryConfirm = () => {
+      const nameVal = $nameInput.val().trim();
+      const genderVal = $genderInput.val().trim();
+      const missing = [];
+      $nameInput.css("borderColor", nameVal ? "#3a3a3a" : "#f28b82");
+      $genderInput.css("borderColor", genderVal ? "#3a3a3a" : "#f28b82");
+      if (!nameVal) missing.push("姓名");
+      if (!genderVal) missing.push("性别");
+      if (missing.length > 0) {
+        $errorMsg.text(`请填写：${missing.join("、")}`).css("display", "block");
+        return;
+      }
+      done(true);
+    };
+
+    $confirm.on("click", tryConfirm);
     $cancel.on("click", () => done(false));
 
     let overlayPointerDownOnSelf = false;
@@ -2094,12 +2251,13 @@ async function openCreateCharacterDialog() {
     const saved = await saveNewCharacterEntry(
       lorebookName,
       result.name,
-      result.extra,
+      result.gender,
+      result.other,
     );
-    notify("success", `角色「${saved}」已写入「${lorebookName}」`);
+    notify("success", `联系人「${saved}」已写入「${lorebookName}」`);
   } catch (error) {
-    console.error("[剧情助手] 写入角色卡条目失败:", error);
-    notify("error", `写入角色卡条目失败：${error.message || error}`);
+    console.error("[剧情助手] 写入联系人条目失败:", error);
+    notify("error", `写入联系人条目失败：${error.message || error}`);
   }
 }
 
@@ -2534,6 +2692,75 @@ function addButtonStyles() {
   }
 }
 
+// === Function: 删除一个 IndexedDB 数据库（用于"清空数据"）===
+// 如果本页面还有该库的连接没关闭，浏览器会触发 onblocked 而不是立刻成功/失败，
+// 这里给个超时兜底，避免整个清空流程卡住不返回；真遇到 blocked 的情况会在控制台留日志，
+// 提醒用户刷新页面重试（IndexedDB 规范本身没有"强制踢掉其他连接"的办法）。
+function deleteIndexedDatabase(name) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      resolve(ok);
+    };
+    try {
+      const req = indexedDB.deleteDatabase(name);
+      req.onsuccess = () => finish(true);
+      req.onerror = () => finish(false);
+      req.onblocked = () => {
+        console.warn(
+          `[剧情助手] 删除数据库 ${name} 被阻塞，可能还有未关闭的连接，请刷新页面后重试。`,
+        );
+      };
+      // 兜底：万一 onblocked 之后也不再触发 onsuccess/onerror，别让调用方一直等下去。
+      setTimeout(() => finish(false), 5000);
+    } catch (error) {
+      console.error(`[剧情助手] 删除数据库 ${name} 时出错:`, error);
+      finish(false);
+    }
+  });
+}
+
+// === Function: 清空本插件的全部本地缓存数据（控制面板"清空数据"按钮）===
+// 范围：两个 IndexedDB 库（私信/头像/图片/背景 + 地图图片）、两个悬浮球位置的 localStorage、
+// 三块插件自己的 extension_settings（通讯器/地图/移动端优化，删掉后下次读取会自动用默认值重建）、
+// 以及所有对话的起始楼层记录和私信忙闲缓存（本地存储，一份 localStorage 覆盖所有对话，一次性清空）。
+// 不包含：总结功能生成的世界书条目（用户自己在世界书里删）。
+async function clearAllPluginLocalData() {
+  const results = await Promise.all([
+    deleteIndexedDatabase(PHONE_IDB_NAME),
+    deleteIndexedDatabase(IDB_NAME),
+  ]);
+
+  try {
+    localStorage.removeItem(FAB_POS_KEY);
+    localStorage.removeItem(PHONE_FAB_POS_KEY);
+  } catch (error) {
+    console.error("[剧情助手] 清空 localStorage 悬浮球位置记忆失败:", error);
+  }
+
+  try {
+    delete extension_settings[PHONE_MODULE_NAME];
+    delete extension_settings[MAP_MODULE_NAME];
+    delete extension_settings[MOBILE_OPT_SETTINGS_KEY];
+    saveSettingsDebounced();
+  } catch (error) {
+    console.error("[剧情助手] 重置插件配置失败:", error);
+  }
+
+  try {
+    localStorage.removeItem(LOCAL_CHAT_STORE_KEY);
+    localChatStoreCache = null; // 内存缓存也一并重置，避免清空后马上又读到清空前的旧对象
+    transientChatMetadataStore = null;
+  } catch (error) {
+    console.error("[剧情助手] 清空所有对话的楼层/忙闲缓存失败:", error);
+  }
+
+  const allDbOk = results.every(Boolean);
+  return { allDbOk };
+}
+
 // === Function: 显示剧情助手控制面板 ===
 async function showSummaryPopup() {
   try {
@@ -2584,9 +2811,13 @@ async function showSummaryPopup() {
         </div>
 
         <div style="margin-bottom: 20px;">
-          <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">角色卡</p>
-          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-            <button id="${POPUP_ID}-create-character" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">创建角色</button>
+          <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">联系人</p>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button id="${POPUP_ID}-create-character" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">添加联系人</button>
+              <button id="${POPUP_ID}-phone-preset" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">私信预设</button>
+            </div>
+            <button id="${POPUP_ID}-phone-fab-toggle" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
           </div>
         </div>
 
@@ -2605,6 +2836,14 @@ async function showSummaryPopup() {
           </div>
           <div id="${POPUP_ID}-lorebook" style="background: #333; border-radius: 6px; padding: 10px; font-size: 13px;">
             ${lorebookEntriesHTML}
+          </div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">数据管理</p>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0;">
+            <span style="font-size: 12px; color: #999; flex: 1;">清空私信记录、头像库、图片库、背景库、地图标记数据、悬浮球位置记忆、所有对话的起始楼层/忙闲缓存等本地缓存（不含世界书总结条目）</span>
+            <button id="${POPUP_ID}-clear-all-data" style="background: #c0392b; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;">清空数据</button>
           </div>
         </div>
 
@@ -2771,6 +3010,20 @@ async function showSummaryPopup() {
         },
       );
 
+    $(`#${POPUP_ID}-phone-preset`)
+      .on("click", () => {
+        closePopup();
+        openPhonePresetDialog();
+      })
+      .hover(
+        function () {
+          $(this).css("background", "#2c5d9e");
+        },
+        function () {
+          $(this).css("background", "#3a7bd5");
+        },
+      );
+
     $(`#${POPUP_ID}-map-marker`)
       .on("click", () => {
         closePopup();
@@ -2807,6 +3060,55 @@ async function showSummaryPopup() {
       applyFabVisibility();
       renderFabToggleButton($fabToggleBtn, nowVisible);
     });
+
+    // 通讯器悬浮球显示开关：逻辑跟上面地图悬浮球那个完全一致，独立的开关/独立的坐标存储。
+    const PHONE_FAB_TOGGLE_ON_STYLE = { background: "#3a9d5a" };
+    const PHONE_FAB_TOGGLE_OFF_STYLE = { background: "#555" };
+
+    function renderPhoneFabToggleButton($btn, visible) {
+      $btn
+        .text(visible ? "通讯器开" : "通讯器关")
+        .css(visible ? PHONE_FAB_TOGGLE_ON_STYLE : PHONE_FAB_TOGGLE_OFF_STYLE);
+    }
+
+    const $phoneFabToggleBtn = $(`#${POPUP_ID}-phone-fab-toggle`);
+    renderPhoneFabToggleButton($phoneFabToggleBtn, getPhoneFabVisible());
+
+    $phoneFabToggleBtn.on("click", () => {
+      const nowVisible = !getPhoneFabVisible();
+      setPhoneFabVisibleSetting(nowVisible);
+      if (!nowVisible) resetPhoneFabPos();
+      applyPhoneFabVisibility();
+      renderPhoneFabToggleButton($phoneFabToggleBtn, nowVisible);
+    });
+
+    // 清空数据：二次确认，确认后清空本地缓存（不含世界书总结条目），成功后提示刷新手机弹窗
+    $(`#${POPUP_ID}-clear-all-data`).on(
+      "click",
+      errorCatched(async () => {
+        const context = getCtx();
+        const confirmed = await context.callGenericPopup(
+          "确定要清空本插件的本地缓存数据吗？包括：私信记录、头像库、图片库、背景库、地图标记数据、悬浮球位置记忆、所有对话的起始楼层记录和私信忙闲缓存。<br>不包含世界书里生成的总结条目。<br>此操作不可撤销。",
+          context.POPUP_TYPE.CONFIRM,
+          "",
+          { okButton: "清空", cancelButton: "取消" },
+        );
+        if (confirmed !== context.POPUP_RESULT.AFFIRMATIVE) return;
+
+        const { allDbOk } = await clearAllPluginLocalData();
+        if (allDbOk) {
+          notify(
+            "success",
+            "已清空本地缓存数据。手机弹窗里的背景、头像等已被清除，建议重新打开一下手机弹窗。",
+          );
+        } else {
+          notify(
+            "warning",
+            "部分数据库清空时被浏览器阻塞（可能有页面连接未关闭），其余数据已清空。请刷新页面后重新点一次「清空数据」。",
+          );
+        }
+      }),
+    );
 
     // 移动端优化：两个开关按钮，点击只切换状态，不关闭弹窗
     const MOBILE_OPT_ON_STYLE = { background: "#3a9d5a" };
@@ -3147,6 +3449,1466 @@ function registerStatusTableAutoUpdate() {
     );
   } catch (error) {
     console.error("[剧情助手] 注册状态表自动更新监听时出错:", error);
+  }
+}
+
+// #####################################################################################
+// === 手机（通讯器）悬浮窗模块 ===
+// 全局开关，控制右下角「通讯器」悬浮球是否显示，默认关闭。
+// 点开后弹出手机界面：通讯录 / 聊天 / 动态 / 设置 四个页签（动态页暂未实现，占位）。
+// 数据来源：
+//   - 联系人：读取当前"角色名总结"世界书里所有「角色卡：」前缀的条目（复用"创建角色"功能写入的数据）。
+//   - 私信正文：本地 IndexedDB（PHONE_IDB_NAME），按"角色名::日期"存储，不占世界书 token。
+//   - 忙/闲判定缓存 + 待注入私信槽位标记：本地存储（PHONE_CHAT_META_KEY），跟随"角色卡+对话文件"走。
+// 忙/闲判定：纯文本匹配——角色名（含去姓简称）是否出现在最后一层 AI 楼层正文里；
+//   出现 → 判定"忙"，把角色写进本地缓存的 busy 表，由状态表序列化时拼出 Busy 字段供正文 AI 感知，
+//     正文 AI 在该角色本轮不再出现时输出 Busy: 角色名: [REMOVE]，插件在下一次状态表重算时读到这个信号，
+//     自动生成一条该角色的补发私信；
+//   不出现 → 判定"闲"，立即调用 AI 生成一条回复，并记住当前最后一层楼层号，
+//     只要楼层号没变，下次发消息直接沿用"闲"的判断，不重新做文本匹配。
+// 私信槽位：今天只要有新的私信更新（用户发送或角色回复），下一次正文生成前临时通过
+//   context.setExtensionPrompt() 把当天聊天记录注入正文，AI 生成完这一轮后立即清空（一次性注入，不常驻）。
+//   ⚠️ setExtensionPrompt 的具体参数/位置枚举没有在本项目其它地方实测过，接入后请在实际酒馆环境验证一遍，
+//   如果没生效或控制台报错，把日志发我再调整（这一点和 README 里"已知需要你在实际环境验证的点"性质一致）。
+// #####################################################################################
+
+const PHONE_MODULE_NAME = "plot_assistant_phone";
+
+// extension_settings[PHONE_MODULE_NAME] 顶层结构：{ fabVisible: boolean }
+function getPhoneExtRoot() {
+  if (!extension_settings[PHONE_MODULE_NAME]) {
+    extension_settings[PHONE_MODULE_NAME] = {};
+  }
+  const root = extension_settings[PHONE_MODULE_NAME];
+  if (typeof root.fabVisible !== "boolean") root.fabVisible = false;
+  return root;
+}
+
+// 读取通讯器悬浮球是否应该显示（默认 false）
+function getPhoneFabVisible() {
+  return getPhoneExtRoot().fabVisible === true;
+}
+
+// 写入通讯器悬浮球显示开关并立即持久化
+function setPhoneFabVisibleSetting(visible) {
+  getPhoneExtRoot().fabVisible = !!visible;
+  saveSettingsDebounced();
+}
+
+// ==== 手机私信系统：本地对话缓存存取（忙/闲缓存 + 待注入私信槽位标记）====
+
+// 读取"当前对话"的手机私信状态记录，不存在则就地初始化一份默认结构并返回（引用，改了要记得调用 persistChatMetadata）。
+// 结构：{ busy: {角色名: true}, idleFloor: {角色名: 楼层号}, pendingInjection: {角色名: true/false} }
+function getPhoneChatState() {
+  const store = getChatMetadataStore();
+  if (
+    !store[PHONE_CHAT_META_KEY] ||
+    typeof store[PHONE_CHAT_META_KEY] !== "object"
+  ) {
+    store[PHONE_CHAT_META_KEY] = {
+      busy: {},
+      idleFloor: {},
+      pendingInjection: {},
+    };
+  }
+  const s = store[PHONE_CHAT_META_KEY];
+  if (!s.busy || typeof s.busy !== "object") s.busy = {};
+  if (!s.idleFloor || typeof s.idleFloor !== "object") s.idleFloor = {};
+  if (!s.pendingInjection || typeof s.pendingInjection !== "object")
+    s.pendingInjection = {};
+  return s;
+}
+
+// 标记"今天有新私信更新"，下一次正文生成前会把当天聊天记录注入私信槽位；调用方需要自己 persistChatMetadata。
+function markPhoneUpdatedToday(characterName) {
+  getPhoneChatState().pendingInjection[characterName] = true;
+}
+
+// === Helper: 角色名（含去姓简称，复用"创建角色"功能已有的 extractCharacterKeywords）是否出现在给定文本里 ===
+function characterActiveInText(characterName, text) {
+  if (!text) return false;
+  return extractCharacterKeywords(characterName).some(
+    (kw) => kw && text.includes(kw),
+  );
+}
+
+// === Helper: 取"最后一层 AI 楼层"的索引与正文，找不到返回 idx=-1 ===
+function getLastAiFloor() {
+  const chat = getCtx().chat;
+  if (!Array.isArray(chat)) return { idx: -1, mes: "" };
+  for (let i = chat.length - 1; i >= 0; i--) {
+    if (chat[i] && !chat[i].is_user) return { idx: i, mes: chat[i].mes || "" };
+  }
+  return { idx: -1, mes: "" };
+}
+
+// === Helper: 取"正文当前时间"——即最后一层AI楼层摘要模块里的 Time 字段，取不到返回空字符串。
+// 供手机私信系统在创建每条消息时记录"这条消息是正文走到哪个时间点时发的"，不是现实时间。===
+function getCurrentStoryTime() {
+  const { mes } = getLastAiFloor();
+  const fields = parseFloorSummaryFields(mes);
+  return (fields && fields.time) || "";
+}
+
+// ==== 手机私信系统：联系人（复用"创建角色"写入的「角色卡：」世界书条目）====
+
+// 从角色卡条目正文里取出 <character_information character="..."> 标签内的内容；取不到就退回整段正文。
+function extractCharacterInfoBody(content) {
+  const match =
+    /<character_information[^>]*>([\s\S]*?)<\/character_information>/.exec(
+      content || "",
+    );
+  return (match ? match[1] : content || "").trim();
+}
+
+// === Helper: 取"标签: 值"里值部分一直到文本末尾的多行内容（用于 other 这种允许多行的字段）。
+// extractLabelLine 只取标签所在那一行，取不到多行内容，这里单独按"从标签行到末尾"整体截取。===
+function extractMultilineLabelField(text, label) {
+  if (!text || typeof text !== "string") return "";
+  const re = new RegExp(`^[ \\t]*${label}[ \\t]*:[ \\t]*([\\s\\S]*)$`, "m");
+  const m = text.match(re);
+  return m ? m[1].trim() : "";
+}
+
+// === Helper: 从角色卡正文里解析固定的 gender/other 两个字段（配合"添加联系人"面板固定输入项）。
+// gender 是单行值，other 允许多行、取到标签所在行之后的所有内容。取不到就是空字符串，不报错。===
+function parseContactExtra(extraText) {
+  return {
+    gender: extractLabelLine(extraText, "gender"),
+    other: extractMultilineLabelField(extraText, "other"),
+  };
+}
+
+// 返回联系人列表：[{ name, extra }]，按名字排序。读不到世界书/没有任何角色卡时返回空数组，不报错。
+async function getPhoneContactsList() {
+  try {
+    const lorebookName = await getOrCreateSummaryLorebook();
+    const entries = await getLorebookEntriesArray(lorebookName);
+    return entries
+      .filter(
+        (e) =>
+          typeof e.comment === "string" &&
+          e.comment.startsWith(CHARACTER_ENTRY_TITLE_PREFIX),
+      )
+      .map((e) => ({
+        name: e.comment.slice(CHARACTER_ENTRY_TITLE_PREFIX.length),
+        extra: extractCharacterInfoBody(e.content),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, "zh"));
+  } catch (error) {
+    console.error("[剧情助手] 读取联系人列表失败:", error);
+    return [];
+  }
+}
+
+// 读取单个联系人角色卡正文（供生成回复时拼系统提示词用），读不到返回空字符串。
+async function getPhoneContactCardBody(characterName) {
+  try {
+    const lorebookName = await getOrCreateSummaryLorebook();
+    const entries = await getLorebookEntriesArray(lorebookName);
+    const entry = entries.find(
+      (e) => e.comment === CHARACTER_ENTRY_TITLE_PREFIX + characterName,
+    );
+    return entry ? extractCharacterInfoBody(entry.content) : "";
+  } catch (error) {
+    console.error("[剧情助手] 读取联系人角色卡失败:", error);
+    return "";
+  }
+}
+
+// === Helper: 读取"私信预设"条目，取不到时返回默认内容（不写入世界书，仅供编辑框预填）。===
+async function loadPhonePresetContent() {
+  try {
+    const lorebookName = await getOrCreateSummaryLorebook();
+    const entries = await getLorebookEntriesArray(lorebookName);
+    const existing = entries.find((e) => e.comment === PHONE_PRESET_TITLE);
+    return existing &&
+      typeof existing.content === "string" &&
+      existing.content.trim()
+      ? existing.content
+      : DEFAULT_PHONE_PRESET_CONTENT;
+  } catch (error) {
+    console.error("[剧情助手] 读取私信预设失败:", error);
+    return DEFAULT_PHONE_PRESET_CONTENT;
+  }
+}
+
+// === Helper: 保存/新建"私信预设"条目。始终 disable:true、非常驻关键词触发——
+// 这条条目不参与酒馆正文的世界书注入，只是插件生成私信回复时直接读取内容拼提示词用。===
+async function savePhonePresetContent(content) {
+  const context = getCtx();
+  const lorebookName = await getOrCreateSummaryLorebook();
+  const data = await context.loadWorldInfo(lorebookName);
+  if (!data || !data.entries)
+    throw new Error(`无法加载世界书: ${lorebookName}`);
+
+  const existing = Object.values(data.entries).find(
+    (entry) => entry.comment === PHONE_PRESET_TITLE,
+  );
+
+  if (existing) {
+    data.entries[existing.uid].content = content;
+    data.entries[existing.uid].disable = true;
+  } else {
+    const newUid = getFreeUid(data);
+    if (newUid === null) throw new Error("无法为新世界书条目分配 uid。");
+    data.entries[newUid] = {
+      uid: newUid,
+      comment: PHONE_PRESET_TITLE,
+      content,
+      disable: true,
+      constant: false,
+      key: [],
+      position: 0,
+      useGroupScoring: false,
+      excludeRecursion: true,
+      preventRecursion: true,
+      delayUntilRecursion: 0,
+      ...CHARACTER_ENTRY_DEFAULTS,
+    };
+  }
+
+  await context.saveWorldInfo(lorebookName, data, true);
+  notifyWorldInfoUpdated(lorebookName);
+  return lorebookName;
+}
+
+// === Function: 打开"私信预设"编辑框（纯文本，取消/保存，样式对齐"对话前强调"弹窗）===
+async function openPhonePresetDialog() {
+  const currentContent = await loadPhonePresetContent();
+
+  const $bodyEl = $("body");
+  const prevBodyOverflow = $bodyEl.css("overflow");
+  $bodyEl.css("overflow", "hidden");
+
+  const result = await new Promise((resolve) => {
+    const $overlay = $("<div>").css({
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: "rgba(0,0,0,0.72)",
+      zIndex: 99999,
+      boxSizing: "border-box",
+    });
+
+    const $box = $("<div>").css({
+      position: "fixed",
+      top: "12px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      background: "#252525",
+      border: "1px solid #3a3a3a",
+      borderRadius: "10px",
+      padding: "clamp(16px, 4vw, 24px)",
+      width: "min(480px, calc(100% - 24px))",
+      maxHeight: "min(85vh, calc(100dvh - 24px))",
+      display: "flex",
+      flexDirection: "column",
+      gap: "12px",
+      color: "#e8e8e8",
+      fontFamily: "inherit",
+      boxSizing: "border-box",
+      boxShadow: "0 8px 32px rgba(0,0,0,0.55)",
+      overflowY: "auto",
+      WebkitOverflowScrolling: "touch",
+    });
+
+    const $title = $("<div>").text(PHONE_PRESET_TITLE).css({
+      fontSize: "1.05em",
+      fontWeight: "600",
+      color: "#f0f0f0",
+      letterSpacing: "0.01em",
+    });
+
+    const $hint = $("<div>")
+      .text(
+        '手机私信生成回复时的开场白/扮演指令，"联系人"会自动替换成实际联系人姓名。',
+      )
+      .css({ fontSize: "0.8em", color: "#999", lineHeight: 1.5 });
+
+    const $textarea = $("<textarea>").val(currentContent).css({
+      width: "100%",
+      boxSizing: "border-box",
+      minHeight: "140px",
+      padding: "10px",
+      borderRadius: "6px",
+      border: "1px solid #3a3a3a",
+      background: "#1a1a1a",
+      color: "#d0d0d0",
+      fontSize: "max(0.95em, 16px)",
+      fontFamily: "inherit",
+      outline: "none",
+      resize: "vertical",
+    });
+
+    const $btnRow = $("<div>").css({
+      display: "flex",
+      gap: "10px",
+      justifyContent: "flex-end",
+      marginTop: "4px",
+    });
+    const btnCss = {
+      padding: "10px 20px",
+      borderRadius: "6px",
+      minHeight: "44px",
+      boxSizing: "border-box",
+      cursor: "pointer",
+      fontSize: "0.95em",
+      touchAction: "manipulation",
+    };
+    const $cancel = $("<button>")
+      .text("取消")
+      .css({
+        ...btnCss,
+        border: "1px solid #3a3a3a",
+        background: "transparent",
+        color: "#c0c0c0",
+      });
+    const $confirm = $("<button>")
+      .text("保存")
+      .css({
+        ...btnCss,
+        border: "none",
+        background: "#5b9cf6",
+        color: "#ffffff",
+        fontWeight: "600",
+      });
+    $btnRow.append($cancel, $confirm);
+
+    $box.append($title, $hint, $textarea, $btnRow);
+    $overlay.append($box);
+    $("body").append($overlay);
+    setTimeout(() => $textarea.trigger("focus"), 50);
+
+    const done = (confirmed) => {
+      $(document).off("keydown.phonePresetDialog");
+      $overlay.remove();
+      $bodyEl.css("overflow", prevBodyOverflow || "");
+      resolve(confirmed ? $textarea.val() : null);
+    };
+
+    $confirm.on("click", () => done(true));
+    $cancel.on("click", () => done(false));
+
+    let overlayPointerDownOnSelf = false;
+    $overlay.on("mousedown touchstart", (e) => {
+      overlayPointerDownOnSelf = $(e.target).is($overlay);
+    });
+    $overlay.on("mouseup touchend", (e) => {
+      if (overlayPointerDownOnSelf && $(e.target).is($overlay)) done(false);
+      overlayPointerDownOnSelf = false;
+    });
+    $(document).on("keydown.phonePresetDialog", (e) => {
+      if (e.key === "Escape") done(false);
+    });
+  });
+
+  if (result === null) return;
+
+  try {
+    const lorebookName = await savePhonePresetContent(result);
+    notify("success", `「${PHONE_PRESET_TITLE}」已保存到「${lorebookName}」`);
+  } catch (error) {
+    console.error("[剧情助手] 保存私信预设失败:", error);
+    notify("error", `保存私信预设失败：${error.message || error}`);
+  }
+}
+
+// === Helper: 从状态表世界书条目的 Relationships 行里，摘出 {{user}} 与指定角色之间的关系阶段值。
+// 取不到（没有状态表/该角色不在关系表里）返回空字符串，不报错。===
+async function getRelationshipStageForCharacter(characterName) {
+  try {
+    const lorebookName = await getOrCreateSummaryLorebook();
+    const entries = await getLorebookEntriesArray(lorebookName);
+    const statusEntry = entries.find((e) => e.comment === STATUS_TABLE_TITLE);
+    if (!statusEntry) return "";
+    const relationshipsLine = extractLabelLine(
+      statusEntry.content,
+      "Relationships",
+    );
+    if (!relationshipsLine) return "";
+    const { map } = parseKeyValueListWithSkipped(relationshipsLine);
+    for (const [key, value] of map.entries()) {
+      if (extractOtherPartyName(key) === characterName) return value;
+    }
+    return "";
+  } catch (error) {
+    console.error("[剧情助手] 读取关系阶段失败:", error);
+    return "";
+  }
+}
+
+// ==== 手机私信系统：本地 IndexedDB（按"角色名::日期"存储，独立于地图图片库）====
+
+function openPhoneDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(PHONE_IDB_NAME, 3);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(PHONE_IDB_STORE)) {
+        db.createObjectStore(PHONE_IDB_STORE);
+      }
+      if (!db.objectStoreNames.contains(PHONE_AVATAR_STORE)) {
+        db.createObjectStore(PHONE_AVATAR_STORE);
+      }
+      if (!db.objectStoreNames.contains(PHONE_STICKER_STORE)) {
+        db.createObjectStore(PHONE_STICKER_STORE);
+      }
+      if (!db.objectStoreNames.contains(PHONE_BACKGROUND_STORE)) {
+        db.createObjectStore(PHONE_BACKGROUND_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// 把图片文件读成压缩后的 dataURL：等比缩放到 maxSize 以内、输出 JPEG，用于头像/图片库这类
+// 不需要保留原图精度、但要控制 IndexedDB 体积的场景（跟小地图底图保留原图精度的诉求不同，不复用那套）。
+function readImageFileCompressed(file, maxSize) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxSize || height > maxSize) {
+          const scale = maxSize / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.onerror = () => reject(new Error("图片加载失败"));
+      img.src = ev.target.result;
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+// ==== 手机：通用图片裁剪弹窗（头像 / 全局背景 / 聊天页背景共用一套交互）====
+// 用法：openImageCropDialog({ file, title, ratio, shape, outputWidth, outputHeight })
+//   file: 用户选中的图片文件
+//   ratio: 裁剪框宽高比（宽/高），shape: "circle"（头像用圆形遮罩预览） | "rect"
+//   outputWidth/outputHeight: 最终导出画布像素尺寸
+// 返回 Promise<string|null>：确定则 resolve 裁剪后的 JPEG dataURL，取消则 resolve null。
+// 交互：单指/鼠标拖拽平移，滚轮或双指捏合缩放，另附一个缩放滑杆方便精细调节。
+function openImageCropDialog({
+  file,
+  title = "裁剪图片",
+  ratio = 1,
+  shape = "rect",
+  outputWidth = 320,
+  outputHeight = 320,
+  quality = 0.85,
+}) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("图片加载失败"));
+      img.onload = () => {
+        try {
+          mountCropDialog(img);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+
+    function mountCropDialog(img) {
+      document.getElementById("pa-crop-dialog")?.remove();
+
+      // 裁剪框尺寸：按目标比例，在弹窗可用空间内尽量大，但不超出屏幕。
+      let viewportW = Math.min(300, window.innerWidth * 0.82);
+      let viewportH = viewportW / ratio;
+      const maxViewportH = window.innerHeight * 0.56;
+      if (viewportH > maxViewportH) {
+        viewportH = maxViewportH;
+        viewportW = viewportH * ratio;
+      }
+
+      const html = `
+        <dialog id="pa-crop-dialog">
+          <div id="pa-crop-panel">
+            <div id="pa-crop-title">${escapePhoneHtml(title)}</div>
+            <div id="pa-crop-viewport" class="${shape === "circle" ? "pa-crop-viewport-circle" : ""}" style="width:${viewportW}px;height:${viewportH}px;">
+              <img id="pa-crop-img" draggable="false" alt="" />
+            </div>
+            <div id="pa-crop-zoom-row">
+              <span id="pa-crop-zoom-icon-min">－</span>
+              <input type="range" id="pa-crop-zoom" min="100" max="300" value="100" />
+              <span id="pa-crop-zoom-icon-max">＋</span>
+            </div>
+            <div id="pa-crop-actions">
+              <button id="pa-crop-cancel">取消</button>
+              <button id="pa-crop-confirm">确定</button>
+            </div>
+          </div>
+        </dialog>`;
+      document.body.insertAdjacentHTML("beforeend", html);
+
+      const dialog = document.getElementById("pa-crop-dialog");
+      const viewport = document.getElementById("pa-crop-viewport");
+      const imgEl = document.getElementById("pa-crop-img");
+      const zoomInput = document.getElementById("pa-crop-zoom");
+
+      const natW = img.naturalWidth;
+      const natH = img.naturalHeight;
+      const coverScale = Math.max(viewportW / natW, viewportH / natH);
+      let scale = coverScale;
+      let left = (viewportW - natW * scale) / 2;
+      let top = (viewportH - natH * scale) / 2;
+
+      imgEl.src = img.src;
+
+      function clamp(v, min, max) {
+        return Math.min(max, Math.max(min, v));
+      }
+
+      function applyTransform() {
+        const dispW = natW * scale;
+        const dispH = natH * scale;
+        left = dispW <= viewportW ? (viewportW - dispW) / 2 : clamp(left, viewportW - dispW, 0);
+        top = dispH <= viewportH ? (viewportH - dispH) / 2 : clamp(top, viewportH - dispH, 0);
+        imgEl.style.width = `${dispW}px`;
+        imgEl.style.height = `${dispH}px`;
+        imgEl.style.left = `${left}px`;
+        imgEl.style.top = `${top}px`;
+      }
+      applyTransform();
+
+      function setZoomVal(val) {
+        const clamped = clamp(Math.round(val), 100, 300);
+        zoomInput.value = clamped;
+        scale = coverScale * (clamped / 100);
+        applyTransform();
+      }
+
+      // 单指/鼠标拖拽平移
+      let dragging = false;
+      let dragStartX = 0,
+        dragStartY = 0,
+        dragStartLeft = 0,
+        dragStartTop = 0;
+      // 双指捏合缩放
+      const activePointers = new Map();
+      let pinchStartDist = 0;
+      let pinchStartZoom = 100;
+
+      viewport.addEventListener("pointerdown", (e) => {
+        viewport.setPointerCapture(e.pointerId);
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (activePointers.size === 1) {
+          dragging = true;
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          dragStartLeft = left;
+          dragStartTop = top;
+        } else if (activePointers.size === 2) {
+          dragging = false;
+          const pts = [...activePointers.values()];
+          pinchStartDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+          pinchStartZoom = Number(zoomInput.value);
+        }
+      });
+      viewport.addEventListener("pointermove", (e) => {
+        if (!activePointers.has(e.pointerId)) return;
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (activePointers.size === 2) {
+          const pts = [...activePointers.values()];
+          const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+          if (pinchStartDist > 0) {
+            setZoomVal(pinchStartZoom * (dist / pinchStartDist));
+          }
+        } else if (dragging) {
+          left = dragStartLeft + (e.clientX - dragStartX);
+          top = dragStartTop + (e.clientY - dragStartY);
+          applyTransform();
+        }
+      });
+      const endPointer = (e) => {
+        activePointers.delete(e.pointerId);
+        if (activePointers.size === 1) {
+          const [pt] = [...activePointers.values()];
+          dragging = true;
+          dragStartX = pt.x;
+          dragStartY = pt.y;
+          dragStartLeft = left;
+          dragStartTop = top;
+        } else {
+          dragging = false;
+        }
+      };
+      viewport.addEventListener("pointerup", endPointer);
+      viewport.addEventListener("pointercancel", endPointer);
+      viewport.addEventListener(
+        "wheel",
+        (e) => {
+          e.preventDefault();
+          setZoomVal(Number(zoomInput.value) + (e.deltaY < 0 ? 8 : -8));
+        },
+        { passive: false },
+      );
+      zoomInput.addEventListener("input", () => setZoomVal(Number(zoomInput.value)));
+
+      function cleanup(result) {
+        dialog.close();
+        dialog.remove();
+        resolve(result);
+      }
+
+      document.getElementById("pa-crop-cancel").addEventListener("click", () => cleanup(null));
+      document.getElementById("pa-crop-confirm").addEventListener(
+        "click",
+        errorCatched(() => {
+          const srcX = -left / scale;
+          const srcY = -top / scale;
+          const srcW = viewportW / scale;
+          const srcH = viewportH / scale;
+          const canvas = document.createElement("canvas");
+          canvas.width = outputWidth;
+          canvas.height = outputHeight;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outputWidth, outputHeight);
+          cleanup(canvas.toDataURL("image/jpeg", quality));
+        }),
+      );
+      dialog.addEventListener("cancel", (e) => {
+        e.preventDefault();
+        cleanup(null);
+      });
+
+      dialog.showModal();
+    }
+  });
+}
+
+// ==== 手机：头像库（按"当前角色卡::联系人名"存取）====
+
+function phoneAvatarDbKey(characterName) {
+  return `${getCurrentCharacterName()}::${characterName}`;
+}
+
+async function savePhoneAvatar(characterName, dataUrl) {
+  try {
+    const db = await openPhoneDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_AVATAR_STORE, "readwrite");
+      tx.objectStore(PHONE_AVATAR_STORE).put(
+        dataUrl,
+        phoneAvatarDbKey(characterName),
+      );
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (error) {
+    console.error("[剧情助手] 保存头像失败:", error);
+    notify("error", "头像保存失败，请查看控制台报错。");
+  }
+}
+
+// 一次性取当前角色卡下所有联系人的头像，返回 Map（联系人名 -> dataURL），供通讯录列表批量渲染用，
+// 避免每个联系人单独发一次 IDB 请求。
+async function getAllPhoneAvatarsForCurrentCharacter() {
+  try {
+    const db = await openPhoneDB();
+    const prefix = phoneAvatarDbKey("");
+    const { keys, values } = await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_AVATAR_STORE, "readonly");
+      const store = tx.objectStore(PHONE_AVATAR_STORE);
+      const keysReq = store.getAllKeys();
+      const valuesReq = store.getAll();
+      let keys, values;
+      keysReq.onsuccess = () => {
+        keys = keysReq.result;
+        if (values !== undefined) resolve({ keys, values });
+      };
+      valuesReq.onsuccess = () => {
+        values = valuesReq.result;
+        if (keys !== undefined) resolve({ keys, values });
+      };
+      keysReq.onerror = () => reject(keysReq.error);
+      valuesReq.onerror = () => reject(valuesReq.error);
+    });
+    const map = new Map();
+    keys.forEach((key, i) => {
+      if (typeof key === "string" && key.startsWith(prefix)) {
+        map.set(key.slice(prefix.length), values[i]);
+      }
+    });
+    return map;
+  } catch (error) {
+    console.error("[剧情助手] 批量读取头像失败:", error);
+    return new Map();
+  }
+}
+
+// ==== 手机：背景库 ====
+// 全局背景：通讯录/动态/设置三页共用一张，存在固定 key 下，不分角色卡。
+async function getPhoneGlobalBackground() {
+  try {
+    const db = await openPhoneDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_BACKGROUND_STORE, "readonly");
+      const req = tx
+        .objectStore(PHONE_BACKGROUND_STORE)
+        .get(PHONE_GLOBAL_BACKGROUND_KEY);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (error) {
+    console.error("[剧情助手] 读取全局背景失败:", error);
+    return null;
+  }
+}
+
+async function savePhoneGlobalBackground(dataUrl) {
+  try {
+    const db = await openPhoneDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_BACKGROUND_STORE, "readwrite");
+      tx.objectStore(PHONE_BACKGROUND_STORE).put(
+        dataUrl,
+        PHONE_GLOBAL_BACKGROUND_KEY,
+      );
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (error) {
+    console.error("[剧情助手] 保存全局背景失败:", error);
+    notify("error", "背景保存失败，请查看控制台报错。");
+  }
+}
+
+async function deletePhoneGlobalBackground() {
+  try {
+    const db = await openPhoneDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_BACKGROUND_STORE, "readwrite");
+      tx.objectStore(PHONE_BACKGROUND_STORE).delete(PHONE_GLOBAL_BACKGROUND_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (error) {
+    console.error("[剧情助手] 清除全局背景失败:", error);
+  }
+}
+
+// 聊天页背景：按"当前角色卡::联系人名"分别存，跟头像库同一套 key 规则，换角色卡/联系人互不影响。
+function phoneChatBackgroundDbKey(characterName) {
+  return `${getCurrentCharacterName()}::${characterName}`;
+}
+
+async function getPhoneChatBackground(characterName) {
+  try {
+    const db = await openPhoneDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_BACKGROUND_STORE, "readonly");
+      const req = tx
+        .objectStore(PHONE_BACKGROUND_STORE)
+        .get(phoneChatBackgroundDbKey(characterName));
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (error) {
+    console.error("[剧情助手] 读取聊天页背景失败:", error);
+    return null;
+  }
+}
+
+async function savePhoneChatBackground(characterName, dataUrl) {
+  try {
+    const db = await openPhoneDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_BACKGROUND_STORE, "readwrite");
+      tx.objectStore(PHONE_BACKGROUND_STORE).put(
+        dataUrl,
+        phoneChatBackgroundDbKey(characterName),
+      );
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (error) {
+    console.error("[剧情助手] 保存聊天页背景失败:", error);
+    notify("error", "背景保存失败，请查看控制台报错。");
+  }
+}
+
+async function deletePhoneChatBackground(characterName) {
+  try {
+    const db = await openPhoneDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_BACKGROUND_STORE, "readwrite");
+      tx.objectStore(PHONE_BACKGROUND_STORE).delete(
+        phoneChatBackgroundDbKey(characterName),
+      );
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (error) {
+    console.error("[剧情助手] 清除聊天页背景失败:", error);
+  }
+}
+
+// 把背景 dataURL 套用到对应容器：传 null/空则清空自定义背景，露出下层默认样式。
+// 全局背景套在 #pa-phone-modal 内专门的背景图层上（z-index 在内容之下）：
+//   没设置自定义背景时，图层本身没有背景图，保持 style.css 里默认的 opacity: 0.9，
+//   露出 #pa-phone-modal 的纯蓝底，还原原来的半透明蓝底效果；
+//   一旦设置了自定义背景图，就把图层调成完全不透明（opacity: 1），彻底盖住下面的蓝底，
+//   避免蓝色透过 10% 的透明度叠加到图片上，导致背景图发暗发闷。
+// 聊天页背景只套在消息滚动区域 #pa-phone-chat-messages 上（即头部标题栏和输入栏这两条线之间），
+// 因为要跟气泡文字保持足够对比度，这里保留一层浅色蒙层，本身就是不透明的，本来就不会漏出全局背景层。
+function applyPhoneGlobalBackground(dataUrl) {
+  const layer = document.getElementById("pa-phone-global-bg-layer");
+  if (!layer) return;
+  if (dataUrl) {
+    layer.style.backgroundImage = `url("${dataUrl}")`;
+    layer.style.opacity = "1";
+  } else {
+    layer.style.backgroundImage = "";
+    layer.style.opacity = "";
+  }
+}
+
+function applyPhoneChatBackground(dataUrl) {
+  const el = document.getElementById("pa-phone-chat-messages");
+  if (!el) return;
+  if (dataUrl) {
+    el.style.backgroundImage = `linear-gradient(rgba(0,20,90,0.35), rgba(0,20,90,0.35)), url("${dataUrl}")`;
+    el.style.backgroundSize = "cover";
+    el.style.backgroundPosition = "center";
+  } else {
+    el.style.backgroundImage = "";
+    el.style.backgroundSize = "";
+    el.style.backgroundPosition = "";
+  }
+}
+
+// ==== 手机：图片库（原"表情包"，全局公用一份，整份列表存在同一个 key 下）====
+
+async function getPhoneStickerList() {
+  try {
+    const db = await openPhoneDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_STICKER_STORE, "readonly");
+      const req = tx
+        .objectStore(PHONE_STICKER_STORE)
+        .get(PHONE_STICKER_LIST_KEY);
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (error) {
+    console.error("[剧情助手] 读取图片列表失败:", error);
+    return [];
+  }
+}
+
+async function savePhoneStickerList(list) {
+  try {
+    const db = await openPhoneDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_STICKER_STORE, "readwrite");
+      tx.objectStore(PHONE_STICKER_STORE).put(list, PHONE_STICKER_LIST_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (error) {
+    console.error("[剧情助手] 保存图片列表失败:", error);
+    notify("error", "图片保存失败，请查看控制台报错。");
+  }
+}
+
+// items: [{ name, dataUrl }]，批量导入用。
+async function addPhoneStickers(items) {
+  const list = await getPhoneStickerList();
+  items.forEach((item) => {
+    list.push({
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      name: item.name,
+      dataUrl: item.dataUrl,
+    });
+  });
+  await savePhoneStickerList(list);
+  return list;
+}
+
+async function renamePhoneSticker(stickerId, newName) {
+  const list = await getPhoneStickerList();
+  const record = list.find((s) => s.id === stickerId);
+  if (!record) return;
+  record.name = newName;
+  await savePhoneStickerList(list);
+}
+
+async function deletePhoneSticker(stickerId) {
+  const list = (await getPhoneStickerList()).filter(
+    (s) => s.id !== stickerId,
+  );
+  await savePhoneStickerList(list);
+  return list;
+}
+
+function formatDateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// === Helper: 把 storyTime（如"武定三年三月十五,申时"或"2023年8月28日 07:35"）拆成 {date, time} 两段，
+// 供手机聊天界面显示用：日期部分给日期分割线，时辰/时间部分给单条消息的时间标签。
+// 优先按逗号切（架空纪年常用格式）；没有逗号再按最后一个空格切（公历日期+时间常用格式）；
+// 两种分隔符都没有就整段当 date、time 留空；storyTime 本身为空则两段都返回空字符串。===
+function splitStoryTime(storyTime) {
+  if (!storyTime) return { date: "", time: "" };
+  const commaIdx = storyTime.indexOf(",");
+  if (commaIdx !== -1) {
+    return {
+      date: storyTime.slice(0, commaIdx).trim(),
+      time: storyTime.slice(commaIdx + 1).trim(),
+    };
+  }
+  const spaceIdx = storyTime.lastIndexOf(" ");
+  if (spaceIdx !== -1) {
+    return {
+      date: storyTime.slice(0, spaceIdx).trim(),
+      time: storyTime.slice(spaceIdx + 1).trim(),
+    };
+  }
+  return { date: storyTime, time: "" };
+}
+
+// 私信存储 key 先按"当前角色卡"分一层、再按联系人名/日期分，跟地图数据（角色名::原id）同思路，
+// 避免不同角色卡下刚好有同名联系人时，私信记录互相串在一起。
+function phoneDbMessagesKey(characterName, dateKey) {
+  return `${getCurrentCharacterName()}::${characterName}::${dateKey}`;
+}
+function phoneDbDateIndexKey(characterName) {
+  return `${getCurrentCharacterName()}::${characterName}::__dates__`;
+}
+
+// 读取某个联系人某一天的消息数组（[{id, from, text, ts}]，from 为 "user"/"character"/"system"），
+// 没有记录时返回空数组，不抛错。
+async function getPhoneMessagesForDate(characterName, dateKey) {
+  try {
+    const db = await openPhoneDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_IDB_STORE, "readonly");
+      const req = tx
+        .objectStore(PHONE_IDB_STORE)
+        .get(phoneDbMessagesKey(characterName, dateKey));
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  } catch (error) {
+    console.error("[剧情助手] 读取私信记录失败:", error);
+    return [];
+  }
+}
+
+// 读取某个联系人"有消息的日期"索引（用于聊天页一次性拉全部历史），按字符串升序排列即时间顺序。
+async function getPhoneDateIndex(characterName) {
+  try {
+    const db = await openPhoneDB();
+    const list = await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_IDB_STORE, "readonly");
+      const req = tx
+        .objectStore(PHONE_IDB_STORE)
+        .get(phoneDbDateIndexKey(characterName));
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+    return [...list].sort();
+  } catch (error) {
+    console.error("[剧情助手] 读取私信日期索引失败:", error);
+    return [];
+  }
+}
+
+// 追加一条消息（自动按 ts 归入对应日期、更新日期索引），返回写入后的消息对象；写入失败返回 null。
+async function appendPhoneMessage(characterName, msg) {
+  const ts = msg.ts || Date.now();
+  const dateKey = formatDateKey(new Date(ts));
+  const record = {
+    id: `${ts}_${Math.random().toString(36).slice(2, 8)}`,
+    from: msg.from,
+    text: msg.text,
+    stickerId: msg.stickerId || null, // 关联图片库图片，仅发图片的消息才有值；旧数据没有此字段，读到的是 undefined -> 按无图片处理
+    ts,
+    storyTime: msg.storyTime || "", // 这条消息发出时，正文摘要模块里的 Time 字段值；旧数据没有此字段，读到的是 undefined -> ""
+  };
+  try {
+    const db = await openPhoneDB();
+    const list = await getPhoneMessagesForDate(characterName, dateKey);
+    list.push(record);
+    const dateIndex = await getPhoneDateIndex(characterName);
+    if (!dateIndex.includes(dateKey)) dateIndex.push(dateKey);
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_IDB_STORE, "readwrite");
+      tx.objectStore(PHONE_IDB_STORE).put(
+        list,
+        phoneDbMessagesKey(characterName, dateKey),
+      );
+      tx.objectStore(PHONE_IDB_STORE).put(
+        dateIndex,
+        phoneDbDateIndexKey(characterName),
+      );
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    return record;
+  } catch (error) {
+    console.error("[剧情助手] 保存私信记录失败:", error);
+    notify("error", "私信保存失败，请查看控制台报错。");
+    return null;
+  }
+}
+
+// 按日期分组返回某联系人的全部聊天记录：[{ dateKey, msgs }]，按时间升序。
+async function getAllPhoneMessages(characterName) {
+  const dateIndex = await getPhoneDateIndex(characterName);
+  const result = [];
+  for (const dateKey of dateIndex) {
+    const msgs = await getPhoneMessagesForDate(characterName, dateKey);
+    if (msgs.length > 0) result.push({ dateKey, msgs });
+  }
+  return result;
+}
+
+// 清空某联系人的全部本地私信记录（供设置页"清空聊天记录"用），不影响其他联系人。
+async function clearPhoneMessages(characterName) {
+  try {
+    const db = await openPhoneDB();
+    const dateIndex = await getPhoneDateIndex(characterName);
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_IDB_STORE, "readwrite");
+      const store = tx.objectStore(PHONE_IDB_STORE);
+      dateIndex.forEach((dateKey) =>
+        store.delete(phoneDbMessagesKey(characterName, dateKey)),
+      );
+      store.delete(phoneDbDateIndexKey(characterName));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (error) {
+    console.error("[剧情助手] 清空私信记录失败:", error);
+    notify("error", "清空私信记录失败，请查看控制台报错。");
+  }
+}
+
+// === Helper: 消息 id 是 appendPhoneMessage 里按 `${ts}_${随机串}` 生成的，随机串来自
+// Math.random().toString(36) 不含下划线，所以按第一个 "_" 切开取前半段就是 ts，
+// 反推出它当初落库用的 dateKey（跟 appendPhoneMessage 存的时候算法一致），不用额外记录。===
+function dateKeyFromMessageId(messageId) {
+  const ts = Number(String(messageId).split("_")[0]);
+  return formatDateKey(new Date(ts));
+}
+
+// 修改某联系人某条私信的文本内容（编辑功能用）；找不到这条消息时静默返回，不报错。
+async function updatePhoneMessageText(characterName, messageId, newText) {
+  try {
+    const db = await openPhoneDB();
+    const dateKey = dateKeyFromMessageId(messageId);
+    const list = await getPhoneMessagesForDate(characterName, dateKey);
+    const record = list.find((m) => m.id === messageId);
+    if (!record) return;
+    record.text = newText;
+    record.stickerId = null; // 手动编辑过文字后退化成普通文字消息，不再关联图片
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_IDB_STORE, "readwrite");
+      tx.objectStore(PHONE_IDB_STORE).put(
+        list,
+        phoneDbMessagesKey(characterName, dateKey),
+      );
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (error) {
+    console.error("[剧情助手] 修改私信内容失败:", error);
+    notify("error", "修改私信内容失败，请查看控制台报错。");
+  }
+}
+
+// 删除某联系人的一条私信（删除功能用）；分桶删空后顺手把这个 dateKey 从日期索引里摘掉，保持数据干净。
+async function deletePhoneMessage(characterName, messageId) {
+  try {
+    const db = await openPhoneDB();
+    const dateKey = dateKeyFromMessageId(messageId);
+    const list = (await getPhoneMessagesForDate(characterName, dateKey)).filter(
+      (m) => m.id !== messageId,
+    );
+    const dateIndex = await getPhoneDateIndex(characterName);
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PHONE_IDB_STORE, "readwrite");
+      const store = tx.objectStore(PHONE_IDB_STORE);
+      if (list.length > 0) {
+        store.put(list, phoneDbMessagesKey(characterName, dateKey));
+      } else {
+        store.delete(phoneDbMessagesKey(characterName, dateKey));
+        const nextIndex = dateIndex.filter((d) => d !== dateKey);
+        store.put(nextIndex, phoneDbDateIndexKey(characterName));
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (error) {
+    console.error("[剧情助手] 删除私信失败:", error);
+    notify("error", "删除私信失败，请查看控制台报错。");
+  }
+}
+
+// ==== 手机私信系统：调用 AI 生成角色回复 ====
+
+// === Helper: 把某联系人的全部历史私信拼成 <private_letter> 标签内的正文。
+// 连续消息的 storyTime 相同就归在同一个"时间：xxx"块下，storyTime 变化（含从空变有）时另起一行时间标注；
+// 关系阶段统一取"当前实时值"（没有逐条历史快照，只能反映现在的关系状态，不代表发那条消息时的历史关系）。===
+async function buildPrivateLetterBody(characterName) {
+  const groups = await getAllPhoneMessages(characterName); // [{dateKey, msgs}]，按时间升序
+  const flatMsgs = [];
+  groups.forEach((g) => flatMsgs.push(...g.msgs));
+  const relevant = flatMsgs.filter(
+    (m) => m.from === "user" || m.from === "character",
+  );
+  if (relevant.length === 0) return "（还没有聊天记录）";
+
+  const relationshipStage =
+    await getRelationshipStageForCharacter(characterName);
+  const lines = [];
+  let lastStoryTime = null;
+  relevant.forEach((m) => {
+    const storyTime = m.storyTime || "";
+    if (storyTime !== lastStoryTime) {
+      const stageSuffix = relationshipStage
+        ? `  当前俩人关系阶段：${relationshipStage}`
+        : "";
+      lines.push(`时间：${storyTime || "（未知）"}${stageSuffix}`);
+      lastStoryTime = storyTime;
+    }
+    lines.push(`${m.from === "user" ? "{{user}}" : characterName}: ${m.text}`);
+  });
+  return lines.join("\n");
+}
+
+// becauseFreedReply=true 表示"角色刚从忙碌里变闲，主动补发一条回复"，此时没有用户刚发的新消息可以针对性回复，
+// 走"补聊"语气；false 表示针对 userText 这条新消息正常回复。
+async function generateCharacterPhoneReply(
+  characterName,
+  userText,
+  becauseFreedReply,
+) {
+  const cardBody = await getPhoneContactCardBody(characterName);
+  const presetContent = await loadPhonePresetContent();
+  // 预设默认内容里用"联系人"占位真实联系人姓名，用户如果保存过自己的版本也统一按这个占位符替换。
+  const openingLine = presetContent.split("联系人").join(characterName);
+  const { mes: lastAiMes } = getLastAiFloor();
+  const letterBody = await buildPrivateLetterBody(characterName);
+
+  const systemPrompt = [
+    openingLine,
+    `<character_information character="${characterName}">\n${
+      cardBody || "gender: \nother: "
+    }\n</character_information>`,
+    `<Latest_plot>\n${lastAiMes || "（暂无正文）"}\n</Latest_plot>`,
+    `<private_letter="${characterName}">\n{{user}}和${characterName}的私信：\n${letterBody}\n</private_letter="${characterName}">`,
+    "回复的语气和内容基于 <Latest_plot> 结尾处的最新进展。如果正文角色已经看到了消息并回复了，直接抄录正文角色回复的消息输出就行，" +
+      "如果正文角色没有回复消息，且正文结尾角色已经和发信人面对面在一起了，依照情境判断私信是属于悄悄话还是过时的内容，过时内容回复笑脸表情就行。",
+    "只输出这一条私信正文本身：第一人称、符合角色说话习惯的一两句话，可以带口语化的语气词/表情，" +
+      "但不要加任何前缀、不要写「角色名：」这种称呼前缀，不要加动作/心理描写的括号说明，不要输出多余的解释。",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const userContent = becauseFreedReply
+    ? `{{user}}之前给你发过消息，需要你输出回复，` +
+      `请以「${characterName}」的身份，用一两句话主动回复{{user}}之前的消息（要像真实私信的样子）。`
+    : `{{user}}刚发来的新消息：${userText}\n请以「${characterName}」的身份回复这条消息。`;
+
+  const reply = await generateSummaryRaw(systemPrompt, userContent);
+  return (reply || "").trim();
+}
+
+// === Helper: 角色名出现在最后一层正文里时，调用AI判断这个角色此刻有没有空看/回私信。
+// 返回 true=有空（按闲处理，正常生成回复）/false=没空（按忙处理，走 Busy 流程）。
+// AI 判断调用失败或解析不出明确结果时，保守按"没空"处理，避免误判打断状态表的 Busy 记录逻辑。===
+async function judgeCharacterHasTimeForPhone(characterName, lastAiMes) {
+  const cardBody = await getPhoneContactCardBody(characterName);
+  const relationshipStage =
+    await getRelationshipStageForCharacter(characterName);
+  const systemPrompt = [
+    `你负责判断角色"${characterName}"此刻是否有空看手机、回复{{user}}的私信。`,
+    cardBody ? `人设参考：\n${cardBody}` : "",
+    relationshipStage
+      ? `{{user}}与该角色当前关系阶段：${relationshipStage}`
+      : "",
+    `<Latest_plot>\n${lastAiMes || "（暂无正文）"}\n</Latest_plot>`,
+    "只根据以上正文里这个角色当前正在做的事、所处场合，判断ta此刻方不方便看手机/回私信。" +
+      "只输出一个字：方便就输出「是」，不方便就输出「否」，不要输出任何其它内容。",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const userContent = `请判断"${characterName}"现在有没有空回私信，只回答"是"或"否"。`;
+
+  try {
+    const raw = (await generateSummaryRaw(systemPrompt, userContent)) || "";
+    const trimmed = raw.trim();
+    if (/^是/.test(trimmed) || /有空|方便/.test(trimmed)) return true;
+    if (/^否/.test(trimmed) || /没空|没有空|不方便/.test(trimmed)) return false;
+    return false; // 解析不出明确结果，保守按"没空"处理
+  } catch (error) {
+    console.error("[剧情助手] 忙闲AI判断失败:", error);
+    return false; // 调用失败同样保守按"没空"处理
+  }
+}
+
+// ==== 手机私信系统：核心流程 ====
+
+// 用户在手机聊天页给某角色发一条消息，返回 { status: "replied", reply } 或 { status: "busy" }。
+// 忙/闲判定：楼层号缓存命中就沿用上次"闲"的判断（不重新做文本匹配）；否则按"角色名是否出现在最后一层AI正文里"判定。
+async function sendPhoneMessageToCharacter(characterName, payload) {
+  // payload 兼容两种形式：纯文本字符串（原有用法），或 { text, stickerId }（发图片用）。
+  const msg = typeof payload === "string" ? { text: payload } : payload || {};
+  const text = (msg.text || "").trim();
+  if (!text) return null;
+
+  await appendPhoneMessage(characterName, {
+    from: "user",
+    text,
+    stickerId: msg.stickerId || null,
+    ts: Date.now(),
+    storyTime: getCurrentStoryTime(),
+  });
+
+  const phoneState = getPhoneChatState();
+  const { idx: lastAiIdx, mes: lastAiMes } = getLastAiFloor();
+
+  let treatAsIdle;
+  if (lastAiIdx !== -1 && phoneState.idleFloor[characterName] === lastAiIdx) {
+    treatAsIdle = true; // 楼层没变，沿用上次"闲"的判断，跳过重新判断
+  } else if (!characterActiveInText(characterName, lastAiMes)) {
+    treatAsIdle = true; // 正文没出现这个角色名，直接判"闲"，不调用AI
+  } else {
+    // 正文里出现了角色名，调用AI判断ta此刻有没有空看/回私信，而不是直接判"忙"
+    treatAsIdle = await judgeCharacterHasTimeForPhone(characterName, lastAiMes);
+  }
+
+  markPhoneUpdatedToday(characterName);
+
+  if (treatAsIdle) {
+    phoneState.idleFloor[characterName] = lastAiIdx;
+    delete phoneState.busy[characterName];
+    await persistChatMetadata();
+    try {
+      const reply = await generateCharacterPhoneReply(
+        characterName,
+        text,
+        false,
+      );
+      await appendPhoneMessage(characterName, {
+        from: "character",
+        text: reply || "（对方没有回复任何内容）",
+        ts: Date.now(),
+        storyTime: getCurrentStoryTime(),
+      });
+      markPhoneUpdatedToday(characterName);
+      await persistChatMetadata();
+      return { status: "replied", reply };
+    } catch (error) {
+      console.error("[剧情助手] 生成私信回复失败:", error);
+      notify("error", "私信回复生成失败，请稍后重试。");
+      return { status: "error" };
+    }
+  }
+
+  // 忙碌分支：写入本地缓存的 busy 表，楼层缓存作废（下次变闲要重新走一次完整判断），
+  // 立即重算一次状态表把 Busy 行刷进去，不用等下一层新的 AI 楼层。
+  phoneState.busy[characterName] = true;
+  delete phoneState.idleFloor[characterName];
+  await persistChatMetadata();
+  await rebuildStatusTableFromChat();
+  return { status: "busy" };
+}
+
+// 状态表重算时检测到某角色 Busy 被正文 AI 标记 [REMOVE]（即"变闲"）后调用：自动补发一条该角色的回复。
+async function handleCharacterBecameFree(characterName) {
+  try {
+    const reply = await generateCharacterPhoneReply(characterName, null, true);
+    await appendPhoneMessage(characterName, {
+      from: "character",
+      text: reply || "（对方没有回复任何内容）",
+      ts: Date.now(),
+      storyTime: getCurrentStoryTime(),
+    });
+    markPhoneUpdatedToday(characterName);
+    await persistChatMetadata();
+    notify("info", `「来自${characterName}」的新消息～`);
+    refreshPhoneChatViewIfOpen(characterName);
+  } catch (error) {
+    console.error("[剧情助手] 角色变闲后自动回复生成失败:", error);
+    notify(
+      "warning",
+      `「${characterName}」变闲后自动回复生成失败，请稍后在手机里手动重新发一条消息试试。`,
+    );
+  }
+}
+
+// ==== 手机私信系统：私信槽位（一次性注入正文，AI 生成完这一轮后立即清空）====
+
+// 返回 { content, injectedNames }：content 是拼好的注入文本（可能为空字符串），
+// injectedNames 是这一轮实际有消息被塞进 content 的角色列表——只有真正注入了的角色，
+// 才允许 clearPhoneSlotPromptAfterRound 清掉它的 pending 标记，避免把没注入成功的私信悄悄标记为"已处理"而丢失。
+async function buildPhoneSlotContent() {
+  const phoneState = getPhoneChatState();
+  const pendingNames = Object.keys(phoneState.pendingInjection || {}).filter(
+    (name) => phoneState.pendingInjection[name],
+  );
+  if (pendingNames.length === 0) return { content: "", injectedNames: [] };
+
+  // 用"剧情当日"（最后一层正文摘要 Time 字段的日期部分）过滤，而不是现实日历日期——
+  // 私信该不该被这一轮正文看到，取决于它是否发生在同一个虚构日期里，跟触发注入这一刻的现实时间无关。
+  const currentStoryDate = splitStoryTime(getCurrentStoryTime()).date;
+
+  const blocks = [];
+  const injectedNames = [];
+  for (const name of pendingNames) {
+    // 不再按现实日期查单个分桶，而是拿该角色全部私信（跨真实自然日也没问题），
+    // 自己按 storyTime 的日期部分过滤出属于"剧情当日"的那些。
+    const allGroups = await getAllPhoneMessages(name);
+    const msgs = allGroups
+      .flatMap((g) => g.msgs)
+      .filter(
+        (m) =>
+          (m.from === "user" || m.from === "character") &&
+          splitStoryTime(m.storyTime).date === currentStoryDate,
+      );
+    if (msgs.length === 0) continue; // 剧情日期暂时对不上，这轮不注入，pending 保留，等日期对上再补
+
+    // 按 storyTime 分组：只有当这条消息的 storyTime 跟上一条不一样时才插入一行"时间："，
+    // 同一时间点下的连续消息共用这一行，不重复输出（同一剧情日的消息本来就同属一天，storyTime 只会是时辰在变）。
+    const lines = [];
+    let lastStoryTime = null;
+    msgs.forEach((m) => {
+      const speaker = m.from === "user" ? "{{user}}" : name;
+      if (m.storyTime && m.storyTime !== lastStoryTime) {
+        lines.push(`时间：${m.storyTime}`);
+        lastStoryTime = m.storyTime;
+      }
+      lines.push(`${speaker}: ${m.text}`);
+    });
+
+    blocks.push(
+      `<private_letter="${name}">\n今日{{user}}和${name}的私信：\n${lines.join("\n")}\n</private_letter="${name}">`,
+    );
+    injectedNames.push(name);
+  }
+  return { content: blocks.join("\n\n"), injectedNames };
+}
+
+// 记录"最近一次 applyPhoneSlotPrompt 实际注入了哪些角色"，供 clearPhoneSlotPromptAfterRound 精确清理 pending 用。
+// 生成开始（写入这个变量）和生成结束（读取并清空）之间由酒馆的事件顺序保证先后，同一时刻只有一轮生成在跑，
+// 不需要更复杂的传参/加锁机制。
+let lastInjectedPhoneNames = [];
+
+async function applyPhoneSlotPrompt() {
+  try {
+    const context = getCtx();
+    if (typeof context.setExtensionPrompt !== "function") {
+      console.warn(
+        "[剧情助手] 当前酒馆版本未暴露 setExtensionPrompt，私信槽位注入未启用。",
+      );
+      return;
+    }
+    const { content, injectedNames } = await buildPhoneSlotContent();
+    lastInjectedPhoneNames = injectedNames;
+    // 用 IN_CHAT + depth=0，让内容紧贴最新一楼插入聊天记录里（跟"对话前强调"等常驻注入的 atDepth 语义一致），
+    // 而不是 IN_PROMPT（插在角色卡定义附近，跟实际聊天记录结构性隔开，容易被当成孤立指令而非背景上下文）。
+    const position = context.extension_prompt_types?.IN_CHAT ?? 1;
+    const role = context.extension_prompt_roles?.SYSTEM ?? 0;
+    context.setExtensionPrompt(
+      PHONE_SLOT_PROMPT_KEY,
+      content,
+      position,
+      0,
+      false,
+      role,
+    );
+  } catch (error) {
+    console.error("[剧情助手] 注入私信槽位时出错:", error);
+  }
+}
+
+function clearPhoneSlotPromptAfterRound() {
+  try {
+    const context = getCtx();
+    if (typeof context.setExtensionPrompt === "function") {
+      const position = context.extension_prompt_types?.IN_CHAT ?? 1;
+      const role = context.extension_prompt_roles?.SYSTEM ?? 0;
+      context.setExtensionPrompt(
+        PHONE_SLOT_PROMPT_KEY,
+        "",
+        position,
+        0,
+        false,
+        role,
+      );
+    }
+    const phoneState = getPhoneChatState();
+    // 只清掉这一轮实际注入了的角色。没被注入的——剧情日期没对上、或者注入快照之后、
+    // 这轮生成结束之前又新产生的 pending——继续保留，等下一轮再补注入，不会被这里误清掉。
+    lastInjectedPhoneNames.forEach((name) => {
+      phoneState.pendingInjection[name] = false;
+    });
+    lastInjectedPhoneNames = [];
+    persistChatMetadata();
+  } catch (error) {
+    console.error("[剧情助手] 清空私信槽位时出错:", error);
+  }
+}
+
+// 注册"生成前注入 / 生成后清空"监听。GENERATION_STARTED 在部分酒馆版本里可能不存在，
+// 找不到时只打印警告、不阻断其它功能——这一点需要你在实际环境验证一下具体的事件名是否可用。
+function registerPhoneSlotInjection() {
+  try {
+    const context = getCtx();
+    if (!context.eventSource || !context.event_types) {
+      console.warn(
+        "[剧情助手] 未找到 eventSource/event_types，私信槽位注入未启用。",
+      );
+      return;
+    }
+    const startEventName =
+      context.event_types.GENERATION_STARTED ||
+      context.event_types.GENERATE_BEFORE_COMBINE_PROMPTS;
+    if (startEventName) {
+      context.eventSource.on(startEventName, () => {
+        applyPhoneSlotPrompt();
+      });
+    } else {
+      console.warn(
+        "[剧情助手] 未找到生成开始事件（GENERATION_STARTED），私信槽位注入未启用，把控制台日志发我调整。",
+      );
+    }
+    const renderEventName =
+      context.event_types.CHARACTER_MESSAGE_RENDERED ||
+      context.event_types.MESSAGE_RECEIVED;
+    if (renderEventName) {
+      context.eventSource.on(renderEventName, () => {
+        clearPhoneSlotPromptAfterRound();
+      });
+    }
+  } catch (error) {
+    console.error("[剧情助手] 注册私信槽位注入监听时出错:", error);
   }
 }
 
@@ -3504,8 +5266,7 @@ function loadFabPos() {
     const raw = localStorage.getItem(FAB_POS_KEY);
     if (!raw) return null;
     const pos = JSON.parse(raw);
-    if (typeof pos.left === "number" && typeof pos.top === "number")
-      return pos;
+    if (typeof pos.left === "number" && typeof pos.top === "number") return pos;
   } catch (e) {
     /* 忽略，用默认位置 */
   }
@@ -3685,6 +5446,890 @@ function injectFloatingButton() {
     } else {
       // 没有明显位移，视为一次点击
       openModal();
+    }
+  }
+
+  fab.addEventListener("mousedown", onPointerDown);
+  fab.addEventListener("touchstart", onPointerDown, { passive: true });
+}
+
+// ---- 通讯器悬浮球：结构和拖拽逻辑照搬上面的地图悬浮球，独立存一份坐标/独立的显隐开关，
+// 互不干扰。默认停靠左下角（地图悬浮球在右上角，避免两个球叠在一起）。
+// 点击目前只弹一个"开发中"提示——具体的手机界面（通讯录/聊天/动态/设置）还没做，
+// 先把入口和开关打通，后面往 openPhoneModal() 里继续填内容即可。
+const PHONE_FAB_POS_KEY = "plotAssistant_phoneFabPos";
+
+function loadPhoneFabPos() {
+  try {
+    const raw = localStorage.getItem(PHONE_FAB_POS_KEY);
+    if (!raw) return null;
+    const pos = JSON.parse(raw);
+    if (typeof pos.left === "number" && typeof pos.top === "number") return pos;
+  } catch (e) {
+    /* 忽略，用默认位置 */
+  }
+  return null;
+}
+
+function savePhoneFabPos(left, top) {
+  try {
+    localStorage.setItem(PHONE_FAB_POS_KEY, JSON.stringify({ left, top }));
+  } catch (e) {
+    /* 存储失败不影响功能 */
+  }
+}
+
+// 关闭通讯器悬浮球时顺带重置位置，逻辑跟 resetFabPos 一致：下次开永远回到干净的默认位置。
+function resetPhoneFabPos() {
+  try {
+    localStorage.removeItem(PHONE_FAB_POS_KEY);
+  } catch (e) {
+    /* 忽略 */
+  }
+  const fab = document.getElementById("plot-assistant-phone-fab");
+  if (fab) {
+    fab.style.top = "";
+    fab.style.left = "";
+    fab.style.right = "";
+    fab.style.bottom = "";
+  }
+}
+
+// 只是 display:none/""，不销毁 DOM，拖拽记住的位置不会丢。
+function applyPhoneFabVisibility() {
+  const fab = document.getElementById("plot-assistant-phone-fab");
+  if (!fab) return;
+  fab.style.display = getPhoneFabVisible() ? "" : "none";
+}
+
+// ==== 手机界面 UI（通讯录 / 聊天 / 动态 / 设置）====
+// DOM 结构/拖拽/弹窗关闭逻辑参照地图编辑器的 <dialog> 写法（buildModalSkeleton/openModal/closeModal），
+// 只是内容换成克莱因蓝风格的手机屏幕，四个页签对应之前 mockup 里的四页。
+
+const phoneUIState = {
+  activeTab: "contacts", // contacts / moments / settings；进入聊天页时记录在 activeChatCharacter，不算独立 tab
+  activeChatCharacter: null,
+};
+
+function escapePhoneHtml(str) {
+  return String(str ?? "").replace(
+    /[&<>"']/g,
+    (ch) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        ch
+      ],
+  );
+}
+
+// 聊天页头部"…"下拉菜单（清空对话/上传头像）的开关，供 action-btn 点击和各处导航切换时调用。
+function togglePhoneActionMenu() {
+  document.getElementById("pa-phone-action-menu")?.classList.toggle("pa-phone-hidden");
+}
+function closePhoneActionMenu() {
+  document
+    .getElementById("pa-phone-action-menu")
+    ?.classList.add("pa-phone-hidden");
+}
+
+function buildPhoneModalSkeleton() {
+  if (document.getElementById("pa-phone-modal-overlay")) return;
+  const html = `
+    <dialog id="pa-phone-modal-overlay">
+        <div id="pa-phone-modal">
+            <div id="pa-phone-base-color-layer"></div>
+            <div id="pa-phone-global-bg-layer"></div>
+            <div id="pa-phone-header">
+                <button id="pa-phone-back-btn" class="pa-phone-hidden" title="返回">‹</button>
+                <button id="pa-phone-close-btn" title="关闭">✕</button>
+                <span id="pa-phone-header-title">通讯录</span>
+                <button id="pa-phone-action-btn" class="pa-phone-hidden"></button>
+                <div id="pa-phone-action-menu" class="pa-phone-hidden">
+                    <button id="pa-phone-action-menu-clear">清空对话</button>
+                    <button id="pa-phone-action-menu-avatar">上传头像</button>
+                    <button id="pa-phone-action-menu-bg">上传背景</button>
+                    <button id="pa-phone-action-menu-bg-reset">恢复默认背景</button>
+                </div>
+                <input type="file" id="pa-phone-avatar-upload-input" accept="image/*" class="pa-phone-hidden" />
+                <input type="file" id="pa-phone-chat-bg-upload-input" accept="image/*" class="pa-phone-hidden" />
+            </div>
+            <div id="pa-phone-body">
+                <div id="pa-phone-page-contacts" class="pa-phone-page"></div>
+                <div id="pa-phone-page-chat" class="pa-phone-page pa-phone-hidden"></div>
+                <div id="pa-phone-page-moments" class="pa-phone-page pa-phone-hidden"></div>
+                <div id="pa-phone-page-settings" class="pa-phone-page pa-phone-hidden"></div>
+            </div>
+            <div id="pa-phone-tabbar">
+                <div class="pa-phone-tab" data-tab="contacts">通讯</div>
+                <div class="pa-phone-tab" data-tab="moments">动态</div>
+                <div class="pa-phone-tab" data-tab="settings">设置</div>
+            </div>
+        </div>
+    </dialog>`;
+  document.body.insertAdjacentHTML("beforeend", html);
+
+  document
+    .getElementById("pa-phone-close-btn")
+    .addEventListener("click", closePhoneModal);
+  document
+    .getElementById("pa-phone-modal-overlay")
+    .addEventListener("click", (e) => {
+      if (e.target.id === "pa-phone-modal-overlay") closePhoneModal();
+      // 点菜单和触发它的按钮以外的地方，顺手把菜单收起来。
+      const menu = document.getElementById("pa-phone-action-menu");
+      const btn = document.getElementById("pa-phone-action-btn");
+      if (
+        !menu.classList.contains("pa-phone-hidden") &&
+        !menu.contains(e.target) &&
+        e.target !== btn
+      ) {
+        menu.classList.add("pa-phone-hidden");
+      }
+    });
+  document.getElementById("pa-phone-action-btn").addEventListener(
+    "click",
+    errorCatched(async () => {
+      const btn = document.getElementById("pa-phone-action-btn");
+      const mode = btn.dataset.mode;
+      if (mode === "add-contact") {
+        closePhoneModal();
+        await openCreateCharacterDialog();
+        await openPhoneModal();
+        return;
+      }
+      if (mode === "chat-menu") {
+        togglePhoneActionMenu();
+      }
+    }),
+  );
+  document.getElementById("pa-phone-action-menu-clear").addEventListener(
+    "click",
+    errorCatched(async () => {
+      closePhoneActionMenu();
+      const name = phoneUIState.activeChatCharacter;
+      if (!name) return;
+      const context = getCtx();
+      const confirmed = await context.callGenericPopup(
+        `确定要清空和「${name}」的全部私信记录吗？此操作不可撤销。`,
+        context.POPUP_TYPE.CONFIRM,
+        "",
+        { okButton: "清空", cancelButton: "取消" },
+      );
+      if (confirmed !== context.POPUP_RESULT.AFFIRMATIVE) return;
+      await clearPhoneMessages(name);
+      notify("success", `已清空和「${name}」的私信记录。`);
+      await renderPhoneChatMessages(name);
+    }),
+  );
+  document
+    .getElementById("pa-phone-action-menu-avatar")
+    .addEventListener("click", () => {
+      closePhoneActionMenu();
+      document.getElementById("pa-phone-avatar-upload-input").click();
+    });
+  document.getElementById("pa-phone-avatar-upload-input").addEventListener(
+    "change",
+    errorCatched(async (e) => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      const name = phoneUIState.activeChatCharacter;
+      if (!name) return;
+      const cropped = await openImageCropDialog({
+        file,
+        title: "裁剪头像",
+        ratio: 1,
+        shape: "circle",
+        outputWidth: 320,
+        outputHeight: 320,
+      });
+      if (!cropped) return;
+      await savePhoneAvatar(name, cropped);
+      notify("success", `已更新「${name}」的头像。`);
+    }),
+  );
+  document
+    .getElementById("pa-phone-action-menu-bg")
+    .addEventListener("click", () => {
+      closePhoneActionMenu();
+      document.getElementById("pa-phone-chat-bg-upload-input").click();
+    });
+  document.getElementById("pa-phone-chat-bg-upload-input").addEventListener(
+    "change",
+    errorCatched(async (e) => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      const name = phoneUIState.activeChatCharacter;
+      if (!name) return;
+      const cropped = await openImageCropDialog({
+        file,
+        title: "裁剪背景",
+        ratio: PHONE_CHAT_BG_RATIO,
+        shape: "rect",
+        outputWidth: 720,
+        outputHeight: Math.round(720 / PHONE_CHAT_BG_RATIO),
+      });
+      if (!cropped) return;
+      await savePhoneChatBackground(name, cropped);
+      if (phoneUIState.activeChatCharacter === name) {
+        applyPhoneChatBackground(cropped);
+      }
+      notify("success", `已更新「${name}」的聊天背景。`);
+    }),
+  );
+  document.getElementById("pa-phone-action-menu-bg-reset").addEventListener(
+    "click",
+    errorCatched(async () => {
+      closePhoneActionMenu();
+      const name = phoneUIState.activeChatCharacter;
+      if (!name) return;
+      const existing = await getPhoneChatBackground(name);
+      if (!existing) {
+        notify("warning", "当前使用默认背景，无需恢复。");
+        return;
+      }
+      await deletePhoneChatBackground(name);
+      if (phoneUIState.activeChatCharacter === name) {
+        applyPhoneChatBackground(null);
+      }
+      notify("success", `已恢复「${name}」的默认背景。`);
+    }),
+  );
+  document.getElementById("pa-phone-back-btn").addEventListener("click", () => {
+    closePhoneActionMenu();
+    phoneUIState.activeChatCharacter = null;
+    switchPhoneTab("contacts");
+  });
+  document.querySelectorAll("#pa-phone-tabbar .pa-phone-tab").forEach((el) => {
+    el.addEventListener("click", () => {
+      phoneUIState.activeChatCharacter = null;
+      switchPhoneTab(el.dataset.tab);
+    });
+  });
+}
+
+// 切换页签（不含聊天页——聊天页由 openPhoneChat 单独进入，退出走"返回"按钮）
+async function switchPhoneTab(tab) {
+  closePhoneActionMenu();
+  phoneUIState.activeTab = tab;
+  document
+    .querySelectorAll("#pa-phone-tabbar .pa-phone-tab")
+    .forEach((el) =>
+      el.classList.toggle("pa-phone-tab-active", el.dataset.tab === tab),
+    );
+  document
+    .getElementById("pa-phone-tabbar")
+    .classList.remove("pa-phone-hidden");
+  document.getElementById("pa-phone-back-btn").classList.add("pa-phone-hidden");
+  document
+    .getElementById("pa-phone-close-btn")
+    .classList.remove("pa-phone-hidden");
+
+  const titles = { contacts: "通讯录", moments: "动态", settings: "设置" };
+  document.getElementById("pa-phone-header-title").textContent =
+    titles[tab] || "";
+
+  // 右侧动作按钮：通讯页是"添加联系人"，动态/设置页暂时不需要，先隐藏。
+  const actionBtn = document.getElementById("pa-phone-action-btn");
+  if (tab === "contacts") {
+    actionBtn.textContent = "＋";
+    actionBtn.title = "添加联系人";
+    actionBtn.dataset.mode = "add-contact";
+    actionBtn.classList.add("pa-phone-action-icon");
+    actionBtn.classList.remove("pa-phone-hidden");
+  } else {
+    actionBtn.classList.add("pa-phone-hidden");
+    delete actionBtn.dataset.mode;
+  }
+
+  ["contacts", "chat", "moments", "settings"].forEach((name) => {
+    document
+      .getElementById(`pa-phone-page-${name}`)
+      .classList.toggle("pa-phone-hidden", name !== tab);
+  });
+
+  if (tab === "contacts") await renderPhoneContactsPage();
+  else if (tab === "moments") renderPhoneMomentsPage();
+  else if (tab === "settings") await renderPhoneSettingsPage();
+}
+
+async function renderPhoneContactsPage() {
+  const container = document.getElementById("pa-phone-page-contacts");
+  container.innerHTML = `<div class="pa-phone-loading">加载中...</div>`;
+  const contacts = await getPhoneContactsList();
+  if (contacts.length === 0) {
+    container.innerHTML = `<div class="pa-phone-empty">还没有联系人，先用「创建角色」功能建一个角色卡吧～</div>`;
+    return;
+  }
+  const avatarMap = await getAllPhoneAvatarsForCurrentCharacter();
+  container.innerHTML = contacts
+    .map((c) => {
+      const { gender } = parseContactExtra(c.extra);
+      const metaText = gender ? `${gender}` : "";
+      const avatarUrl = avatarMap.get(c.name);
+      const avatarInner = avatarUrl
+        ? `<img class="pa-phone-avatar-img" src="${avatarUrl}" alt="${escapePhoneHtml(c.name)}" />`
+        : escapePhoneHtml(c.name.slice(0, 1));
+      return `
+      <div class="pa-phone-contact-item" data-name="${escapePhoneHtml(c.name)}">
+        <div class="pa-phone-avatar">${avatarInner}</div>
+        <div class="pa-phone-contact-meta">
+          <div class="pa-phone-contact-name">${escapePhoneHtml(c.name)}</div>
+          <div class="pa-phone-contact-extra">${escapePhoneHtml(metaText)}</div>
+        </div>
+      </div>`;
+    })
+    .join("");
+  container.querySelectorAll(".pa-phone-contact-item").forEach((el) => {
+    el.addEventListener("click", () => openPhoneChat(el.dataset.name));
+  });
+}
+
+function renderPhoneMomentsPage() {
+  document.getElementById("pa-phone-page-moments").innerHTML =
+    `<div class="pa-phone-empty">「动态」页正在开发中，敬请期待～</div>`;
+}
+
+// 全局背景（通讯录/动态/设置三页共用）的裁剪宽高比，参照手机弹窗内容区域的大致比例（360:550）。
+const PHONE_GLOBAL_BG_RATIO = 360 / 550;
+// 聊天页背景（按联系人分别设置）的裁剪宽高比，参照消息滚动区域（顶部标题栏和底部输入栏之间）的大致比例（360:540）。
+const PHONE_CHAT_BG_RATIO = 360 / 540;
+
+// 设置页：第一行是"背景"（全局背景，铺满通讯录/动态/设置三页），下面是"图片"（原表情包）批量导入 + 网格管理。
+// 清空聊天记录、更换头像、更换聊天页背景都挪去了聊天页头部"…"菜单里，按当前联系人操作，这里不再重复。
+async function renderPhoneSettingsPage() {
+  const container = document.getElementById("pa-phone-page-settings");
+  container.innerHTML = `<div class="pa-phone-loading">加载中...</div>`;
+  const [stickers, globalBg] = await Promise.all([
+    getPhoneStickerList(),
+    getPhoneGlobalBackground(),
+  ]);
+
+  const gridHtml = stickers.length
+    ? stickers
+        .map(
+          (s) => `
+      <div class="pa-phone-sticker-manage-item" data-id="${escapePhoneHtml(s.id)}">
+        <button class="pa-phone-sticker-delete-btn" title="删除">✕</button>
+        <img src="${s.dataUrl}" alt="${escapePhoneHtml(s.name)}" />
+        <div class="pa-phone-sticker-manage-name" title="点击改名">${escapePhoneHtml(s.name)}</div>
+      </div>`,
+        )
+        .join("")
+    : `<div class="pa-phone-empty">还没有图片，点右上角"添加"批量导入几张吧～</div>`;
+
+  container.innerHTML = `
+    <div class="pa-phone-settings-section">
+      <div class="pa-phone-settings-title-row">
+        <div class="pa-phone-settings-title">背景</div>
+        <div class="pa-phone-bg-btns">
+          <button id="pa-phone-global-bg-upload-btn" class="pa-phone-sticker-add-btn">上传背景</button>
+          <button id="pa-phone-global-bg-reset-btn" class="pa-phone-bg-reset-btn${globalBg ? "" : " pa-phone-hidden"}">恢复默认</button>
+        </div>
+      </div>
+      <div id="pa-phone-global-bg-preview" class="pa-phone-bg-preview"${globalBg ? ` style="background-image:url('${globalBg}')"` : ""}>
+        ${globalBg ? "" : '<span class="pa-phone-bg-preview-empty">未设置，通讯录/动态/设置页将使用此背景</span>'}
+      </div>
+    </div>
+    <input type="file" id="pa-phone-global-bg-upload-input" accept="image/*" class="pa-phone-hidden" />
+    <div class="pa-phone-settings-section">
+      <div class="pa-phone-settings-title-row">
+        <div class="pa-phone-settings-title">图片</div>
+        <button id="pa-phone-sticker-add-btn" class="pa-phone-sticker-add-btn">+ 添加</button>
+      </div>
+      <div class="pa-phone-sticker-manage-grid">${gridHtml}</div>
+    </div>
+    <input type="file" id="pa-phone-sticker-upload-input" accept="image/*" multiple class="pa-phone-hidden" />`;
+
+  document
+    .getElementById("pa-phone-global-bg-upload-btn")
+    .addEventListener("click", () => {
+      document.getElementById("pa-phone-global-bg-upload-input").click();
+    });
+  document.getElementById("pa-phone-global-bg-upload-input").addEventListener(
+    "change",
+    errorCatched(async (e) => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      const cropped = await openImageCropDialog({
+        file,
+        title: "裁剪背景",
+        ratio: PHONE_GLOBAL_BG_RATIO,
+        shape: "rect",
+        outputWidth: 720,
+        outputHeight: Math.round(720 / PHONE_GLOBAL_BG_RATIO),
+      });
+      if (!cropped) return;
+      await savePhoneGlobalBackground(cropped);
+      applyPhoneGlobalBackground(cropped);
+      notify("success", "已更新背景。");
+      await renderPhoneSettingsPage();
+    }),
+  );
+  document.getElementById("pa-phone-global-bg-reset-btn").addEventListener(
+    "click",
+    errorCatched(async () => {
+      await deletePhoneGlobalBackground();
+      applyPhoneGlobalBackground(null);
+      notify("success", "已恢复默认背景。");
+      await renderPhoneSettingsPage();
+    }),
+  );
+
+  document
+    .getElementById("pa-phone-sticker-add-btn")
+    .addEventListener("click", () => {
+      document.getElementById("pa-phone-sticker-upload-input").click();
+    });
+
+  document.getElementById("pa-phone-sticker-upload-input").addEventListener(
+    "change",
+    errorCatched(async (e) => {
+      const files = Array.from(e.target.files || []);
+      e.target.value = "";
+      if (!files.length) return;
+      const items = [];
+      for (const file of files) {
+        const dataUrl = await readImageFileCompressed(file, 200);
+        const baseName = file.name.replace(/\.[^.]+$/, "") || "图片";
+        items.push({ name: baseName, dataUrl });
+      }
+      await addPhoneStickers(items);
+      notify("success", `已导入 ${items.length} 张图片。`);
+      await renderPhoneSettingsPage();
+    }),
+  );
+
+  container.querySelectorAll(".pa-phone-sticker-delete-btn").forEach((btn) => {
+    btn.addEventListener(
+      "click",
+      errorCatched(async () => {
+        const item = btn.closest(".pa-phone-sticker-manage-item");
+        await deletePhoneSticker(item.dataset.id);
+        await renderPhoneSettingsPage();
+      }),
+    );
+  });
+
+  container.querySelectorAll(".pa-phone-sticker-manage-name").forEach((nameEl) => {
+    nameEl.addEventListener("click", () => {
+      const item = nameEl.closest(".pa-phone-sticker-manage-item");
+      const id = item.dataset.id;
+      const current = nameEl.textContent;
+      nameEl.outerHTML = `<input class="pa-phone-sticker-name-input" value="${escapePhoneHtml(current)}" />`;
+      const input = item.querySelector(".pa-phone-sticker-name-input");
+      input.focus();
+      input.select();
+      const save = errorCatched(async () => {
+        const newName = input.value.trim() || current;
+        await renamePhoneSticker(id, newName);
+        await renderPhoneSettingsPage();
+      });
+      input.addEventListener("blur", save);
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") input.blur();
+      });
+    });
+  });
+}
+
+// 进入某个联系人的聊天页：隐藏 tabbar，显示返回按钮，标题换成联系人名字。
+async function openPhoneChat(characterName) {
+  phoneUIState.activeChatCharacter = characterName;
+  document.getElementById("pa-phone-header-title").textContent = characterName;
+  document
+    .getElementById("pa-phone-back-btn")
+    .classList.remove("pa-phone-hidden");
+  document
+    .getElementById("pa-phone-close-btn")
+    .classList.add("pa-phone-hidden");
+  document.getElementById("pa-phone-tabbar").classList.add("pa-phone-hidden");
+
+  closePhoneActionMenu();
+  const actionBtn = document.getElementById("pa-phone-action-btn");
+  actionBtn.textContent = "⋯";
+  actionBtn.title = "更多操作";
+  actionBtn.dataset.mode = "chat-menu";
+  actionBtn.classList.add("pa-phone-action-icon");
+  actionBtn.classList.remove("pa-phone-hidden");
+  ["contacts", "chat", "moments", "settings"].forEach((name) => {
+    document
+      .getElementById(`pa-phone-page-${name}`)
+      .classList.toggle("pa-phone-hidden", name !== "chat");
+  });
+
+  const page = document.getElementById("pa-phone-page-chat");
+  page.innerHTML = `
+    <div id="pa-phone-chat-messages"><div class="pa-phone-loading">加载中...</div></div>
+    <div id="pa-phone-sticker-panel" class="pa-phone-hidden"></div>
+    <div id="pa-phone-chat-inputbar">
+      <button id="pa-phone-sticker-btn" title="图片">☺</button>
+      <input id="pa-phone-chat-input" type="text" placeholder="发消息给${escapePhoneHtml(
+        characterName,
+      )}..." />
+      <button id="pa-phone-chat-send-btn">发送</button>
+    </div>`;
+
+  const chatBg = await getPhoneChatBackground(characterName);
+  applyPhoneChatBackground(chatBg);
+
+  await renderPhoneChatMessages(characterName);
+
+  const input = document.getElementById("pa-phone-chat-input");
+  const sendBtn = document.getElementById("pa-phone-chat-send-btn");
+  const stickerBtn = document.getElementById("pa-phone-sticker-btn");
+  const stickerPanel = document.getElementById("pa-phone-sticker-panel");
+  const doSend = errorCatched(async () => {
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    sendBtn.disabled = true;
+    input.disabled = true;
+    try {
+      await sendPhoneMessageToCharacter(characterName, text);
+      if (phoneUIState.activeChatCharacter === characterName) {
+        await renderPhoneChatMessages(characterName);
+      }
+    } finally {
+      sendBtn.disabled = false;
+      input.disabled = false;
+      input.focus();
+    }
+  });
+  sendBtn.addEventListener("click", doSend);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doSend();
+  });
+  stickerBtn.addEventListener(
+    "click",
+    errorCatched(async () => {
+      const willShow = stickerPanel.classList.contains("pa-phone-hidden");
+      if (willShow) await renderPhoneStickerPanel(characterName, stickerPanel);
+      stickerPanel.classList.toggle("pa-phone-hidden", !willShow);
+    }),
+  );
+}
+
+// 图片选择面板：网格展示图片库，点一下就直接发出去（跟真实聊天软件的表情选择一致）。
+async function renderPhoneStickerPanel(characterName, panel) {
+  const list = await getPhoneStickerList();
+  if (!list.length) {
+    panel.innerHTML = `<div class="pa-phone-empty" style="padding:14px 10px;">还没有图片，去设置页导入几张吧～</div>`;
+    return;
+  }
+  panel.innerHTML = list
+    .map(
+      (s) => `
+    <div class="pa-phone-sticker-item" data-id="${escapePhoneHtml(s.id)}" title="${escapePhoneHtml(s.name)}">
+      <img src="${s.dataUrl}" alt="${escapePhoneHtml(s.name)}" />
+    </div>`,
+    )
+    .join("");
+  panel.querySelectorAll(".pa-phone-sticker-item").forEach((el) => {
+    el.addEventListener(
+      "click",
+      errorCatched(async () => {
+        const sticker = list.find((s) => s.id === el.dataset.id);
+        if (!sticker) return;
+        panel.classList.add("pa-phone-hidden");
+        await sendPhoneStickerToCharacter(characterName, sticker);
+      }),
+    );
+  });
+}
+
+// 发一张图片：text 存 `[图片:图片名]` 文字标记（AI 靠这个感知"用户发了张图片"），
+// stickerId 关联图片库图片，供本地气泡渲染真实图片用。
+async function sendPhoneStickerToCharacter(characterName, sticker) {
+  const sendBtn = document.getElementById("pa-phone-chat-send-btn");
+  const input = document.getElementById("pa-phone-chat-input");
+  if (sendBtn) sendBtn.disabled = true;
+  if (input) input.disabled = true;
+  try {
+    await sendPhoneMessageToCharacter(characterName, {
+      text: `[图片:${sticker.name}]`,
+      stickerId: sticker.id,
+    });
+    if (phoneUIState.activeChatCharacter === characterName) {
+      await renderPhoneChatMessages(characterName);
+    }
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+    if (input) input.disabled = false;
+  }
+}
+
+// 重新渲染聊天页消息列表（发送/收到新消息后调用），并自动滚到底部。
+async function renderPhoneChatMessages(characterName) {
+  const list = document.getElementById("pa-phone-chat-messages");
+  if (!list) return;
+  const groups = await getAllPhoneMessages(characterName);
+  if (groups.length === 0) {
+    list.innerHTML = `<div class="pa-phone-empty">还没有聊天记录，发第一条消息试试吧～</div>`;
+    return;
+  }
+  // 一次性把图片库读出来建个 id -> 记录的索引，气泡渲染时按 stickerId 查图；
+  // 图片后来被删了查不到时，退化成显示 [图片:xxx] 文字标记，不会渲染出坏图标。
+  const stickerMap = new Map(
+    (await getPhoneStickerList()).map((s) => [s.id, s]),
+  );
+  list.innerHTML = groups
+    .map((g) => {
+      // 分割线：取这一组消息里第一条带 storyTime 的日期部分；这组里没有任何消息带 storyTime（旧数据）时，退回显示现实日期。
+      const firstStoryDate = g.msgs
+        .map((m) => splitStoryTime(m.storyTime).date)
+        .find((d) => d);
+      const dividerText = firstStoryDate || g.dateKey;
+      return `
+      <div class="pa-phone-date-divider">${escapePhoneHtml(dividerText)}</div>
+      ${g.msgs
+        .map((m) => {
+          const storyParts = splitStoryTime(m.storyTime);
+          const timeStr =
+            storyParts.time || new Date(m.ts).toTimeString().slice(0, 5);
+          const side =
+            m.from === "user" ? "pa-phone-msg-right" : "pa-phone-msg-left";
+          const sticker = m.stickerId ? stickerMap.get(m.stickerId) : null;
+          const bubbleClass = sticker
+            ? "pa-phone-msg-bubble pa-phone-msg-bubble-sticker"
+            : "pa-phone-msg-bubble";
+          const bubbleInner = sticker
+            ? `<img class="pa-phone-msg-sticker-img" src="${sticker.dataUrl}" alt="${escapePhoneHtml(sticker.name)}" />`
+            : escapePhoneHtml(m.text);
+          return `
+          <div class="pa-phone-msg-row ${side}" data-id="${escapePhoneHtml(m.id)}" data-text="${escapePhoneHtml(m.text)}">
+            <div class="pa-phone-msg-bubble-line">
+              <div class="${bubbleClass}">${bubbleInner}</div>
+              <button class="pa-phone-msg-more-btn" title="编辑/删除">⋯</button>
+            </div>
+            <div class="pa-phone-msg-actions pa-phone-hidden">
+              <button class="pa-phone-msg-edit-btn">编辑</button>
+              <button class="pa-phone-msg-delete-btn">删除</button>
+            </div>
+            <div class="pa-phone-msg-time">${timeStr}</div>
+          </div>`;
+        })
+        .join("")}`;
+    })
+    .join("");
+  list.scrollTop = list.scrollHeight;
+  bindPhoneChatMessageActions(list, characterName);
+}
+
+// 给每条消息挂"···"展开/收起、编辑、删除的交互；每次 renderPhoneChatMessages 重绘后重新绑定一遍。
+function bindPhoneChatMessageActions(list, characterName) {
+  list.querySelectorAll(".pa-phone-msg-row").forEach((row) => {
+    const actions = row.querySelector(".pa-phone-msg-actions");
+
+    row
+      .querySelector(".pa-phone-msg-more-btn")
+      .addEventListener("click", () => {
+        const willShow = actions.classList.contains("pa-phone-hidden");
+        // 同一时间只保留一行展开，点别的行的"···"先把上一行收起。
+        list
+          .querySelectorAll(".pa-phone-msg-actions")
+          .forEach((el) => el.classList.add("pa-phone-hidden"));
+        actions.classList.toggle("pa-phone-hidden", !willShow);
+      });
+
+    row
+      .querySelector(".pa-phone-msg-edit-btn")
+      .addEventListener("click", () => {
+        actions.classList.add("pa-phone-hidden");
+        const bubbleLine = row.querySelector(".pa-phone-msg-bubble-line");
+        // 从 data-text 读原文，而不是气泡的 textContent——图片消息的气泡里是 <img>，
+        // textContent 读不到 [图片:xxx] 这个真实存的文字标记。保存后 updatePhoneMessageText
+        // 会顺带清掉 stickerId，这条消息就退化成普通文字消息了。
+        const originalText = row.dataset.text || "";
+        bubbleLine.outerHTML = `
+        <div class="pa-phone-msg-edit-box">
+          <textarea class="pa-phone-msg-edit-input">${escapePhoneHtml(originalText)}</textarea>
+          <div class="pa-phone-msg-edit-btns">
+            <button class="pa-phone-msg-edit-cancel">取消</button>
+            <button class="pa-phone-msg-edit-save">保存</button>
+          </div>
+        </div>`;
+        const box = row.querySelector(".pa-phone-msg-edit-box");
+        box
+          .querySelector(".pa-phone-msg-edit-cancel")
+          .addEventListener("click", () =>
+            renderPhoneChatMessages(characterName),
+          );
+        box.querySelector(".pa-phone-msg-edit-save").addEventListener(
+          "click",
+          errorCatched(async () => {
+            const newText = box
+              .querySelector(".pa-phone-msg-edit-input")
+              .value.trim();
+            if (!newText) {
+              notify("warning", "私信内容不能为空，没有保存。");
+              return;
+            }
+            await updatePhoneMessageText(
+              characterName,
+              row.dataset.id,
+              newText,
+            );
+            await renderPhoneChatMessages(characterName);
+          }),
+        );
+      });
+
+    row.querySelector(".pa-phone-msg-delete-btn").addEventListener(
+      "click",
+      errorCatched(async () => {
+        const context = getCtx();
+        const confirmed = await context.callGenericPopup(
+          "确定要删除这条私信吗？此操作不可撤销。",
+          context.POPUP_TYPE.CONFIRM,
+          "",
+          { okButton: "删除", cancelButton: "取消" },
+        );
+        if (confirmed !== context.POPUP_RESULT.AFFIRMATIVE) return;
+        await deletePhoneMessage(characterName, row.dataset.id);
+        await renderPhoneChatMessages(characterName);
+      }),
+    );
+  });
+}
+
+// 角色"变闲"自动补发回复后，如果手机聊天页当前正好开着这个联系人，实时刷新一下。
+function refreshPhoneChatViewIfOpen(characterName) {
+  const overlay = document.getElementById("pa-phone-modal-overlay");
+  if (!overlay || !overlay.open) return;
+  if (phoneUIState.activeChatCharacter !== characterName) return;
+  renderPhoneChatMessages(characterName);
+}
+
+function closePhoneModal() {
+  const overlay = document.getElementById("pa-phone-modal-overlay");
+  if (overlay && overlay.open) overlay.close();
+  closePhoneActionMenu();
+  document
+    .getElementById("pa-phone-sticker-panel")
+    ?.classList.add("pa-phone-hidden");
+}
+
+async function openPhoneModal() {
+  buildPhoneModalSkeleton();
+  phoneUIState.activeChatCharacter = null;
+  const globalBg = await getPhoneGlobalBackground();
+  applyPhoneGlobalBackground(globalBg);
+  document.getElementById("pa-phone-modal-overlay").showModal();
+  await switchPhoneTab("contacts");
+}
+
+function injectPhoneFloatingButton() {
+  if (document.getElementById("plot-assistant-phone-fab")) return;
+
+  const html = `
+        <div id="plot-assistant-phone-fab" title="通讯器">
+            <div class="plot-assistant-phone-fab-icon">📱</div>
+        </div>`;
+  document.body.insertAdjacentHTML("beforeend", html);
+
+  const fab = document.getElementById("plot-assistant-phone-fab");
+
+  const FAB_MARGIN = 16;
+  const FAB_SIZE = 44;
+
+  function clampPos(left, top) {
+    const maxLeft = Math.max(
+      FAB_MARGIN,
+      window.innerWidth - FAB_MARGIN - FAB_SIZE,
+    );
+    const maxTop = Math.max(
+      FAB_MARGIN,
+      window.innerHeight - FAB_MARGIN - FAB_SIZE,
+    );
+    return {
+      left: Math.min(Math.max(left, FAB_MARGIN), maxLeft),
+      top: Math.min(Math.max(top, FAB_MARGIN), maxTop),
+    };
+  }
+
+  const savedPos = loadPhoneFabPos();
+  if (savedPos) {
+    const pos = clampPos(savedPos.left, savedPos.top);
+    fab.style.right = "auto";
+    fab.style.bottom = "auto";
+    fab.style.left = `${pos.left}px`;
+    fab.style.top = `${pos.top}px`;
+  }
+  // 显隐由控制面板里的「通讯器开/通讯器关」按钮控制，这里只负责套用启动时已保存的状态。
+  applyPhoneFabVisibility();
+
+  let dragging = false;
+  let moved = false;
+  let startX = 0,
+    startY = 0;
+  let offsetX = 0,
+    offsetY = 0;
+
+  const DRAG_THRESHOLD = 6;
+
+  function onPointerDown(e) {
+    dragging = true;
+    moved = false;
+    const point = e.touches ? e.touches[0] : e;
+    const rect = fab.getBoundingClientRect();
+    offsetX = point.clientX - rect.left;
+    offsetY = point.clientY - rect.top;
+    startX = point.clientX;
+    startY = point.clientY;
+    document.addEventListener("mousemove", onPointerMove);
+    document.addEventListener("mouseup", onPointerUp);
+    document.addEventListener("touchmove", onPointerMove, { passive: false });
+    document.addEventListener("touchend", onPointerUp);
+  }
+
+  function onPointerMove(e) {
+    if (!dragging) return;
+    const point = e.touches ? e.touches[0] : e;
+    if (
+      Math.abs(point.clientX - startX) > DRAG_THRESHOLD ||
+      Math.abs(point.clientY - startY) > DRAG_THRESHOLD
+    ) {
+      moved = true;
+      if (e.touches) e.preventDefault();
+    }
+    if (!moved) return;
+
+    const x = point.clientX - offsetX;
+    const y = point.clientY - offsetY;
+
+    const margin = 4;
+    const size = fab.offsetWidth;
+    const newLeft = Math.min(
+      Math.max(x, margin),
+      window.innerWidth - size - margin,
+    );
+    const newTop = Math.min(
+      Math.max(y, margin),
+      window.innerHeight - size - margin,
+    );
+
+    fab.style.right = "auto";
+    fab.style.bottom = "auto";
+    fab.style.left = `${newLeft}px`;
+    fab.style.top = `${newTop}px`;
+  }
+
+  function onPointerUp() {
+    if (!dragging) return;
+    dragging = false;
+    document.removeEventListener("mousemove", onPointerMove);
+    document.removeEventListener("mouseup", onPointerUp);
+    document.removeEventListener("touchmove", onPointerMove);
+    document.removeEventListener("touchend", onPointerUp);
+
+    if (moved) {
+      const left = parseFloat(fab.style.left) || 0;
+      const top = parseFloat(fab.style.top) || 0;
+      savePhoneFabPos(left, top);
+    } else {
+      openPhoneModal();
     }
   }
 
@@ -5708,6 +8353,10 @@ jQuery(() => {
 
   // --- 移动端优化模块 ---
   applyMobileOptSettingsOnLoad(); // 默认关闭，只有之前手动开启过才会在这里生效
+
+  // --- 通讯器（手机）悬浮窗模块 ---
+  injectPhoneFloatingButton(); // 默认关闭，只有之前手动开启过才会在这里显示出来
+  registerPhoneSlotInjection(); // 私信槽位：生成前注入当天新私信，生成后立即清空
 
   // --- 地图标记模块 ---
   getSettings(); // 确保当前角色（或临时）的地图数据结构已就绪
