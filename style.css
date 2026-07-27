@@ -119,6 +119,14 @@
 
 #pa-phone-modal {
     position: relative;
+    /* 强制建立一个新的层叠上下文（跟 backdrop-filter 会自动建立的效果叠加，双保险）。
+       有了这个，下面两层背景图无论写不写 z-index、值多少，都只会在 #pa-phone-modal 内部
+       比较层叠顺序，不会跑到弹窗外面影响外部页面（比如把小说正文页面的背景也带偏）。 */
+    isolation: isolate;
+    /* 玻璃质感：模糊弹窗"外面"（小说正文页面）透过来的内容，配合下面纯色底层的半透明蓝，
+       做出旧版那种能隐约看到虚化正文文字的磨砂玻璃效果。只模糊外部内容，不影响弹窗自己
+       内部的纯色底层/背景图层/文字——那些是在这层模糊结果之上正常绘制的，始终清晰。 */
+    backdrop-filter: blur(8px);
     width: 360px;
     max-width: 94vw;
     height: 640px;
@@ -128,42 +136,45 @@
     border: 3px solid #c8ccd2;
     border-radius: 20px;
     overflow: hidden;
-    /* 纯色兜底：跟 #pa-phone-base-color-layer 同色，双保险。正常情况下弹窗内容会被
-       下面两层完全不透明的图层盖满，这里的颜色理论上不会被看到，只是防止圆角边缘抗
-       锯齿之类的极端情况漏出外面小说的文字。 */
-    background: #002fa7;
+    background: transparent;
     box-shadow: 0 10px 40px rgba(0,0,0,0.5);
     color: #fff;
     font-family: -apple-system, "PingFang SC", sans-serif;
 }
 
-/* 纯色底层：原来这个蓝色是直接设在 #pa-phone-modal 自己身上的，靠 #pa-phone-global-bg-layer 的
-   z-index: -1 盖在它上面——这依赖 #pa-phone-modal 建立自己的层叠上下文（靠 backdrop-filter 触发），
-   部分浏览器/webview 环境下 backdrop-filter 不生效或不建立层叠上下文时，z-index: -1 的图层会画到
-   意料之外的位置（比如整个蓝底"之下"），导致背景图怎么设都被蓝色盖住。
-   现在改成不依赖 z-index/层叠上下文的写法：这一层和背景图层都是 #pa-phone-modal 的普通同级子元素，
-   单纯靠 DOM 顺序决定谁盖在谁上面（写在后面的元素画在上面），这个规则在任何浏览器里都成立。
-   alpha 固定为 1（完全不透明）：不管有没有设置自定义背景图，弹窗本体都不该透出外面小说的文字，
-   所以这一层不再做"没设置背景时留一点透明"的处理。 */
+/* 纯色底层：作为背景图的"兜底"，默认显示（没设置背景图时）。
+   明确写 z-index: -2（旧版验证过在实际环境里有效的写法），强制摁在最底下，不依赖"DOM 顺序
+   靠隐式规则垫底"这种在部分 webview 环境里不可靠的写法——之前就是因为没写 z-index，
+   这层背景图在实际环境里盖住了 header/tabbar，导致 tab 栏完全看不见。
+   #pa-phone-modal 自己背景是透明的，只靠 backdrop-filter 模糊外部内容；这层的 0.9 透明度
+   蓝色叠在模糊结果上面，做出旧版的磨砂玻璃质感。
+   一旦设置了背景图，由 JS（applyPhoneGlobalBackground）把这层的透明度改成 0，蓝色完全隐藏，
+   避免背景图被蓝色掺进去——见下面 #pa-phone-global-bg-layer 的说明。 */
 #pa-phone-base-color-layer {
     position: absolute;
     inset: 0;
+    z-index: -2;
+    opacity: 0.9;
     background: rgba(0, 47, 167, 1);
     pointer-events: none;
+    transition: opacity 0.2s ease;
 }
 
-/* 全局背景图层：铺在通讯录/动态/设置三页共用的最底层，紧跟在 #pa-phone-base-color-layer 后面，
-   靠 DOM 顺序天然画在底色层上面。
-   这里默认就是完全不透明（opacity: 1）：没有背景图时这层没有 background-image，视觉上
-   直接露出下面同样不透明的纯蓝底色；一旦设置了自定义背景图，也保持不透明，避免蓝底透过
-   任何透明度叠加到图片上把图片叠暗。 */
+/* 全局背景图层：铺在通讯录/动态/设置三页共用的最底层，z-index: -1，比纯色底层高一级、
+   比 header/body/tabbar 等正常内容低一级，同样是明确写 z-index，不依赖隐式 DOM 顺序。
+   没有背景图时这层没有 background-image、opacity 是 1（完全透明的空图层，不影响观感），
+   直接露出下面的玻璃质感纯蓝底。
+   一旦设置了自定义背景图，JS 把这层的透明度改成 0.86、同时隐藏纯色底层的蓝——这样露出来的
+   14% 直接是 backdrop-filter 模糊后的正文本身（不带蓝色），图片和玻璃通透感能同时要。 */
 #pa-phone-global-bg-layer {
     position: absolute;
     inset: 0;
+    z-index: -1;
     opacity: 1;
     background-size: cover;
     background-position: center;
     pointer-events: none;
+    transition: opacity 0.2s ease;
 }
 
 #pa-phone-header {
@@ -747,9 +758,7 @@
     flex-shrink: 0;
     display: flex;
     border-top: 0.5px solid rgba(255,255,255,0.3);
-    /* 不再单独加白色蒙层：跟头部标题栏一样直接透出下面的 base-color-layer /
-       global-bg-layer，跟正文是同一套背景，只靠上面这条分隔线做视觉区分。 */
-    background: transparent;
+    background: rgba(255,255,255,0.08);
 }
 
 .pa-phone-tab {

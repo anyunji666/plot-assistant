@@ -1,24 +1,5 @@
 # 剧情助手
 
-不依赖「酒馆助手」插件，直接使用 SillyTavern 原生扩展接口。包含四块功能，共用同一本按"角色名 + 总结"命名的世界书：
-
-- **总结/状态表**（总结功能）
-- **对话前强调**（输出强调）
-- **创建角色**（角色卡）
-- **地图标记**
-
-## 安装方法
-
-1. 找到你的酒馆数据目录下的 `data/<你的用户名>/extensions/` 文件夹
-   （比如 `SillyTavern/data/default-user/extensions/`）。
-2. 把整个 `plot-assistant` 文件夹复制进去，得到：
-   `data/<你的用户名>/extensions/plot-assistant/manifest.json`
-   `data/<你的用户名>/extensions/plot-assistant/index.js`
-   `data/<你的用户名>/extensions/plot-assistant/style.css`
-   `data/<你的用户名>/extensions/plot-assistant/lib/leaflet/...`
-3. 重新加载酒馆网页（或在"扩展"面板点刷新）。
-4. 打开扩展菜单（顶部三个格子的图标），应该能看到「剧情助手」一项，点开即弹出控制面板。
-
 ## 总结功能（总结/状态表）
 
 面板"总结功能"分组下三个按钮：**自动小总结**（按当前对话进度，每30层自动往后总结，支持起始楼层偏移，见下）、**设定起始楼层**（沿用同一本总结世界书新开对话继续写时，设定本对话的楼层号从第几层开始编号）、**自动大总结**（把所有小总结整合成一段主线脉络）。
@@ -87,16 +68,4 @@ other:
 - **回复生成的提示词**：会把该联系人的**全部历史私信**（按 storyTime 分组，storyTime 变化时另起一行标注"时间：xxx  当前俩人关系阶段：xxx"，关系阶段实时从状态表 Relationships 读取）连同角色卡、最后一层正文一起发给 AI。其中"扮演谁 + 口吻参考人设"这句开场白是**可编辑预设**——面板"联系人"分组下的**私信预设**按钮可以打开编辑框修改，其余结构和输出格式要求写死在代码里，不随预设一起改动。
 - **私信槽位**：只要有新的私信更新（不管是你发的还是角色回的），下一次正文生成前会临时把当天的聊天记录注入正文（通过 `context.setExtensionPrompt`），生成完这一轮立即清空，不会常驻占用上下文。
 
-### ⚠️ 升级后需要手动做一步
 
-Busy 字段是新加进摘要输出协议（`DEFAULT_PRE_EMPHASIS_CONTENT`）里的，但**这个默认值只在"对话前强调"条目第一次创建、编辑框里还没有任何已保存内容时才会生效**。如果你之前已经保存过一次"对话前强调"，世界书里存的是你保存时的旧内容，不会自动带上 Busy 的规则说明——正文 AI 也就不会知道要输出 `Busy: 角色名: [REMOVE]`，"忙碌角色自动补发私信"这一步会一直等不到信号。
-
-**升级后请去控制面板"输出强调"分组点一次"对话前强调"，对照编辑框里的新默认内容，把 Busy 相关的规则说明手动补进你现在保存的那份文本里（或者直接删掉重存成默认值），保存后才会生效。**
-
-## 已知需要你在实际环境验证的点
-
-- **起始楼层的持久化接口**：`persistChatMetadata()` 依次尝试 `context.saveMetadata()` / `context.saveMetadataDebounced()` / `context.saveChatDebounced()`，已实测确认当前酒馆版本里 `context.saveMetadata()` 存在且可用（同步调用即生效，刷新页面后数据仍在）。如果你换了酒馆版本后发现"设定起始楼层"刷新后失效，控制台会有警告日志，把日志发我再调整。
-- 图片存储 key 为"角色名::原id"格式（IndexedDB `mm_map_marker_db`）。
-- 「地图信息」世界书条目的自动创建依赖 `saveWorldInfo`/`loadWorldInfo` 原生接口，如果编辑地图后条目没有更新，看看控制台有没有报错，把日志发我。
-- `context.generateRaw` 的返回格式、世界书自动创建依赖的事件名等，如果换了酒馆版本后表现异常，把控制台日志发我看看。
-- **私信槽位注入用到的 `context.setExtensionPrompt`**：这个接口在本插件其它模块里都没实测用过，`registerPhoneSlotInjection()` 依赖 `GENERATION_STARTED`（找不到会退回 `GENERATE_BEFORE_COMBINE_PROMPTS`）在生成前注入、`CHARACTER_MESSAGE_RENDERED`（找不到退回 `MESSAGE_RECEIVED`）在生成后清空。如果发现私信没有按预期注入正文，或者控制台有相关报错/警告，把日志发我再调整。

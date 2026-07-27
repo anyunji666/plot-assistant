@@ -4263,20 +4263,27 @@ async function deletePhoneChatBackground(characterName) {
 }
 
 // 把背景 dataURL 套用到对应容器：传 null/空则清空自定义背景，露出下层默认样式。
-// 全局背景套在 #pa-phone-modal 内专门的背景图层上（z-index 在内容之下）：
-//   这一层和它下面的纯色底层 #pa-phone-base-color-layer 现在都固定是完全不透明的，
-//   不管有没有设置自定义背景图，弹窗本体都只会露出纯色或者背景图，不会透出外面小说的文字；
-//   没设置自定义背景时，图层本身没有 background-image，直接露出下面同样不透明的纯蓝底；
-//   设置了自定义背景图后，就在这一层上显示图片即可，不需要再额外调 opacity。
+// 全局背景套在 #pa-phone-modal 内专门的背景图层上：#pa-phone-modal 自己背景透明，靠
+// isolation: isolate + backdrop-filter: blur(8px) 模糊弹窗外面（小说正文）透过来的内容，
+// 建立独立层叠上下文。纯色底层 z-index:-2、背景图层 z-index:-1，明确摁在 header/body/tabbar
+// 之下（不依赖"DOM 顺序谁写在后面盖在上面"这种在部分 webview 环境里不可靠的隐式规则）。
+// 没设置背景图时：纯色底层 0.9 透明度的蓝叠在模糊结果上面，是磨砂玻璃质感。
+// 设置了背景图后：① 纯色底层透明度改成 0，蓝色完全隐藏；② 背景图层自己也改成 0.86 透明度，
+// 露出来的部分直接是模糊后的正文本身（不带蓝色），图片和玻璃通透感同时保留。
 // 聊天页背景只套在消息滚动区域 #pa-phone-chat-messages 上（即头部标题栏和输入栏这两条线之间），
-// 因为要跟气泡文字保持足够对比度，这里保留一层浅色蒙层，本身就是不透明的，本来就不会漏出全局背景层。
+// 因为要跟气泡文字保持足够对比度，这里保留一层浅色蒙层。
 function applyPhoneGlobalBackground(dataUrl) {
   const layer = document.getElementById("pa-phone-global-bg-layer");
+  const colorLayer = document.getElementById("pa-phone-base-color-layer");
   if (!layer) return;
   if (dataUrl) {
     layer.style.backgroundImage = `url("${dataUrl}")`;
+    layer.style.opacity = "0.86";
+    if (colorLayer) colorLayer.style.opacity = "0";
   } else {
     layer.style.backgroundImage = "";
+    layer.style.opacity = "1";
+    if (colorLayer) colorLayer.style.opacity = "0.9";
   }
 }
 
