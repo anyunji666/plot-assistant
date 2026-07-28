@@ -83,12 +83,10 @@ export async function generateCharacterPhoneReply(
 // 返回 true=有空（按闲处理，正常生成回复）/false=没空（按忙处理，走 Busy 流程）。
 // AI 判断调用失败或解析不出明确结果时，保守按"没空"处理，避免误判打断状态表的 Busy 记录逻辑。===
 export async function judgeCharacterHasTimeForPhone(characterName, lastAiMes) {
-  const cardBody = await getPhoneContactCardBody(characterName);
   const relationshipStage =
     await getRelationshipStageForCharacter(characterName);
   const systemPrompt = [
     `你负责判断角色"${characterName}"此刻是否有空看手机、回复{{user}}的私信。`,
-    cardBody ? `人设参考：\n${cardBody}` : "",
     relationshipStage
       ? `{{user}}与该角色当前关系阶段：${relationshipStage}`
       : "",
