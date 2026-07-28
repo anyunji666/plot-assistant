@@ -91,7 +91,7 @@ export async function judgeCharacterHasTimeForPhone(characterName, lastAiMes) {
       ? `{{user}}与该角色当前关系阶段：${relationshipStage}`
       : "",
     `<Latest_plot>\n${lastAiMes || "（暂无正文）"}\n</Latest_plot>`,
-    "只根据以上正文里这个角色当前正在做的事、所处场合，判断ta此刻方不方便看手机/回私信。" +
+    "只根据以上正文里这个角色当前正在做的事、所处场合，判断ta此刻方不方便看通讯器/回私信。" +
       "如果正文里没有出现这个角色，直接输出「是」。" +
       "只输出一个字：方便就输出「是」，不方便就输出「否」，不要输出任何其它内容。",
   ]
