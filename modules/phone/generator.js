@@ -86,21 +86,27 @@ export async function judgeCharacterHasTimeForPhone(characterName, lastAiMes) {
   const relationshipStage =
     await getRelationshipStageForCharacter(characterName);
   const systemPrompt = [
-    `你负责判断角色"${characterName}"此刻是否有空看手机、回复{{user}}的私信。`,
+    `你负责判断角色"${characterName}"此刻是否有空回复{{user}}的私信。`,
     relationshipStage
       ? `{{user}}与该角色当前关系阶段：${relationshipStage}`
       : "",
     `<Latest_plot>\n${lastAiMes || "（暂无正文）"}\n</Latest_plot>`,
     "只根据以上正文里这个角色当前正在做的事、所处场合，判断ta此刻方不方便看手机/回私信。" +
+      "如果正文里没有出现这个角色，直接输出「是」。" +
       "只输出一个字：方便就输出「是」，不方便就输出「否」，不要输出任何其它内容。",
   ]
     .filter(Boolean)
     .join("\n\n");
-  const userContent = `请判断"${characterName}"现在有没有空回私信，只回答"是"或"否"。`;
+  const userContent = `请判断"${characterName}"现在是否有空回私信，只回答"是"或"否"。`;
 
   try {
     const raw = (await generateSummaryRaw(systemPrompt, userContent)) || "";
-    const trimmed = raw.trim();
+    // AI 有时会照抄 prompt 里示范用的引号/书名号格式，输出「是」"否"这类带符号的结果，
+    // 先剥掉首尾常见的引号/书名号/标点/星号（markdown加粗）再匹配，避免被误判成"解析不出结果"。
+    const trimmed = raw
+      .trim()
+      .replace(/^[「」『』【】《》（）()""''"'*＊．.。！!,，:：\s]+/, "")
+      .replace(/[「」『』【】《》（）()""''"'*＊．.。！!,，:：\s]+$/, "");
     if (/^是/.test(trimmed) || /有空|方便/.test(trimmed)) return true;
     if (/^否/.test(trimmed) || /没空|没有空|不方便/.test(trimmed)) return false;
     return false; // 解析不出明确结果，保守按"没空"处理
