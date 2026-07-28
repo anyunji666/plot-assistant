@@ -754,6 +754,7 @@ export const PHONE_CHAT_BG_RATIO = 360 / 540;
 // 清空聊天记录、更换头像、更换聊天页背景都挪去了聊天页头部"…"菜单里，按当前联系人操作，这里不再重复。
 export async function renderPhoneSettingsPage() {
   const container = document.getElementById("pa-phone-page-settings");
+  const prevScrollTop = container.scrollTop; // 记住滚动位置：改名/删除/上传后重绘不应该把页面弹回顶部
   container.innerHTML = `<div class="pa-phone-loading">加载中...</div>`;
   const [stickers, globalBg] = await Promise.all([
     getPhoneStickerList(),
@@ -792,9 +793,12 @@ export async function renderPhoneSettingsPage() {
         <div class="pa-phone-settings-title">图片</div>
         <button id="pa-phone-sticker-add-btn" class="pa-phone-sticker-add-btn">+ 添加</button>
       </div>
+      <div class="pa-phone-sticker-manage-hint">发送图片时，AI 实际读取到的是「图片：图片名称」这段文字，请把图片名称改成能描述图片内容的文字（点图片名即可改名），AI 才能"看懂"这张图。</div>
       <div class="pa-phone-sticker-manage-grid">${gridHtml}</div>
     </div>
     <input type="file" id="pa-phone-sticker-upload-input" accept="image/*" multiple class="pa-phone-hidden" />`;
+
+  container.scrollTop = prevScrollTop;
 
   document
     .getElementById("pa-phone-global-bg-upload-btn")
