@@ -1168,6 +1168,19 @@ export function refreshPhoneChatViewIfOpen(characterName) {
 }
 
 
+// 调用AI生成回复前后，如果聊天页当前正好开着这个联系人，把顶部标题（姓名位置）
+// 换成"对方正在输入…"；isTyping=false 时换回联系人名字。只影响标题文字，
+// 不影响其它状态（返回按钮/更多按钮之类不受这个函数控制）。
+export function setPhoneTypingIndicator(characterName, isTyping) {
+  const overlay = document.getElementById("pa-phone-modal-overlay");
+  if (!overlay || !overlay.open) return;
+  if (phoneUIState.activeChatCharacter !== characterName) return;
+  const titleEl = document.getElementById("pa-phone-header-title");
+  if (!titleEl) return;
+  titleEl.textContent = isTyping ? "对方正在输入…" : characterName;
+}
+
+
 export function closePhoneModal() {
   const overlay = document.getElementById("pa-phone-modal-overlay");
   if (overlay && overlay.open) overlay.close();

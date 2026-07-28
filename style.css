@@ -593,6 +593,10 @@
     border: none;
     border-radius: 6px;
     padding: 0 14px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: #95ec69;
     color: #054d05;
     font-size: 13px;

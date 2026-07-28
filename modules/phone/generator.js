@@ -2,7 +2,7 @@
 
 import { PHONE_SLOT_PROMPT_KEY, getCtx, notify, persistChatMetadata } from "../core.js";
 import { appendPhoneMessage, characterActiveInText, getAllPhoneMessages, getCurrentStoryTime, getLastAiFloor, getPhoneChatState, getPhoneContactCardBody, getRelationshipStageForCharacter, loadPhonePresetContent, markPhoneUpdatedToday, splitStoryTime } from "./store.js";
-import { refreshPhoneChatViewIfOpen } from "./ui.js";
+import { refreshPhoneChatViewIfOpen, setPhoneTypingIndicator } from "./ui.js";
 import { generateSummaryRaw } from "../summary/generator.js";
 import { rebuildStatusTableFromChat } from "../summary/parser.js";
 
@@ -130,6 +130,7 @@ export async function sendPhoneMessageToCharacter(characterName, payload) {
     ts: Date.now(),
     storyTime: getCurrentStoryTime(),
   });
+  refreshPhoneChatViewIfOpen(characterName); // 先把用户自己发的这条显示出来，再去判断忙闲状态
 
   const phoneState = getPhoneChatState();
   const { idx: lastAiIdx, mes: lastAiMes } = getLastAiFloor();
@@ -150,6 +151,7 @@ export async function sendPhoneMessageToCharacter(characterName, payload) {
     phoneState.idleFloor[characterName] = lastAiIdx;
     delete phoneState.busy[characterName];
     await persistChatMetadata();
+    setPhoneTypingIndicator(characterName, true); // 确认要调用AI生成回复了，顶部换成"对方正在输入…"
     try {
       const reply = await generateCharacterPhoneReply(
         characterName,
@@ -169,6 +171,8 @@ export async function sendPhoneMessageToCharacter(characterName, payload) {
       console.error("[剧情助手] 生成私信回复失败:", error);
       notify("error", "私信回复生成失败，请稍后重试。");
       return { status: "error" };
+    } finally {
+      setPhoneTypingIndicator(characterName, false); // 无论成功/失败，都把顶部标题换回联系人名字
     }
   }
 
