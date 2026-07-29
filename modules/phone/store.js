@@ -326,6 +326,39 @@ export function readImageFileCompressed(file, maxSize) {
 }
 
 
+// 尝试下载外部图片链接并压缩转成本地 base64（复用跟本地上传一致的压缩逻辑），
+// 用于"链接导入"时就地转存，避免链接失效后图片跟着失效。
+// 常见失败原因：图床没开放跨域（CORS），或链接本身已经失效——这两种情况都会走 reject，
+// 调用方应该 catch 住，退回保存原始链接，而不是让整次导入直接失败。
+export function readImageUrlCompressed(url, maxSize) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        let { width, height } = img;
+        if (width > maxSize || height > maxSize) {
+          const scale = maxSize / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        // 图床没有返回 CORS 头时，canvas 会被判定为"污染"，toDataURL 在这一步抛 SecurityError
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = () => reject(new Error("图片加载失败"));
+    img.src = url;
+  });
+}
+
+
 // ==== 手机：头像库（按"当前角色卡::联系人名"存取）====
 
 export function phoneAvatarDbKey(characterName) {
@@ -563,7 +596,8 @@ export function parsePhoneStickerImportText(text) {
 
 
 // items: [{ name, dataUrl }]，批量导入用。dataUrl 既可以是本地压缩后的 base64，也可以是外部图片链接
-// （文本批量导入走的是外链，直接存 URL，不下载转存，避免跨域限制；缺点是链接失效后图片会跟着失效）。
+// （链接导入会在调用方那一层先尝试用 readImageUrlCompressed 下载转存成本地 base64；
+// 图床不支持跨域下载或链接已失效时才会退回存原始 URL，这里不关心具体是哪种，照单存就行）。
 export async function addPhoneStickers(items) {
   const list = await getPhoneStickerList();
   items.forEach((item) => {

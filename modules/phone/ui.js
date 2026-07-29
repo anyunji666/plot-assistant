@@ -3,7 +3,7 @@
 import { openCreateCharacterDialog } from "../character.js";
 import { PHONE_PRESET_TITLE, errorCatched, getCtx, notify } from "../core.js";
 import { sendPhoneMessageToCharacter } from "./generator.js";
-import { addPhoneStickers, clearPhoneMessages, deletePhoneChatBackground, deletePhoneGlobalBackground, deletePhoneMessage, deletePhoneSticker, getAllPhoneAvatarsForCurrentCharacter, getAllPhoneMessages, getPhoneChatBackground, getPhoneContactsList, getPhoneFabVisible, getPhoneGlobalBackground, getPhoneStickerList, loadPhonePresetContent, parseContactExtra, parsePhoneStickerImportText, readImageFileCompressed, renamePhoneSticker, savePhoneAvatar, savePhoneChatBackground, savePhoneGlobalBackground, savePhonePresetContent, splitStoryTime, updatePhoneMessageText } from "./store.js";
+import { addPhoneStickers, clearPhoneMessages, deletePhoneChatBackground, deletePhoneGlobalBackground, deletePhoneMessage, deletePhoneSticker, getAllPhoneAvatarsForCurrentCharacter, getAllPhoneMessages, getPhoneChatBackground, getPhoneContactsList, getPhoneFabVisible, getPhoneGlobalBackground, getPhoneStickerList, loadPhonePresetContent, parseContactExtra, parsePhoneStickerImportText, readImageFileCompressed, readImageUrlCompressed, renamePhoneSticker, savePhoneAvatar, savePhoneChatBackground, savePhoneGlobalBackground, savePhonePresetContent, splitStoryTime, updatePhoneMessageText } from "./store.js";
 
 
 // === Function: 打开"私信预设"编辑框（纯文本，取消/保存，样式对齐"对话前强调"弹窗）===
@@ -150,8 +150,9 @@ export async function openPhonePresetDialog() {
 }
 
 
-// === Function: 打开"从文本导入图片"弹窗——粘贴"名称--图片链接"格式的文本，一行一条，批量导入图片库。
-// 样式对齐 openPhonePresetDialog；导入的是外链图片（不下载转存），链接失效会导致图片跟着失效，弹窗里有提示。===
+// === Function: 打开"从链接导入图片"弹窗——粘贴"名称--图片链接"格式的文本，一行一条，批量导入图片库。
+// 样式对齐 openPhonePresetDialog；每条链接会先尝试下载并压缩转存成本地图片（跟本地上传效果一致），
+// 图床不支持跨域（CORS）或链接已失效时下载会失败，这部分退回保存原始外链，弹窗里有提示。===
 export async function openPhoneStickerImportDialog() {
   const $bodyEl = $("body");
   const prevBodyOverflow = $bodyEl.css("overflow");
@@ -191,7 +192,7 @@ export async function openPhoneStickerImportDialog() {
       WebkitOverflowScrolling: "touch",
     });
 
-    const $title = $("<div>").text("从文本导入图片").css({
+    const $title = $("<div>").text("从链接导入图片").css({
       fontSize: "1.05em",
       fontWeight: "600",
       color: "#f0f0f0",
@@ -201,7 +202,8 @@ export async function openPhoneStickerImportDialog() {
     const $hint = $("<div>")
       .html(
         '一行一条，格式为「名称--图片链接」，例如：<br>好想念你--https://i.postimg.cc/xxx.jpg<br>' +
-          '不符合这个格式的行会自动跳过。导入的是图片外链，不会下载转存，链接失效图片会跟着失效。',
+          '不符合这个格式的行会自动跳过。导入时会尝试把图片下载并转存到本地；部分图床不支持跨域下载，' +
+          '这部分会自动退回保存原始链接（链接失效时图片会跟着失效）。',
       )
       .css({ fontSize: "0.8em", color: "#999", lineHeight: 1.5 });
 
@@ -292,12 +294,29 @@ export async function openPhoneStickerImportDialog() {
     return;
   }
 
-  await addPhoneStickers(items);
+  notify("info", `正在尝试下载 ${items.length} 张图片到本地，请稍候…`);
+  let downloaded = 0;
+  const finalItems = [];
+  for (const item of items) {
+    try {
+      const localDataUrl = await readImageUrlCompressed(item.dataUrl, 200);
+      finalItems.push({ name: item.name, dataUrl: localDataUrl });
+      downloaded += 1;
+    } catch {
+      // 下载/转码失败（多半是图床没开 CORS，或链接已经失效），退回保存原始外链，不中断整批导入
+      finalItems.push(item);
+    }
+  }
+  const linkOnly = finalItems.length - downloaded;
+
+  await addPhoneStickers(finalItems);
+  const countText =
+    linkOnly > 0
+      ? `已导入 ${finalItems.length} 张图片（${downloaded} 张已转存本地，${linkOnly} 张图床不支持转存、仍使用外链）`
+      : `已导入 ${finalItems.length} 张图片，均已转存本地`;
   notify(
     "success",
-    skipped > 0
-      ? `已导入 ${items.length} 张图片，跳过 ${skipped} 行无法识别的内容。`
-      : `已导入 ${items.length} 张图片。`,
+    skipped > 0 ? `${countText}，跳过 ${skipped} 行无法识别的内容。` : `${countText}。`,
   );
   await renderPhoneSettingsPage();
 }
@@ -927,7 +946,7 @@ export async function renderPhoneSettingsPage() {
       </div>`,
         )
         .join("")
-    : `<div class="pa-phone-empty">还没有图片，点右上角"添加"批量导入几张吧～</div>`;
+    : `<div class="pa-phone-empty">还没有图片，点右上角"本地上传"批量导入几张吧～</div>`;
 
   container.innerHTML = `
     <div class="pa-phone-settings-section">
@@ -947,8 +966,8 @@ export async function renderPhoneSettingsPage() {
       <div class="pa-phone-settings-title-row">
         <div class="pa-phone-settings-title">图片</div>
         <div class="pa-phone-bg-btns">
-          <button id="pa-phone-sticker-import-text-btn" class="pa-phone-sticker-add-btn">文本导入</button>
-          <button id="pa-phone-sticker-add-btn" class="pa-phone-sticker-add-btn">+ 添加</button>
+          <button id="pa-phone-sticker-import-text-btn" class="pa-phone-sticker-add-btn">链接导入</button>
+          <button id="pa-phone-sticker-add-btn" class="pa-phone-sticker-add-btn">本地上传</button>
         </div>
       </div>
       <div class="pa-phone-sticker-manage-hint">发送图片时，AI 实际读取到的是「图片：图片名称」这段文字，请把图片名称改成能描述图片内容的文字（点图片名即可改名），AI 才能"看懂"这张图。</div>
