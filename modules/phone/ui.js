@@ -1139,6 +1139,15 @@ export async function openPhoneChat(characterName) {
       stickerPanel.classList.toggle("pa-phone-hidden", !willShow);
     }),
   );
+  // 点击聊天气泡区时，如果图片面板正展开，就顺手把它收起来（跟点"图片"按钮关闭的效果一致）。
+  document.getElementById("pa-phone-chat-messages").addEventListener(
+    "click",
+    () => {
+      if (!stickerPanel.classList.contains("pa-phone-hidden")) {
+        stickerPanel.classList.add("pa-phone-hidden");
+      }
+    },
+  );
 }
 
 
