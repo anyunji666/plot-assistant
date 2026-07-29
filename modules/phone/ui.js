@@ -693,9 +693,11 @@ export function buildPhoneModalSkeleton() {
       const btn = document.getElementById("pa-phone-action-btn");
       const mode = btn.dataset.mode;
       if (mode === "add-contact") {
-        closePhoneModal();
+        const overlay = document.getElementById("pa-phone-modal-overlay");
+        if (overlay && overlay.open) overlay.close();
         await openCreateCharacterDialog();
-        await openPhoneModal();
+        if (overlay) overlay.showModal();
+        await renderPhoneContactsPage();
         return;
       }
       if (mode === "chat-menu") {
@@ -1000,7 +1002,15 @@ export async function renderPhoneSettingsPage() {
 
   document
     .getElementById("pa-phone-sticker-import-text-btn")
-    .addEventListener("click", errorCatched(openPhoneStickerImportDialog));
+    .addEventListener(
+      "click",
+      errorCatched(async () => {
+        const overlay = document.getElementById("pa-phone-modal-overlay");
+        if (overlay && overlay.open) overlay.close();
+        await openPhoneStickerImportDialog();
+        if (overlay) overlay.showModal();
+      }),
+    );
 
   document.getElementById("pa-phone-sticker-upload-input").addEventListener(
     "change",
