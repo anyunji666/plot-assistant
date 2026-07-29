@@ -539,7 +539,31 @@ export async function savePhoneStickerList(list) {
 }
 
 
-// items: [{ name, dataUrl }]，批量导入用。
+// === Helper: 解析"名称--图片链接"格式的批量导入文本，一行一条（如"好想念你--https://xxx.jpg"）。
+// 用贪婪匹配抓最后一个"--"到行尾的 http(s) 链接，前面剩余部分整体当名称（允许名称本身含"--"）；
+// 不含合法链接的行（空行、格式不符的备注行等）直接跳过，计入 skipped 但不算错误、不中断解析。===
+export function parsePhoneStickerImportText(text) {
+  const lines = (text || "").split(/\r?\n/);
+  const items = [];
+  let skipped = 0;
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return; // 空行不计入 skipped，避免数字虚高
+    const match = trimmed.match(/^(.*)--\s*(https?:\/\/\S+)\s*$/);
+    if (!match) {
+      skipped += 1;
+      return;
+    }
+    const name = match[1].trim() || "图片";
+    const url = match[2].trim();
+    items.push({ name, dataUrl: url });
+  });
+  return { items, skipped };
+}
+
+
+// items: [{ name, dataUrl }]，批量导入用。dataUrl 既可以是本地压缩后的 base64，也可以是外部图片链接
+// （文本批量导入走的是外链，直接存 URL，不下载转存，避免跨域限制；缺点是链接失效后图片会跟着失效）。
 export async function addPhoneStickers(items) {
   const list = await getPhoneStickerList();
   items.forEach((item) => {

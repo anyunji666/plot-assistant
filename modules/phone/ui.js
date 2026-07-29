@@ -3,7 +3,7 @@
 import { openCreateCharacterDialog } from "../character.js";
 import { PHONE_PRESET_TITLE, errorCatched, getCtx, notify } from "../core.js";
 import { sendPhoneMessageToCharacter } from "./generator.js";
-import { addPhoneStickers, clearPhoneMessages, deletePhoneChatBackground, deletePhoneGlobalBackground, deletePhoneMessage, deletePhoneSticker, getAllPhoneAvatarsForCurrentCharacter, getAllPhoneMessages, getPhoneChatBackground, getPhoneContactsList, getPhoneFabVisible, getPhoneGlobalBackground, getPhoneStickerList, loadPhonePresetContent, parseContactExtra, readImageFileCompressed, renamePhoneSticker, savePhoneAvatar, savePhoneChatBackground, savePhoneGlobalBackground, savePhonePresetContent, splitStoryTime, updatePhoneMessageText } from "./store.js";
+import { addPhoneStickers, clearPhoneMessages, deletePhoneChatBackground, deletePhoneGlobalBackground, deletePhoneMessage, deletePhoneSticker, getAllPhoneAvatarsForCurrentCharacter, getAllPhoneMessages, getPhoneChatBackground, getPhoneContactsList, getPhoneFabVisible, getPhoneGlobalBackground, getPhoneStickerList, loadPhonePresetContent, parseContactExtra, parsePhoneStickerImportText, readImageFileCompressed, renamePhoneSticker, savePhoneAvatar, savePhoneChatBackground, savePhoneGlobalBackground, savePhonePresetContent, splitStoryTime, updatePhoneMessageText } from "./store.js";
 
 
 // === Function: 打开"私信预设"编辑框（纯文本，取消/保存，样式对齐"对话前强调"弹窗）===
@@ -147,6 +147,159 @@ export async function openPhonePresetDialog() {
     console.error("[剧情助手] 保存私信预设失败:", error);
     notify("error", `保存私信预设失败：${error.message || error}`);
   }
+}
+
+
+// === Function: 打开"从文本导入图片"弹窗——粘贴"名称--图片链接"格式的文本，一行一条，批量导入图片库。
+// 样式对齐 openPhonePresetDialog；导入的是外链图片（不下载转存），链接失效会导致图片跟着失效，弹窗里有提示。===
+export async function openPhoneStickerImportDialog() {
+  const $bodyEl = $("body");
+  const prevBodyOverflow = $bodyEl.css("overflow");
+  $bodyEl.css("overflow", "hidden");
+
+  const rawText = await new Promise((resolve) => {
+    const $overlay = $("<div>").css({
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: "rgba(0,0,0,0.72)",
+      zIndex: 99999,
+      boxSizing: "border-box",
+    });
+
+    const $box = $("<div>").css({
+      position: "fixed",
+      top: "12px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      background: "#252525",
+      border: "1px solid #3a3a3a",
+      borderRadius: "10px",
+      padding: "clamp(16px, 4vw, 24px)",
+      width: "min(480px, calc(100% - 24px))",
+      maxHeight: "min(85vh, calc(100dvh - 24px))",
+      display: "flex",
+      flexDirection: "column",
+      gap: "12px",
+      color: "#e8e8e8",
+      fontFamily: "inherit",
+      boxSizing: "border-box",
+      boxShadow: "0 8px 32px rgba(0,0,0,0.55)",
+      overflowY: "auto",
+      WebkitOverflowScrolling: "touch",
+    });
+
+    const $title = $("<div>").text("从文本导入图片").css({
+      fontSize: "1.05em",
+      fontWeight: "600",
+      color: "#f0f0f0",
+      letterSpacing: "0.01em",
+    });
+
+    const $hint = $("<div>")
+      .html(
+        '一行一条，格式为「名称--图片链接」，例如：<br>好想念你--https://i.postimg.cc/xxx.jpg<br>' +
+          '不符合这个格式的行会自动跳过。导入的是图片外链，不会下载转存，链接失效图片会跟着失效。',
+      )
+      .css({ fontSize: "0.8em", color: "#999", lineHeight: 1.5 });
+
+    const $textarea = $("<textarea>")
+      .attr("placeholder", "粘贴「名称--链接」列表，一行一条")
+      .css({
+        width: "100%",
+        boxSizing: "border-box",
+        minHeight: "180px",
+        padding: "10px",
+        borderRadius: "6px",
+        border: "1px solid #3a3a3a",
+        background: "#1a1a1a",
+        color: "#d0d0d0",
+        fontSize: "max(0.95em, 16px)",
+        fontFamily: "inherit",
+        outline: "none",
+        resize: "vertical",
+      });
+
+    const $btnRow = $("<div>").css({
+      display: "flex",
+      gap: "10px",
+      justifyContent: "flex-end",
+      marginTop: "4px",
+    });
+    const btnCss = {
+      padding: "10px 20px",
+      borderRadius: "6px",
+      minHeight: "44px",
+      boxSizing: "border-box",
+      cursor: "pointer",
+      fontSize: "0.95em",
+      touchAction: "manipulation",
+    };
+    const $cancel = $("<button>")
+      .text("取消")
+      .css({
+        ...btnCss,
+        border: "1px solid #3a3a3a",
+        background: "transparent",
+        color: "#c0c0c0",
+      });
+    const $confirm = $("<button>")
+      .text("导入")
+      .css({
+        ...btnCss,
+        border: "none",
+        background: "#5b9cf6",
+        color: "#ffffff",
+        fontWeight: "600",
+      });
+    $btnRow.append($cancel, $confirm);
+
+    $box.append($title, $hint, $textarea, $btnRow);
+    $overlay.append($box);
+    $("body").append($overlay);
+    setTimeout(() => $textarea.trigger("focus"), 50);
+
+    const done = (confirmed) => {
+      $(document).off("keydown.phoneStickerImportDialog");
+      $overlay.remove();
+      $bodyEl.css("overflow", prevBodyOverflow || "");
+      resolve(confirmed ? $textarea.val() : null);
+    };
+
+    $confirm.on("click", () => done(true));
+    $cancel.on("click", () => done(false));
+
+    let overlayPointerDownOnSelf = false;
+    $overlay.on("mousedown touchstart", (e) => {
+      overlayPointerDownOnSelf = $(e.target).is($overlay);
+    });
+    $overlay.on("mouseup touchend", (e) => {
+      if (overlayPointerDownOnSelf && $(e.target).is($overlay)) done(false);
+      overlayPointerDownOnSelf = false;
+    });
+    $(document).on("keydown.phoneStickerImportDialog", (e) => {
+      if (e.key === "Escape") done(false);
+    });
+  });
+
+  if (rawText === null) return;
+
+  const { items, skipped } = parsePhoneStickerImportText(rawText);
+  if (!items.length) {
+    notify("warning", "没有识别到任何「名称--链接」格式的内容，未导入。");
+    return;
+  }
+
+  await addPhoneStickers(items);
+  notify(
+    "success",
+    skipped > 0
+      ? `已导入 ${items.length} 张图片，跳过 ${skipped} 行无法识别的内容。`
+      : `已导入 ${items.length} 张图片。`,
+  );
+  await renderPhoneSettingsPage();
 }
 
 
@@ -791,7 +944,10 @@ export async function renderPhoneSettingsPage() {
     <div class="pa-phone-settings-section">
       <div class="pa-phone-settings-title-row">
         <div class="pa-phone-settings-title">图片</div>
-        <button id="pa-phone-sticker-add-btn" class="pa-phone-sticker-add-btn">+ 添加</button>
+        <div class="pa-phone-bg-btns">
+          <button id="pa-phone-sticker-import-text-btn" class="pa-phone-sticker-add-btn">文本导入</button>
+          <button id="pa-phone-sticker-add-btn" class="pa-phone-sticker-add-btn">+ 添加</button>
+        </div>
       </div>
       <div class="pa-phone-sticker-manage-hint">发送图片时，AI 实际读取到的是「图片：图片名称」这段文字，请把图片名称改成能描述图片内容的文字（点图片名即可改名），AI 才能"看懂"这张图。</div>
       <div class="pa-phone-sticker-manage-grid">${gridHtml}</div>
@@ -841,6 +997,10 @@ export async function renderPhoneSettingsPage() {
     .addEventListener("click", () => {
       document.getElementById("pa-phone-sticker-upload-input").click();
     });
+
+  document
+    .getElementById("pa-phone-sticker-import-text-btn")
+    .addEventListener("click", errorCatched(openPhoneStickerImportDialog));
 
   document.getElementById("pa-phone-sticker-upload-input").addEventListener(
     "change",
