@@ -922,7 +922,7 @@ export async function renderPhoneSettingsPage() {
           (s) => `
       <div class="pa-phone-sticker-manage-item" data-id="${escapePhoneHtml(s.id)}">
         <button class="pa-phone-sticker-delete-btn" title="删除">✕</button>
-        <img src="${s.dataUrl}" alt="${escapePhoneHtml(s.name)}" />
+        <div class="pa-phone-sticker-manage-thumb"><img src="${s.dataUrl}" alt="${escapePhoneHtml(s.name)}" /></div>
         <div class="pa-phone-sticker-manage-name" title="点击改名">${escapePhoneHtml(s.name)}</div>
       </div>`,
         )

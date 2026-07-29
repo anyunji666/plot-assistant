@@ -575,12 +575,12 @@
 }
 
 .pa-phone-sticker-item {
-    aspect-ratio: 1 / 1;
+    position: relative;
+    width: 100%;
+    padding-bottom: 100%; /* 用 padding 百分比撑出正方形高度，不依赖 aspect-ratio，兼容性更好，避免行高塌陷 */
+    height: 0;
     background: rgba(255,255,255,0.1);
     border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     cursor: pointer;
     overflow: hidden;
     transition: background-color 0.15s ease;
@@ -591,6 +591,8 @@
 }
 
 .pa-phone-sticker-item img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: contain;
@@ -733,11 +735,21 @@
     gap: 4px;
 }
 
-.pa-phone-sticker-manage-item img {
+.pa-phone-sticker-manage-thumb {
+    position: relative;
     width: 100%;
-    aspect-ratio: 1 / 1;
-    object-fit: contain;
+    padding-bottom: 100%; /* 用 padding 百分比撑出正方形高度，不依赖 aspect-ratio，跟聊天页贴纸面板保持一致 */
+    height: 0;
     border-radius: 4px;
+    overflow: hidden;
+}
+
+.pa-phone-sticker-manage-thumb img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
 }
 
 .pa-phone-sticker-manage-name {
