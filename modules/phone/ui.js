@@ -3,7 +3,7 @@
 import { openCreateCharacterDialog } from "../character.js";
 import { PHONE_PRESET_TITLE, errorCatched, getCtx, notify } from "../core.js";
 import { sendPhoneMessageToCharacter } from "./generator.js";
-import { PHONE_INVENTORY_SELF_KEY, addPhoneStickers, clearPhoneMessages, deletePhoneChatBackground, deletePhoneGlobalBackground, deletePhoneMessage, deletePhoneSticker, deletePhoneInventoryItem, getAllPhoneAvatarsForCurrentCharacter, getAllPhoneMessages, getPhoneChatBackground, getPhoneChatState, getPhoneContactsList, getPhoneFabVisible, getPhoneGlobalBackground, getPhoneInventoryMap, getPhoneStickerList, groupPhoneInventoryByOwner, loadPhonePresetContent, parseContactExtra, parsePhoneStickerImportText, readImageFileCompressed, renamePhoneSticker, savePhoneAvatar, savePhoneChatBackground, savePhoneGlobalBackground, savePhonePresetContent, splitStoryTime, updatePhoneMessageText, upsertPhoneInventoryItem } from "./store.js";
+import { PHONE_INVENTORY_SELF_KEY, addPhoneStickers, cancelPendingInventoryChange, clearPhoneMessages, deletePhoneChatBackground, deletePhoneGlobalBackground, deletePhoneMessage, deletePhoneSticker, deletePhoneInventoryItem, getAllPhoneAvatarsForCurrentCharacter, getAllPhoneMessages, getPhoneChatBackground, getPhoneChatState, getPhoneContactsList, getPhoneFabVisible, getPhoneGlobalBackground, getPhoneInventoryMap, getPhoneStickerList, groupPhoneInventoryByOwner, loadPhonePresetContent, parseContactExtra, parsePhoneStickerImportText, readImageFileCompressed, renamePhoneSticker, savePhoneAvatar, savePhoneChatBackground, savePhoneGlobalBackground, savePhonePresetContent, splitStoryTime, updatePhoneMessageText, upsertPhoneInventoryItem } from "./store.js";
 
 
 // === Function: 打开"私信预设"编辑框（纯文本，取消/保存，样式对齐"对话前强调"弹窗）===
@@ -948,18 +948,28 @@ export async function renderPhoneShoppingPage() {
 }
 
 
-// 单条物品行的 HTML：数量框是否只读取决于 numeric（非数字备注只能改名/删除，不能在这里被改写成数值）；
-// pending=true 表示这是购物页刚改的、还没被正文AI写进状态表的"待同步"改动，加个小标签提示一下。
+// 单条物品行的 HTML：数量框是否只读取决于 numeric（非数字备注只能改名/删除，不能在这里被改写成数值）。
+// pending: null(无待生效改动) / "changed"(待同步新增或改动) / "deleted"(待移除，还没被AI确认真的删掉)。
 function renderPhoneShoppingItemRow(owner, item, value, numeric, pending) {
-  const pendingBadge = pending
-    ? `<span class="pa-phone-shopping-pending-badge">待同步</span>`
+  const isDeleted = pending === "deleted";
+  const pendingBadge =
+    pending === "changed"
+      ? `<span class="pa-phone-shopping-pending-badge">待同步</span>`
+      : isDeleted
+        ? `<span class="pa-phone-shopping-pending-badge pa-phone-shopping-pending-badge-deleted">待移除</span>`
+        : "";
+  const rowClass = pending
+    ? " pa-phone-shopping-item-row-pending"
     : "";
+  const actionBtn = isDeleted
+    ? `<button class="pa-phone-shopping-cancel-btn">撤销</button>`
+    : `<button class="pa-phone-shopping-delete-btn">删除</button>`;
   return `
-    <div class="pa-phone-shopping-item-row${pending ? " pa-phone-shopping-item-row-pending" : ""}" data-owner="${escapePhoneHtml(owner)}" data-item="${escapePhoneHtml(item)}">
-      <input class="pa-phone-shopping-input pa-phone-shopping-item-name" type="text" value="${escapePhoneHtml(item)}" placeholder="物品名" />
-      <input class="pa-phone-shopping-input pa-phone-shopping-item-qty" type="${numeric ? "number" : "text"}" value="${escapePhoneHtml(value)}" placeholder="数量" ${numeric ? "" : "readonly"} />
+    <div class="pa-phone-shopping-item-row${rowClass}" data-owner="${escapePhoneHtml(owner)}" data-item="${escapePhoneHtml(item)}" data-pending="${pending || ""}">
+      <input class="pa-phone-shopping-input pa-phone-shopping-item-name" type="text" value="${escapePhoneHtml(item)}" placeholder="物品名" ${isDeleted ? "disabled" : ""} />
+      <input class="pa-phone-shopping-input pa-phone-shopping-item-qty" type="${numeric ? "number" : "text"}" value="${escapePhoneHtml(value)}" placeholder="数量" ${numeric && !isDeleted ? "" : "readonly"} ${isDeleted ? "disabled" : ""} />
       ${pendingBadge}
-      <button class="pa-phone-shopping-delete-btn">删除</button>
+      ${actionBtn}
     </div>`;
 }
 
@@ -1000,7 +1010,7 @@ function bindPhoneShoppingPageEvents(container) {
 
 
 function bindPhoneShoppingRowEvents(row) {
-  row.querySelector(".pa-phone-shopping-delete-btn").addEventListener(
+  row.querySelector(".pa-phone-shopping-delete-btn")?.addEventListener(
     "click",
     errorCatched(async () => {
       const owner = row.dataset.owner;
@@ -1010,6 +1020,13 @@ function bindPhoneShoppingRowEvents(row) {
         return;
       }
       await deletePhoneInventoryItem(owner, item);
+      await renderPhoneShoppingPage();
+    }),
+  );
+  row.querySelector(".pa-phone-shopping-cancel-btn")?.addEventListener(
+    "click",
+    errorCatched(async () => {
+      await cancelPendingInventoryChange(row.dataset.owner, row.dataset.item);
       await renderPhoneShoppingPage();
     }),
   );

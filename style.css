@@ -441,12 +441,18 @@
     flex-shrink: 0;
 }
 
-.pa-phone-shopping-input[readonly] {
+.pa-phone-shopping-input[readonly],
+.pa-phone-shopping-input[disabled] {
     opacity: 0.6;
 }
 
 .pa-phone-shopping-item-row-pending {
     border: 1px dashed rgba(255,214,110,0.7);
+}
+
+.pa-phone-shopping-item-row[data-pending="deleted"] {
+    opacity: 0.6;
+    border: 1px dashed rgba(255,255,255,0.35);
 }
 
 .pa-phone-shopping-pending-badge {
@@ -457,6 +463,27 @@
     border-radius: 5px;
     padding: 2px 6px;
     white-space: nowrap;
+}
+
+.pa-phone-shopping-pending-badge-deleted {
+    color: #fff;
+    background: #7a7a7a;
+}
+
+.pa-phone-shopping-cancel-btn {
+    flex-shrink: 0;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #fff;
+    background: #3a6fb3;
+    cursor: pointer;
+}
+
+.pa-phone-shopping-cancel-btn:hover {
+    background: #4780cc;
 }
 
 .pa-phone-shopping-delete-btn {

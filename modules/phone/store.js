@@ -310,29 +310,62 @@ export async function getPhoneInventoryMap() {
 
 
 // 新增/改名/改数量某个所有者名下的一件物品：只记进"待生效改动"，不写世界书。
-// oldItemName 非空且与 itemName 不同时视为"改名"：旧 key 标记为待删除，新 key 记为待写入的数量。
+// oldItemName 非空且与 itemName 不同时视为"改名"：旧 key 处理成"待删除"（如果它本来就还没被AI确认过，直接撤销即可）。
+// 如果改完的值其实跟"已确认"的基准值一样（比如 1→2 又改回 1），就直接撤销这条待生效标记，不用假装有变化。
 export async function upsertPhoneInventoryItem(ownerName, itemName, oldItemName, quantity) {
+  const baseMap = await getPhoneInventoryMap();
   const pending = getPhoneChatState().pendingInventoryChanges;
+
   if (oldItemName && oldItemName !== itemName) {
-    pending[`${ownerName}·${oldItemName}`] = { deleted: true };
+    const oldKey = `${ownerName}·${oldItemName}`;
+    if (baseMap.has(oldKey)) {
+      pending[oldKey] = { deleted: true }; // 旧名字是已确认过的，标记待移除
+    } else {
+      delete pending[oldKey]; // 旧名字本来就还没被AI确认过，直接撤销，不用通知AI去删一个不存在的东西
+    }
   }
-  pending[`${ownerName}·${itemName}`] = { quantity };
+
+  const newKey = `${ownerName}·${itemName}`;
+  const baseValue = baseMap.get(newKey);
+  if (baseValue !== undefined && String(baseValue) === String(quantity)) {
+    delete pending[newKey]; // 改回了跟已确认状态一样的值，等于没有变化
+  } else {
+    pending[newKey] = { quantity };
+  }
+
   await persistChatMetadata();
 }
 
 
-// 删除某个所有者名下的一件物品：只记进"待生效改动"，不写世界书。
+// 删除某个所有者名下的一件物品：
+// - 如果这条本来就是"已确认"的（基准 Inventory 里有），标记成"待移除"，继续显示、等AI下一轮确认了才真正消失；
+// - 如果这条本来就是购物页刚加的、还没被AI确认过的，直接撤销待生效标记就行，不用假装有变化去通知AI。
 export async function deletePhoneInventoryItem(ownerName, itemName) {
-  getPhoneChatState().pendingInventoryChanges[`${ownerName}·${itemName}`] = {
-    deleted: true,
-  };
+  const key = `${ownerName}·${itemName}`;
+  const baseMap = await getPhoneInventoryMap();
+  const pending = getPhoneChatState().pendingInventoryChanges;
+  if (baseMap.has(key)) {
+    pending[key] = { deleted: true };
+  } else {
+    delete pending[key];
+  }
+  await persistChatMetadata();
+}
+
+
+// 撤销某个所有者名下一条"待生效改动"（包括"待移除"），恢复成基准 Inventory 里的原样。
+export async function cancelPendingInventoryChange(ownerName, itemName) {
+  delete getPhoneChatState().pendingInventoryChanges[`${ownerName}·${itemName}`];
   await persistChatMetadata();
 }
 
 
 // 把"基准 Inventory"和"待生效改动"合并、按所有者分组，{{user}} 固定排最前，其余按联系人名单顺序排列；
 // 所有联系人（含 {{user}}）都会出现在结果里，即使暂时没有任何物品，好让购物页始终显示卡片方便新增。
-// 每条物品带 pending 标记（这条是购物页刚改的、还没被正文AI写进状态表的），供 UI 加个"待同步"提示用。
+// 每条物品带 pending 标记，供 UI 加提示用：
+//   null      —— 跟已确认状态一致，没有待生效改动
+//   "changed" —— 购物页刚新增/改了数量，还没被正文AI写进状态表
+//   "deleted" —— 购物页标记了待移除，继续显示原值，等AI确认了才会真的消失
 // 物品数量是否为纯数字（BARE_NUMBER_PATTERN）决定购物页里这一行的数量框能不能编辑——
 // 非数字备注（AI 写的文字状态）只允许改名/删除，不允许在这个 UI 里被误改写成数值。
 export function groupPhoneInventoryByOwner(baseMap, pendingChanges, contactNames) {
@@ -348,17 +381,26 @@ export function groupPhoneInventoryByOwner(baseMap, pendingChanges, contactNames
     });
   };
 
+  const handledKeys = new Set();
   baseMap.forEach((value, key) => {
     const parsed = splitInventoryKey(key);
     if (!parsed) return; // 不是"所有者·物品名"格式的脏数据，跳过不展示
-    if (pendingChanges[key]) return; // 这条有待生效改动，以待生效的为准，基准值先不展示
-    addItem(parsed.owner, parsed.item, value, false);
+    handledKeys.add(key);
+    const change = pendingChanges[key];
+    if (!change) {
+      addItem(parsed.owner, parsed.item, value, null);
+    } else if (change.deleted) {
+      addItem(parsed.owner, parsed.item, value, "deleted"); // 待移除：先按原值展示
+    } else {
+      addItem(parsed.owner, parsed.item, change.quantity, "changed");
+    }
   });
   Object.entries(pendingChanges).forEach(([key, change]) => {
-    if (change.deleted) return; // 待删除：不展示（不管基准里有没有这条）
+    if (handledKeys.has(key)) return; // 基准里已经处理过这个 key 了
+    if (change.deleted) return; // 基准里本来就没有还标"待移除"，属于脏状态，不展示（正常流程不会出现）
     const parsed = splitInventoryKey(key);
     if (!parsed) return;
-    addItem(parsed.owner, parsed.item, change.quantity, true);
+    addItem(parsed.owner, parsed.item, change.quantity, "changed"); // 全新物品，还没被AI确认
   });
 
   const orderedOwners = [PHONE_INVENTORY_SELF_KEY, ...contactNames];
