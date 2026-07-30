@@ -332,7 +332,8 @@ export function clearPhoneSlotPromptAfterRound() {
 
 
 // 购物页手动改动库存后，一次性提醒正文AI"这一轮请在摘要模块的 Inventory 字段里同步这些变化"。
-// AI 输出后经由常规的 mergeFloorIntoStatusTable 合并进状态表，就变成"历史"的一部分了——
+// 直接换算成 Inventory 字段本身的格式（所有者·物品名: =N / [REMOVE]）给AI抄，不用AI自己再翻译一遍自然语言，
+// 减少格式跑偏的空间。AI 输出后经由常规的 mergeFloorIntoStatusTable 合并进状态表，就变成"历史"的一部分了——
 // 后续再触发 rebuildStatusTableFromChat 全量重放时也不会把这次手动改动冲掉。
 export function applyPendingInventoryChangePrompt() {
   try {
@@ -341,21 +342,17 @@ export function applyPendingInventoryChangePrompt() {
     const pending = getPhoneChatState().pendingInventoryChanges;
     const keys = Object.keys(pending);
     if (keys.length === 0) return;
-    const lines = keys
+    const segments = keys
       .map((key) => {
         const parsed = splitInventoryKey(key);
         if (!parsed) return null;
         const change = pending[key];
-        return change.deleted
-          ? `- ${parsed.owner}的"${parsed.item}"应被移除`
-          : `- ${parsed.owner}的"${parsed.item}"应变为：${change.quantity}`;
+        const value = change.deleted ? "[REMOVE]" : `=${change.quantity}`;
+        return `${parsed.owner}·${parsed.item}: ${value}`;
       })
       .filter(Boolean);
-    if (lines.length === 0) return;
-    const content =
-      `{{user}}刚在手机购物页手动调整了随身物品，请在本轮摘要模块的 Inventory 字段里同步输出这些变化` +
-      `（沿用 +N/-N/=N/[REMOVE] 格式，格式：所有者·物品名: 值）：\n` +
-      lines.join("\n");
+    if (segments.length === 0) return;
+    const content = `用户对Inventory字段进行了校准，请在本轮摘要模块的Inventory字段中输出：\n${segments.join("；")}；`;
     const position = context.extension_prompt_types?.IN_CHAT ?? 1;
     const role = context.extension_prompt_roles?.SYSTEM ?? 0;
     context.setExtensionPrompt(
