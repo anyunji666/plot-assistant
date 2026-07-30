@@ -678,6 +678,24 @@ export function applyNumericMapUpdates(
 }
 
 
+// === Helper: 把楼层摘要文本里等于"当前人格名"的整词换回状态表统一约定的字面量 {{user}} ===
+// "对话前强调"提示词注入给正文AI之前，酒馆会先把其中的 {{user}} 宏替换成真实人格名，
+// 正文AI从始至终都没见过字面量 {{user}}，它在 Relationships/Inventory/Setups 里写"自己"这一方时，
+// 写的必然是当前人格名。这里在合并进状态表前统一转换回 {{user}}，让状态表内部数据保持
+// extractOtherPartyName / 背包页 PHONE_INVENTORY_SELF_KEY 等下游代码一直依赖的那个约定，
+// 不用在每处消费逻辑里都重新适配"真实人格名"。
+// 只在紧跟着 "·"（Inventory/Setups 的 owner 分隔符）或 "→"（Relationships 的关系箭头）时才替换，
+// 避免误伤人格名恰好出现在物品名、Setups 简介等自由文本内容里的情况。
+export function normalizeSelfNameToLiteral(text) {
+  if (!text) return text;
+  const personaName = getCtx().name1;
+  if (!personaName || personaName === "{{user}}") return text;
+  const escaped = personaName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(^|[；;])\\s*${escaped}(?=\\s*[·→])`, "g");
+  return text.replace(pattern, (_match, prefix) => `${prefix}{{user}}`);
+}
+
+
 // === Helper: 从 "{{user}}→角色名" 这类关系 key 里取出"另一方"角色名（排除 {{user}} 自身）===
 export function extractOtherPartyName(relationshipKey) {
   const parts = relationshipKey.split("→").map((s) => s.trim());
@@ -722,7 +740,11 @@ export function serializeStatusTableContent(state, busyMap) {
 // warnings 为可选的数组，传入时会收集本次合并中发现的所有格式问题（不合规的部分会被跳过、不写入状态表，
 // 但不会阻断其余合法字段的正常合并）。不传 warnings 时行为与之前完全一致，仅静默跳过不合规内容。
 export function mergeFloorIntoStatusTable(state, floorFields, warnings) {
-  const relParsed = parseKeyValueListWithSkipped(floorFields.relationships);
+  const relationshipsText = normalizeSelfNameToLiteral(floorFields.relationships);
+  const inventoryText = normalizeSelfNameToLiteral(floorFields.inventory);
+  const setupsText = normalizeSelfNameToLiteral(floorFields.setups);
+
+  const relParsed = parseKeyValueListWithSkipped(relationshipsText);
   if (warnings) {
     relParsed.skipped.forEach((fragment) =>
       warnings.push(
@@ -749,8 +771,8 @@ export function mergeFloorIntoStatusTable(state, floorFields, warnings) {
     // 不传 warnings 时（旧行为兜底）：不合规的值直接跳过，不写入，避免脏数据进入状态表。
   });
 
-  const inventoryParsed = parseKeyValueListWithSkipped(floorFields.inventory);
-  const setupsParsed = parseKeyValueListWithSkipped(floorFields.setups);
+  const inventoryParsed = parseKeyValueListWithSkipped(inventoryText);
+  const setupsParsed = parseKeyValueListWithSkipped(setupsText);
   if (warnings) {
     inventoryParsed.skipped.forEach((fragment) =>
       warnings.push(
