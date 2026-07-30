@@ -3,8 +3,8 @@
 import { saveSettingsDebounced } from "../../../../../../script.js";
 import { extension_settings } from "../../../../../extensions.js";
 import { extractCharacterKeywords } from "../character.js";
-import { CHARACTER_ENTRY_DEFAULTS, CHARACTER_ENTRY_TITLE_PREFIX, DEFAULT_PHONE_PRESET_CONTENT, PHONE_AVATAR_STORE, PHONE_BACKGROUND_STORE, PHONE_CHAT_META_KEY, PHONE_GLOBAL_BACKGROUND_KEY, PHONE_IDB_NAME, PHONE_IDB_STORE, PHONE_PRESET_TITLE, PHONE_STICKER_LIST_KEY, PHONE_STICKER_STORE, STATUS_TABLE_TITLE, getChatMetadataStore, getCtx, notify } from "../core.js";
-import { extractLabelLine, extractOtherPartyName, parseFloorSummaryFields, parseKeyValueListWithSkipped } from "../summary/parser.js";
+import { CHARACTER_ENTRY_DEFAULTS, CHARACTER_ENTRY_TITLE_PREFIX, DEFAULT_PHONE_PRESET_CONTENT, PHONE_AVATAR_STORE, PHONE_BACKGROUND_STORE, PHONE_CHAT_META_KEY, PHONE_GLOBAL_BACKGROUND_KEY, PHONE_IDB_NAME, PHONE_IDB_STORE, PHONE_PRESET_TITLE, PHONE_STICKER_LIST_KEY, PHONE_STICKER_STORE, STATUS_TABLE_TITLE, getChatMetadataStore, getCtx, notify, persistChatMetadata } from "../core.js";
+import { BARE_NUMBER_PATTERN, extractLabelLine, extractOtherPartyName, parseFloorSummaryFields, parseKeyValueListWithSkipped } from "../summary/parser.js";
 import { getCurrentCharacterName, getFreeUid, getLorebookEntriesArray, getOrCreateSummaryLorebook, notifyWorldInfoUpdated } from "../worldinfo.js";
 
 
@@ -58,7 +58,8 @@ export function setPhoneFabVisibleSetting(visible) {
 // ==== 手机私信系统：本地对话缓存存取（忙/闲缓存 + 待注入私信槽位标记）====
 
 // 读取"当前对话"的手机私信状态记录，不存在则就地初始化一份默认结构并返回（引用，改了要记得调用 persistChatMetadata）。
-// 结构：{ busy: {角色名: true}, idleFloor: {角色名: 楼层号}, pendingInjection: {角色名: true/false} }
+// 结构：{ busy: {角色名: true}, idleFloor: {角色名: 楼层号}, pendingInjection: {角色名: true/false},
+//        pendingInventoryChanges: {"所有者·物品名": {quantity} 或 {deleted:true}} }
 export function getPhoneChatState() {
   const store = getChatMetadataStore();
   if (
@@ -69,6 +70,7 @@ export function getPhoneChatState() {
       busy: {},
       idleFloor: {},
       pendingInjection: {},
+      pendingInventoryChanges: {},
     };
   }
   const s = store[PHONE_CHAT_META_KEY];
@@ -76,6 +78,11 @@ export function getPhoneChatState() {
   if (!s.idleFloor || typeof s.idleFloor !== "object") s.idleFloor = {};
   if (!s.pendingInjection || typeof s.pendingInjection !== "object")
     s.pendingInjection = {};
+  if (
+    !s.pendingInventoryChanges ||
+    typeof s.pendingInventoryChanges !== "object"
+  )
+    s.pendingInventoryChanges = {};
   return s;
 }
 
@@ -268,6 +275,99 @@ export async function getRelationshipStageForCharacter(characterName) {
     return "";
   }
 }
+
+
+// ==== 手机「购物」页：携带物品 ====
+// 状态表 Inventory 字段现在只有一个书写入口——正文AI自己的摘要输出（经 mergeFloorIntoStatusTable 合并）。
+// 购物页只读这份数据，不直接抢着写世界书：编辑（增/删/改）一律先记成"待生效改动"存在本地对话状态里，
+// 下一轮生成前提醒正文AI照着改，AI 输出后自然经由既有流程合并、变成"历史"的一部分，全量重放也不会被冲掉。
+// key 沿用状态表既有约定 "所有者·物品名"，{{user}} 自己的物品也走这个前缀。
+
+export const PHONE_INVENTORY_SELF_KEY = "{{user}}";
+
+// 把 "所有者·物品名" 格式的 key 切开；不是这个格式（脏数据）返回 null。
+export function splitInventoryKey(key) {
+  const idx = key.indexOf("·");
+  if (idx < 0) return null;
+  const owner = key.slice(0, idx).trim();
+  const item = key.slice(idx + 1).trim();
+  if (!owner || !item) return null;
+  return { owner, item };
+}
+
+
+// 只读状态表条目当前的 Inventory：Map<"所有者·物品名", 值>。状态表条目还不存在时返回空 Map。
+export async function getPhoneInventoryMap() {
+  const lorebookName = await getOrCreateSummaryLorebook();
+  const entries = await getLorebookEntriesArray(lorebookName);
+  const statusEntry = entries.find((e) => e.comment === STATUS_TABLE_TITLE);
+  const line = statusEntry
+    ? extractLabelLine(statusEntry.content, "Inventory")
+    : "";
+  const { map } = parseKeyValueListWithSkipped(line);
+  return map;
+}
+
+
+// 新增/改名/改数量某个所有者名下的一件物品：只记进"待生效改动"，不写世界书。
+// oldItemName 非空且与 itemName 不同时视为"改名"：旧 key 标记为待删除，新 key 记为待写入的数量。
+export async function upsertPhoneInventoryItem(ownerName, itemName, oldItemName, quantity) {
+  const pending = getPhoneChatState().pendingInventoryChanges;
+  if (oldItemName && oldItemName !== itemName) {
+    pending[`${ownerName}·${oldItemName}`] = { deleted: true };
+  }
+  pending[`${ownerName}·${itemName}`] = { quantity };
+  await persistChatMetadata();
+}
+
+
+// 删除某个所有者名下的一件物品：只记进"待生效改动"，不写世界书。
+export async function deletePhoneInventoryItem(ownerName, itemName) {
+  getPhoneChatState().pendingInventoryChanges[`${ownerName}·${itemName}`] = {
+    deleted: true,
+  };
+  await persistChatMetadata();
+}
+
+
+// 把"基准 Inventory"和"待生效改动"合并、按所有者分组，{{user}} 固定排最前，其余按联系人名单顺序排列；
+// 所有联系人（含 {{user}}）都会出现在结果里，即使暂时没有任何物品，好让购物页始终显示卡片方便新增。
+// 每条物品带 pending 标记（这条是购物页刚改的、还没被正文AI写进状态表的），供 UI 加个"待同步"提示用。
+// 物品数量是否为纯数字（BARE_NUMBER_PATTERN）决定购物页里这一行的数量框能不能编辑——
+// 非数字备注（AI 写的文字状态）只允许改名/删除，不允许在这个 UI 里被误改写成数值。
+export function groupPhoneInventoryByOwner(baseMap, pendingChanges, contactNames) {
+  const groups = new Map(); // owner -> [{item, value, numeric, pending}]
+
+  const addItem = (owner, item, value, pending) => {
+    if (!groups.has(owner)) groups.set(owner, []);
+    groups.get(owner).push({
+      item,
+      value,
+      numeric: BARE_NUMBER_PATTERN.test(String(value).trim()),
+      pending,
+    });
+  };
+
+  baseMap.forEach((value, key) => {
+    const parsed = splitInventoryKey(key);
+    if (!parsed) return; // 不是"所有者·物品名"格式的脏数据，跳过不展示
+    if (pendingChanges[key]) return; // 这条有待生效改动，以待生效的为准，基准值先不展示
+    addItem(parsed.owner, parsed.item, value, false);
+  });
+  Object.entries(pendingChanges).forEach(([key, change]) => {
+    if (change.deleted) return; // 待删除：不展示（不管基准里有没有这条）
+    const parsed = splitInventoryKey(key);
+    if (!parsed) return;
+    addItem(parsed.owner, parsed.item, change.quantity, true);
+  });
+
+  const orderedOwners = [PHONE_INVENTORY_SELF_KEY, ...contactNames];
+  return orderedOwners.map((owner) => ({
+    owner,
+    items: groups.get(owner) || [],
+  }));
+}
+
 
 
 // ==== 手机私信系统：本地 IndexedDB（按"角色名::日期"存储，独立于地图图片库）====

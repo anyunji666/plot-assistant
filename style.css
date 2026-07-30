@@ -355,6 +355,126 @@
     text-overflow: ellipsis;
 }
 
+/* ---- 购物页（携带物品） ---- */
+#pa-phone-page-shopping {
+    padding: 10px 10px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pa-phone-shopping-card {
+    background: rgba(255,255,255,0.14);
+    border: 0.5px solid rgba(255,255,255,0.3);
+    border-radius: 10px;
+    padding: 10px;
+}
+
+.pa-phone-shopping-header {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    cursor: pointer;
+}
+
+.pa-phone-shopping-add-btn {
+    display: none; /* 默认收起时不显示，展开后才出现 */
+    flex-shrink: 0;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #fff;
+    background: #2e8b57;
+    cursor: pointer;
+}
+
+.pa-phone-shopping-card-expanded .pa-phone-shopping-add-btn {
+    display: inline-block;
+}
+
+.pa-phone-shopping-add-btn:hover {
+    background: #37a066;
+}
+
+.pa-phone-shopping-items {
+    display: none; /* 默认收起 */
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.pa-phone-shopping-card-expanded .pa-phone-shopping-items {
+    display: flex;
+}
+
+.pa-phone-shopping-item-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    background: rgba(0,0,0,0.15);
+    border-radius: 8px;
+    padding: 6px 8px;
+}
+
+.pa-phone-shopping-input {
+    min-width: 0;
+    border: 0.5px solid rgba(255,255,255,0.25);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    font-size: 13px;
+    padding: 5px 8px;
+}
+
+.pa-phone-shopping-input::placeholder {
+    color: rgba(255,255,255,0.5);
+}
+
+.pa-phone-shopping-item-name {
+    flex: 1;
+}
+
+.pa-phone-shopping-item-qty {
+    width: 64px;
+    flex-shrink: 0;
+}
+
+.pa-phone-shopping-input[readonly] {
+    opacity: 0.6;
+}
+
+.pa-phone-shopping-item-row-pending {
+    border: 1px dashed rgba(255,214,110,0.7);
+}
+
+.pa-phone-shopping-pending-badge {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: #2a2000;
+    background: #ffd66e;
+    border-radius: 5px;
+    padding: 2px 6px;
+    white-space: nowrap;
+}
+
+.pa-phone-shopping-delete-btn {
+    flex-shrink: 0;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #fff;
+    background: #b33a3a;
+    cursor: pointer;
+}
+
+.pa-phone-shopping-delete-btn:hover {
+    background: #c94747;
+}
+
 /* ---- 聊天页 ---- */
 #pa-phone-page-chat {
     display: flex;

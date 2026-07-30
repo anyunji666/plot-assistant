@@ -1,7 +1,7 @@
 "use strict";
 
-import { PHONE_SLOT_PROMPT_KEY, getCtx, notify, persistChatMetadata } from "../core.js";
-import { appendPhoneMessage, characterActiveInText, getAllPhoneMessages, getCurrentStoryTime, getLastAiFloor, getPhoneChatState, getPhoneContactCardBody, getRelationshipStageForCharacter, loadPhonePresetContent, markPhoneUpdatedToday, splitStoryTime } from "./store.js";
+import { PHONE_INVENTORY_PROMPT_KEY, PHONE_SLOT_PROMPT_KEY, getCtx, notify, persistChatMetadata } from "../core.js";
+import { appendPhoneMessage, characterActiveInText, getAllPhoneMessages, getCurrentStoryTime, getLastAiFloor, getPhoneChatState, getPhoneContactCardBody, getRelationshipStageForCharacter, loadPhonePresetContent, markPhoneUpdatedToday, splitInventoryKey, splitStoryTime } from "./store.js";
 import { refreshPhoneChatViewIfOpen, setPhoneTypingIndicator } from "./ui.js";
 import { generateSummaryRaw } from "../summary/generator.js";
 import { rebuildStatusTableFromChat } from "../summary/parser.js";
@@ -331,6 +331,70 @@ export function clearPhoneSlotPromptAfterRound() {
 }
 
 
+// 购物页手动改动库存后，一次性提醒正文AI"这一轮请在摘要模块的 Inventory 字段里同步这些变化"。
+// AI 输出后经由常规的 mergeFloorIntoStatusTable 合并进状态表，就变成"历史"的一部分了——
+// 后续再触发 rebuildStatusTableFromChat 全量重放时也不会把这次手动改动冲掉。
+export function applyPendingInventoryChangePrompt() {
+  try {
+    const context = getCtx();
+    if (typeof context.setExtensionPrompt !== "function") return;
+    const pending = getPhoneChatState().pendingInventoryChanges;
+    const keys = Object.keys(pending);
+    if (keys.length === 0) return;
+    const lines = keys
+      .map((key) => {
+        const parsed = splitInventoryKey(key);
+        if (!parsed) return null;
+        const change = pending[key];
+        return change.deleted
+          ? `- ${parsed.owner}的"${parsed.item}"应被移除`
+          : `- ${parsed.owner}的"${parsed.item}"应变为：${change.quantity}`;
+      })
+      .filter(Boolean);
+    if (lines.length === 0) return;
+    const content =
+      `{{user}}刚在手机购物页手动调整了随身物品，请在本轮摘要模块的 Inventory 字段里同步输出这些变化` +
+      `（沿用 +N/-N/=N/[REMOVE] 格式，格式：所有者·物品名: 值）：\n` +
+      lines.join("\n");
+    const position = context.extension_prompt_types?.IN_CHAT ?? 1;
+    const role = context.extension_prompt_roles?.SYSTEM ?? 0;
+    context.setExtensionPrompt(
+      PHONE_INVENTORY_PROMPT_KEY,
+      content,
+      position,
+      0,
+      false,
+      role,
+    );
+  } catch (error) {
+    console.error("[剧情助手] 注入购物页库存变更提醒时出错:", error);
+  }
+}
+
+
+export function clearPendingInventoryChangePromptAfterRound() {
+  try {
+    const context = getCtx();
+    if (typeof context.setExtensionPrompt === "function") {
+      const position = context.extension_prompt_types?.IN_CHAT ?? 1;
+      const role = context.extension_prompt_roles?.SYSTEM ?? 0;
+      context.setExtensionPrompt(
+        PHONE_INVENTORY_PROMPT_KEY,
+        "",
+        position,
+        0,
+        false,
+        role,
+      );
+    }
+    getPhoneChatState().pendingInventoryChanges = {};
+    persistChatMetadata();
+  } catch (error) {
+    console.error("[剧情助手] 清空购物页库存变更提醒时出错:", error);
+  }
+}
+
+
 // 注册"生成前注入 / 生成后清空"监听。GENERATION_STARTED 在部分酒馆版本里可能不存在，
 // 找不到时只打印警告、不阻断其它功能——这一点需要你在实际环境验证一下具体的事件名是否可用。
 export function registerPhoneSlotInjection() {
@@ -348,6 +412,7 @@ export function registerPhoneSlotInjection() {
     if (startEventName) {
       context.eventSource.on(startEventName, () => {
         applyPhoneSlotPrompt();
+        applyPendingInventoryChangePrompt();
       });
     } else {
       console.warn(
@@ -360,6 +425,7 @@ export function registerPhoneSlotInjection() {
     if (renderEventName) {
       context.eventSource.on(renderEventName, () => {
         clearPhoneSlotPromptAfterRound();
+        clearPendingInventoryChangePromptAfterRound();
       });
     }
   } catch (error) {

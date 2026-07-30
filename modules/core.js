@@ -220,6 +220,10 @@ export const PHONE_GLOBAL_BACKGROUND_KEY = "__global__";
 // AI 生成完这一轮后立即清空（一次性注入，不常驻）。
 export const PHONE_SLOT_PROMPT_KEY = "plotAssistant_phoneSlot";
 
+// 购物页手动改动库存后，下一轮生成前一次性提醒正文AI"请在摘要模块Inventory字段里同步这些变化"的注入key，
+// 用法跟 PHONE_SLOT_PROMPT_KEY 一样：生成前注入、渲染完清空，不常驻。
+export const PHONE_INVENTORY_PROMPT_KEY = "plotAssistant_inventoryChangeSlot";
+
 
 export const SUMMARY_BUTTON_ID = "summary-assistant-menu-button";
 

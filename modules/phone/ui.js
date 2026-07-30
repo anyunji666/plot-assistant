@@ -3,7 +3,7 @@
 import { openCreateCharacterDialog } from "../character.js";
 import { PHONE_PRESET_TITLE, errorCatched, getCtx, notify } from "../core.js";
 import { sendPhoneMessageToCharacter } from "./generator.js";
-import { addPhoneStickers, clearPhoneMessages, deletePhoneChatBackground, deletePhoneGlobalBackground, deletePhoneMessage, deletePhoneSticker, getAllPhoneAvatarsForCurrentCharacter, getAllPhoneMessages, getPhoneChatBackground, getPhoneContactsList, getPhoneFabVisible, getPhoneGlobalBackground, getPhoneStickerList, loadPhonePresetContent, parseContactExtra, parsePhoneStickerImportText, readImageFileCompressed, renamePhoneSticker, savePhoneAvatar, savePhoneChatBackground, savePhoneGlobalBackground, savePhonePresetContent, splitStoryTime, updatePhoneMessageText } from "./store.js";
+import { PHONE_INVENTORY_SELF_KEY, addPhoneStickers, clearPhoneMessages, deletePhoneChatBackground, deletePhoneGlobalBackground, deletePhoneMessage, deletePhoneSticker, deletePhoneInventoryItem, getAllPhoneAvatarsForCurrentCharacter, getAllPhoneMessages, getPhoneChatBackground, getPhoneChatState, getPhoneContactsList, getPhoneFabVisible, getPhoneGlobalBackground, getPhoneInventoryMap, getPhoneStickerList, groupPhoneInventoryByOwner, loadPhonePresetContent, parseContactExtra, parsePhoneStickerImportText, readImageFileCompressed, renamePhoneSticker, savePhoneAvatar, savePhoneChatBackground, savePhoneGlobalBackground, savePhonePresetContent, splitStoryTime, updatePhoneMessageText, upsertPhoneInventoryItem } from "./store.js";
 
 
 // === Function: 打开"私信预设"编辑框（纯文本，取消/保存，样式对齐"对话前强调"弹窗）===
@@ -605,8 +605,9 @@ export function applyPhoneFabVisibility() {
 // 只是内容换成克莱因蓝风格的手机屏幕，四个页签对应之前 mockup 里的四页。
 
 export const phoneUIState = {
-  activeTab: "contacts", // contacts / moments / settings；进入聊天页时记录在 activeChatCharacter，不算独立 tab
+  activeTab: "contacts", // contacts / shopping / settings；进入聊天页时记录在 activeChatCharacter，不算独立 tab
   activeChatCharacter: null,
+  expandedShoppingOwner: null, // 购物页当前展开的所有者 key（{{user}} 或联系人名），一次只展开一个，null 表示全部收起
 };
 
 
@@ -657,12 +658,12 @@ export function buildPhoneModalSkeleton() {
             <div id="pa-phone-body">
                 <div id="pa-phone-page-contacts" class="pa-phone-page"></div>
                 <div id="pa-phone-page-chat" class="pa-phone-page pa-phone-hidden"></div>
-                <div id="pa-phone-page-moments" class="pa-phone-page pa-phone-hidden"></div>
+                <div id="pa-phone-page-shopping" class="pa-phone-page pa-phone-hidden"></div>
                 <div id="pa-phone-page-settings" class="pa-phone-page pa-phone-hidden"></div>
             </div>
             <div id="pa-phone-tabbar">
                 <div class="pa-phone-tab" data-tab="contacts">通讯</div>
-                <div class="pa-phone-tab" data-tab="moments">动态</div>
+                <div class="pa-phone-tab" data-tab="shopping">购物</div>
                 <div class="pa-phone-tab" data-tab="settings">设置</div>
             </div>
         </div>
@@ -817,6 +818,7 @@ export function buildPhoneModalSkeleton() {
 export async function switchPhoneTab(tab) {
   closePhoneActionMenu();
   phoneUIState.activeTab = tab;
+  if (tab !== "shopping") phoneUIState.expandedShoppingOwner = null;
   document
     .querySelectorAll("#pa-phone-tabbar .pa-phone-tab")
     .forEach((el) =>
@@ -830,7 +832,7 @@ export async function switchPhoneTab(tab) {
     .getElementById("pa-phone-close-btn")
     .classList.remove("pa-phone-hidden");
 
-  const titles = { contacts: "通讯录", moments: "动态", settings: "设置" };
+  const titles = { contacts: "通讯录", shopping: "携带物品", settings: "设置" };
   document.getElementById("pa-phone-header-title").textContent =
     titles[tab] || "";
 
@@ -847,14 +849,14 @@ export async function switchPhoneTab(tab) {
     delete actionBtn.dataset.mode;
   }
 
-  ["contacts", "chat", "moments", "settings"].forEach((name) => {
+  ["contacts", "chat", "shopping", "settings"].forEach((name) => {
     document
       .getElementById(`pa-phone-page-${name}`)
       .classList.toggle("pa-phone-hidden", name !== tab);
   });
 
   if (tab === "contacts") await renderPhoneContactsPage();
-  else if (tab === "moments") renderPhoneMomentsPage();
+  else if (tab === "shopping") await renderPhoneShoppingPage();
   else if (tab === "settings") await renderPhoneSettingsPage();
 }
 
@@ -892,9 +894,165 @@ export async function renderPhoneContactsPage() {
 }
 
 
-export function renderPhoneMomentsPage() {
-  document.getElementById("pa-phone-page-moments").innerHTML =
-    `<div class="pa-phone-empty">「动态」页正在开发中，敬请期待～</div>`;
+// 购物页（携带物品）：卡片列表 = {{user}} 自己（固定置顶）+ 通讯录联系人，
+// 只读展示状态表 Inventory（叠加本地"待生效改动"），编辑不直接写世界书，等下一轮正文AI在摘要里自己同步。
+export async function renderPhoneShoppingPage() {
+  const container = document.getElementById("pa-phone-page-shopping");
+  container.innerHTML = `<div class="pa-phone-loading">加载中...</div>`;
+
+  const [contacts, avatarMap, inventoryMap] = await Promise.all([
+    getPhoneContactsList(),
+    getAllPhoneAvatarsForCurrentCharacter(),
+    getPhoneInventoryMap(),
+  ]);
+
+  const selfName = getCtx().name1 || "我";
+  const contactMetaMap = new Map(contacts.map((c) => [c.name, c]));
+  const pendingChanges = getPhoneChatState().pendingInventoryChanges;
+  const groups = groupPhoneInventoryByOwner(
+    inventoryMap,
+    pendingChanges,
+    contacts.map((c) => c.name),
+  );
+
+  container.innerHTML = groups
+    .map(({ owner, items }) => {
+      const isSelf = owner === PHONE_INVENTORY_SELF_KEY;
+      const displayName = isSelf ? selfName : owner;
+      const contact = contactMetaMap.get(owner);
+      const gender = contact ? parseContactExtra(contact.extra).gender : "";
+      const avatarUrl = isSelf ? null : avatarMap.get(owner);
+      const avatarInner = avatarUrl
+        ? `<img class="pa-phone-avatar-img" src="${avatarUrl}" alt="${escapePhoneHtml(displayName)}" />`
+        : escapePhoneHtml(displayName.slice(0, 1));
+      const itemsHtml = items
+        .map((it) => renderPhoneShoppingItemRow(owner, it.item, it.value, it.numeric, it.pending))
+        .join("");
+      const expanded = owner === phoneUIState.expandedShoppingOwner;
+      return `
+      <div class="pa-phone-shopping-card${expanded ? " pa-phone-shopping-card-expanded" : ""}" data-owner="${escapePhoneHtml(owner)}">
+        <div class="pa-phone-shopping-header">
+          <div class="pa-phone-avatar">${avatarInner}</div>
+          <div class="pa-phone-contact-meta">
+            <div class="pa-phone-contact-name">${escapePhoneHtml(displayName)}</div>
+            <div class="pa-phone-contact-extra">${escapePhoneHtml(gender)}</div>
+          </div>
+          <button class="pa-phone-shopping-add-btn">增加</button>
+        </div>
+        <div class="pa-phone-shopping-items">${itemsHtml}</div>
+      </div>`;
+    })
+    .join("");
+
+  bindPhoneShoppingPageEvents(container);
+}
+
+
+// 单条物品行的 HTML：数量框是否只读取决于 numeric（非数字备注只能改名/删除，不能在这里被改写成数值）；
+// pending=true 表示这是购物页刚改的、还没被正文AI写进状态表的"待同步"改动，加个小标签提示一下。
+function renderPhoneShoppingItemRow(owner, item, value, numeric, pending) {
+  const pendingBadge = pending
+    ? `<span class="pa-phone-shopping-pending-badge">待同步</span>`
+    : "";
+  return `
+    <div class="pa-phone-shopping-item-row${pending ? " pa-phone-shopping-item-row-pending" : ""}" data-owner="${escapePhoneHtml(owner)}" data-item="${escapePhoneHtml(item)}">
+      <input class="pa-phone-shopping-input pa-phone-shopping-item-name" type="text" value="${escapePhoneHtml(item)}" placeholder="物品名" />
+      <input class="pa-phone-shopping-input pa-phone-shopping-item-qty" type="${numeric ? "number" : "text"}" value="${escapePhoneHtml(value)}" placeholder="数量" ${numeric ? "" : "readonly"} />
+      ${pendingBadge}
+      <button class="pa-phone-shopping-delete-btn">删除</button>
+    </div>`;
+}
+
+
+function bindPhoneShoppingPageEvents(container) {
+  container.querySelectorAll(".pa-phone-shopping-card").forEach((card) => {
+    card
+      .querySelector(".pa-phone-shopping-header")
+      .addEventListener("click", () => {
+        const owner = card.dataset.owner;
+        phoneUIState.expandedShoppingOwner =
+          phoneUIState.expandedShoppingOwner === owner ? null : owner;
+        renderPhoneShoppingPage();
+      });
+  });
+  container.querySelectorAll(".pa-phone-shopping-add-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation(); // 阻止冒泡到 header 的展开/收起点击，否则加完立刻被收起
+      const card = btn.closest(".pa-phone-shopping-card");
+      const owner = card.dataset.owner;
+      const itemsContainer = card.querySelector(".pa-phone-shopping-items");
+      itemsContainer.insertAdjacentHTML(
+        "beforeend",
+        renderPhoneShoppingItemRow(owner, "", "", true),
+      );
+      const row = itemsContainer.lastElementChild;
+      bindPhoneShoppingRowEvents(row);
+      row.querySelector(".pa-phone-shopping-item-name").focus();
+    });
+  });
+  container.querySelectorAll(".pa-phone-shopping-items").forEach((el) => {
+    el.addEventListener("click", (e) => e.stopPropagation()); // 点物品行/删除按钮不触发卡片收起
+  });
+  container
+    .querySelectorAll(".pa-phone-shopping-item-row")
+    .forEach(bindPhoneShoppingRowEvents);
+}
+
+
+function bindPhoneShoppingRowEvents(row) {
+  row.querySelector(".pa-phone-shopping-delete-btn").addEventListener(
+    "click",
+    errorCatched(async () => {
+      const owner = row.dataset.owner;
+      const item = row.dataset.item;
+      if (!item) {
+        row.remove(); // 还没保存过的空白行，直接移除，不用动状态表
+        return;
+      }
+      await deletePhoneInventoryItem(owner, item);
+      await renderPhoneShoppingPage();
+    }),
+  );
+  row.querySelectorAll(".pa-phone-shopping-input").forEach((input) => {
+    input.addEventListener(
+      "change",
+      errorCatched(() => handlePhoneShoppingRowSave(row)),
+    );
+  });
+}
+
+
+// 物品名和数量都填了才落盘（新增行允许先后分步骤填写，任意一项还空着就先不保存）；
+// 数量填 0 或负数按"删除该条目"处理，跟状态表里 Inventory 数值 ≤0 自动移除的既有约定保持一致。
+async function handlePhoneShoppingRowSave(row) {
+  const owner = row.dataset.owner;
+  const oldItem = row.dataset.item;
+  const nameInput = row.querySelector(".pa-phone-shopping-item-name");
+  const qtyInput = row.querySelector(".pa-phone-shopping-item-qty");
+  const newItem = nameInput.value.trim();
+  const qtyRaw = qtyInput.value.trim();
+  if (!newItem || !qtyRaw) return;
+
+  if (qtyInput.readOnly) {
+    // 非数字的旧文字备注：这里只支持改名，数量原样保留，不做数值校验。
+    if (newItem === oldItem) return;
+    await upsertPhoneInventoryItem(owner, newItem, oldItem, qtyRaw);
+    await renderPhoneShoppingPage();
+    return;
+  }
+
+  const qty = parseInt(qtyRaw, 10);
+  if (!Number.isFinite(qty)) {
+    notify("warning", "数量请填一个数字。");
+    return;
+  }
+  if (qty <= 0) {
+    if (oldItem) await deletePhoneInventoryItem(owner, oldItem);
+    await renderPhoneShoppingPage();
+    return;
+  }
+  await upsertPhoneInventoryItem(owner, newItem, oldItem, qty);
+  await renderPhoneShoppingPage();
 }
 
 
@@ -1083,7 +1241,7 @@ export async function openPhoneChat(characterName) {
   actionBtn.dataset.mode = "chat-menu";
   actionBtn.classList.add("pa-phone-action-icon");
   actionBtn.classList.remove("pa-phone-hidden");
-  ["contacts", "chat", "moments", "settings"].forEach((name) => {
+  ["contacts", "chat", "shopping", "settings"].forEach((name) => {
     document
       .getElementById(`pa-phone-page-${name}`)
       .classList.toggle("pa-phone-hidden", name !== "chat");
