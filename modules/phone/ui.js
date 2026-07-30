@@ -605,9 +605,9 @@ export function applyPhoneFabVisibility() {
 // 只是内容换成克莱因蓝风格的手机屏幕，四个页签对应之前 mockup 里的四页。
 
 export const phoneUIState = {
-  activeTab: "contacts", // contacts / shopping / settings；进入聊天页时记录在 activeChatCharacter，不算独立 tab
+  activeTab: "contacts", // contacts / backpack / settings；进入聊天页时记录在 activeChatCharacter，不算独立 tab
   activeChatCharacter: null,
-  expandedShoppingOwner: null, // 购物页当前展开的所有者 key（{{user}} 或联系人名），一次只展开一个，null 表示全部收起
+  expandedBackpackOwner: null, // 背包页当前展开的所有者 key（{{user}} 或联系人名），一次只展开一个，null 表示全部收起
 };
 
 
@@ -658,12 +658,12 @@ export function buildPhoneModalSkeleton() {
             <div id="pa-phone-body">
                 <div id="pa-phone-page-contacts" class="pa-phone-page"></div>
                 <div id="pa-phone-page-chat" class="pa-phone-page pa-phone-hidden"></div>
-                <div id="pa-phone-page-shopping" class="pa-phone-page pa-phone-hidden"></div>
+                <div id="pa-phone-page-backpack" class="pa-phone-page pa-phone-hidden"></div>
                 <div id="pa-phone-page-settings" class="pa-phone-page pa-phone-hidden"></div>
             </div>
             <div id="pa-phone-tabbar">
                 <div class="pa-phone-tab" data-tab="contacts">通讯</div>
-                <div class="pa-phone-tab" data-tab="shopping">购物</div>
+                <div class="pa-phone-tab" data-tab="backpack">背包</div>
                 <div class="pa-phone-tab" data-tab="settings">设置</div>
             </div>
         </div>
@@ -818,7 +818,7 @@ export function buildPhoneModalSkeleton() {
 export async function switchPhoneTab(tab) {
   closePhoneActionMenu();
   phoneUIState.activeTab = tab;
-  if (tab !== "shopping") phoneUIState.expandedShoppingOwner = null;
+  if (tab !== "backpack") phoneUIState.expandedBackpackOwner = null;
   document
     .querySelectorAll("#pa-phone-tabbar .pa-phone-tab")
     .forEach((el) =>
@@ -832,7 +832,7 @@ export async function switchPhoneTab(tab) {
     .getElementById("pa-phone-close-btn")
     .classList.remove("pa-phone-hidden");
 
-  const titles = { contacts: "通讯录", shopping: "携带物品", settings: "设置" };
+  const titles = { contacts: "通讯录", backpack: "携带物品", settings: "设置" };
   document.getElementById("pa-phone-header-title").textContent =
     titles[tab] || "";
 
@@ -849,14 +849,14 @@ export async function switchPhoneTab(tab) {
     delete actionBtn.dataset.mode;
   }
 
-  ["contacts", "chat", "shopping", "settings"].forEach((name) => {
+  ["contacts", "chat", "backpack", "settings"].forEach((name) => {
     document
       .getElementById(`pa-phone-page-${name}`)
       .classList.toggle("pa-phone-hidden", name !== tab);
   });
 
   if (tab === "contacts") await renderPhoneContactsPage();
-  else if (tab === "shopping") await renderPhoneShoppingPage();
+  else if (tab === "backpack") await renderPhoneBackpackPage();
   else if (tab === "settings") await renderPhoneSettingsPage();
 }
 
@@ -894,10 +894,10 @@ export async function renderPhoneContactsPage() {
 }
 
 
-// 购物页（携带物品）：卡片列表 = {{user}} 自己（固定置顶）+ 通讯录联系人，
+// 背包页（携带物品）：卡片列表 = {{user}} 自己（固定置顶）+ 通讯录联系人，
 // 只读展示状态表 Inventory（叠加本地"待生效改动"），编辑不直接写世界书，等下一轮正文AI在摘要里自己同步。
-export async function renderPhoneShoppingPage() {
-  const container = document.getElementById("pa-phone-page-shopping");
+export async function renderPhoneBackpackPage() {
+  const container = document.getElementById("pa-phone-page-backpack");
   container.innerHTML = `<div class="pa-phone-loading">加载中...</div>`;
 
   const [contacts, avatarMap, inventoryMap] = await Promise.all([
@@ -926,91 +926,91 @@ export async function renderPhoneShoppingPage() {
         ? `<img class="pa-phone-avatar-img" src="${avatarUrl}" alt="${escapePhoneHtml(displayName)}" />`
         : escapePhoneHtml(displayName.slice(0, 1));
       const itemsHtml = items
-        .map((it) => renderPhoneShoppingItemRow(owner, it.item, it.value, it.numeric, it.pending))
+        .map((it) => renderPhoneBackpackItemRow(owner, it.item, it.value, it.numeric, it.pending))
         .join("");
-      const expanded = owner === phoneUIState.expandedShoppingOwner;
+      const expanded = owner === phoneUIState.expandedBackpackOwner;
       return `
-      <div class="pa-phone-shopping-card${expanded ? " pa-phone-shopping-card-expanded" : ""}" data-owner="${escapePhoneHtml(owner)}">
-        <div class="pa-phone-shopping-header">
+      <div class="pa-phone-backpack-card${expanded ? " pa-phone-backpack-card-expanded" : ""}" data-owner="${escapePhoneHtml(owner)}">
+        <div class="pa-phone-backpack-header">
           <div class="pa-phone-avatar">${avatarInner}</div>
           <div class="pa-phone-contact-meta">
             <div class="pa-phone-contact-name">${escapePhoneHtml(displayName)}</div>
             <div class="pa-phone-contact-extra">${escapePhoneHtml(gender)}</div>
           </div>
-          <button class="pa-phone-shopping-add-btn">增加</button>
+          <button class="pa-phone-backpack-add-btn">增加</button>
         </div>
-        <div class="pa-phone-shopping-items">${itemsHtml}</div>
+        <div class="pa-phone-backpack-items">${itemsHtml}</div>
       </div>`;
     })
     .join("");
 
-  bindPhoneShoppingPageEvents(container);
+  bindPhoneBackpackPageEvents(container);
 }
 
 
 // 单条物品行的 HTML：数量框是否只读取决于 numeric（非数字备注只能改名/删除，不能在这里被改写成数值）。
 // pending: null(无待生效改动) / "changed"(待同步新增或改动) / "deleted"(待移除，还没被AI确认真的删掉)。
-function renderPhoneShoppingItemRow(owner, item, value, numeric, pending) {
+function renderPhoneBackpackItemRow(owner, item, value, numeric, pending) {
   const isDeleted = pending === "deleted";
   const pendingBadge =
     pending === "changed"
-      ? `<span class="pa-phone-shopping-pending-badge">待同步</span>`
+      ? `<span class="pa-phone-backpack-pending-badge">待同步</span>`
       : isDeleted
-        ? `<span class="pa-phone-shopping-pending-badge pa-phone-shopping-pending-badge-deleted">待移除</span>`
+        ? `<span class="pa-phone-backpack-pending-badge pa-phone-backpack-pending-badge-deleted">待移除</span>`
         : "";
   const rowClass = pending
-    ? " pa-phone-shopping-item-row-pending"
+    ? " pa-phone-backpack-item-row-pending"
     : "";
   const actionBtn = isDeleted
-    ? `<button class="pa-phone-shopping-cancel-btn">撤销</button>`
-    : `<button class="pa-phone-shopping-delete-btn">删除</button>`;
+    ? `<button class="pa-phone-backpack-cancel-btn">撤销</button>`
+    : `<button class="pa-phone-backpack-delete-btn">删除</button>`;
   return `
-    <div class="pa-phone-shopping-item-row${rowClass}" data-owner="${escapePhoneHtml(owner)}" data-item="${escapePhoneHtml(item)}" data-pending="${pending || ""}">
-      <input class="pa-phone-shopping-input pa-phone-shopping-item-name" type="text" value="${escapePhoneHtml(item)}" placeholder="物品名" ${isDeleted ? "disabled" : ""} />
-      <input class="pa-phone-shopping-input pa-phone-shopping-item-qty" type="${numeric ? "number" : "text"}" value="${escapePhoneHtml(value)}" placeholder="数量" ${numeric && !isDeleted ? "" : "readonly"} ${isDeleted ? "disabled" : ""} />
+    <div class="pa-phone-backpack-item-row${rowClass}" data-owner="${escapePhoneHtml(owner)}" data-item="${escapePhoneHtml(item)}" data-pending="${pending || ""}">
+      <input class="pa-phone-backpack-input pa-phone-backpack-item-name" type="text" value="${escapePhoneHtml(item)}" placeholder="物品名" ${isDeleted ? "disabled" : ""} />
+      <input class="pa-phone-backpack-input pa-phone-backpack-item-qty" type="${numeric ? "number" : "text"}" value="${escapePhoneHtml(value)}" placeholder="数量" ${numeric && !isDeleted ? "" : "readonly"} ${isDeleted ? "disabled" : ""} />
       ${pendingBadge}
       ${actionBtn}
     </div>`;
 }
 
 
-function bindPhoneShoppingPageEvents(container) {
-  container.querySelectorAll(".pa-phone-shopping-card").forEach((card) => {
+function bindPhoneBackpackPageEvents(container) {
+  container.querySelectorAll(".pa-phone-backpack-card").forEach((card) => {
     card
-      .querySelector(".pa-phone-shopping-header")
+      .querySelector(".pa-phone-backpack-header")
       .addEventListener("click", () => {
         const owner = card.dataset.owner;
-        phoneUIState.expandedShoppingOwner =
-          phoneUIState.expandedShoppingOwner === owner ? null : owner;
-        renderPhoneShoppingPage();
+        phoneUIState.expandedBackpackOwner =
+          phoneUIState.expandedBackpackOwner === owner ? null : owner;
+        renderPhoneBackpackPage();
       });
   });
-  container.querySelectorAll(".pa-phone-shopping-add-btn").forEach((btn) => {
+  container.querySelectorAll(".pa-phone-backpack-add-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation(); // 阻止冒泡到 header 的展开/收起点击，否则加完立刻被收起
-      const card = btn.closest(".pa-phone-shopping-card");
+      const card = btn.closest(".pa-phone-backpack-card");
       const owner = card.dataset.owner;
-      const itemsContainer = card.querySelector(".pa-phone-shopping-items");
+      const itemsContainer = card.querySelector(".pa-phone-backpack-items");
       itemsContainer.insertAdjacentHTML(
         "beforeend",
-        renderPhoneShoppingItemRow(owner, "", "", true),
+        renderPhoneBackpackItemRow(owner, "", "", true),
       );
       const row = itemsContainer.lastElementChild;
-      bindPhoneShoppingRowEvents(row);
-      row.querySelector(".pa-phone-shopping-item-name").focus();
+      bindPhoneBackpackRowEvents(row);
+      row.querySelector(".pa-phone-backpack-item-name").focus();
     });
   });
-  container.querySelectorAll(".pa-phone-shopping-items").forEach((el) => {
+  container.querySelectorAll(".pa-phone-backpack-items").forEach((el) => {
     el.addEventListener("click", (e) => e.stopPropagation()); // 点物品行/删除按钮不触发卡片收起
   });
   container
-    .querySelectorAll(".pa-phone-shopping-item-row")
-    .forEach(bindPhoneShoppingRowEvents);
+    .querySelectorAll(".pa-phone-backpack-item-row")
+    .forEach(bindPhoneBackpackRowEvents);
 }
 
 
-function bindPhoneShoppingRowEvents(row) {
-  row.querySelector(".pa-phone-shopping-delete-btn")?.addEventListener(
+function bindPhoneBackpackRowEvents(row) {
+  row.querySelector(".pa-phone-backpack-delete-btn")?.addEventListener(
     "click",
     errorCatched(async () => {
       const owner = row.dataset.owner;
@@ -1020,20 +1020,20 @@ function bindPhoneShoppingRowEvents(row) {
         return;
       }
       await deletePhoneInventoryItem(owner, item);
-      await renderPhoneShoppingPage();
+      await renderPhoneBackpackPage();
     }),
   );
-  row.querySelector(".pa-phone-shopping-cancel-btn")?.addEventListener(
+  row.querySelector(".pa-phone-backpack-cancel-btn")?.addEventListener(
     "click",
     errorCatched(async () => {
       await cancelPendingInventoryChange(row.dataset.owner, row.dataset.item);
-      await renderPhoneShoppingPage();
+      await renderPhoneBackpackPage();
     }),
   );
-  row.querySelectorAll(".pa-phone-shopping-input").forEach((input) => {
+  row.querySelectorAll(".pa-phone-backpack-input").forEach((input) => {
     input.addEventListener(
       "change",
-      errorCatched(() => handlePhoneShoppingRowSave(row)),
+      errorCatched(() => handlePhoneBackpackRowSave(row)),
     );
   });
 }
@@ -1041,11 +1041,11 @@ function bindPhoneShoppingRowEvents(row) {
 
 // 物品名和数量都填了才落盘（新增行允许先后分步骤填写，任意一项还空着就先不保存）；
 // 数量填 0 或负数按"删除该条目"处理，跟状态表里 Inventory 数值 ≤0 自动移除的既有约定保持一致。
-async function handlePhoneShoppingRowSave(row) {
+async function handlePhoneBackpackRowSave(row) {
   const owner = row.dataset.owner;
   const oldItem = row.dataset.item;
-  const nameInput = row.querySelector(".pa-phone-shopping-item-name");
-  const qtyInput = row.querySelector(".pa-phone-shopping-item-qty");
+  const nameInput = row.querySelector(".pa-phone-backpack-item-name");
+  const qtyInput = row.querySelector(".pa-phone-backpack-item-qty");
   const newItem = nameInput.value.trim();
   const qtyRaw = qtyInput.value.trim();
   if (!newItem || !qtyRaw) return;
@@ -1054,7 +1054,7 @@ async function handlePhoneShoppingRowSave(row) {
     // 非数字的旧文字备注：这里只支持改名，数量原样保留，不做数值校验。
     if (newItem === oldItem) return;
     await upsertPhoneInventoryItem(owner, newItem, oldItem, qtyRaw);
-    await renderPhoneShoppingPage();
+    await renderPhoneBackpackPage();
     return;
   }
 
@@ -1065,11 +1065,11 @@ async function handlePhoneShoppingRowSave(row) {
   }
   if (qty <= 0) {
     if (oldItem) await deletePhoneInventoryItem(owner, oldItem);
-    await renderPhoneShoppingPage();
+    await renderPhoneBackpackPage();
     return;
   }
   await upsertPhoneInventoryItem(owner, newItem, oldItem, qty);
-  await renderPhoneShoppingPage();
+  await renderPhoneBackpackPage();
 }
 
 
@@ -1258,7 +1258,7 @@ export async function openPhoneChat(characterName) {
   actionBtn.dataset.mode = "chat-menu";
   actionBtn.classList.add("pa-phone-action-icon");
   actionBtn.classList.remove("pa-phone-hidden");
-  ["contacts", "chat", "shopping", "settings"].forEach((name) => {
+  ["contacts", "chat", "backpack", "settings"].forEach((name) => {
     document
       .getElementById(`pa-phone-page-${name}`)
       .classList.toggle("pa-phone-hidden", name !== "chat");

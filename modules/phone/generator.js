@@ -331,7 +331,7 @@ export function clearPhoneSlotPromptAfterRound() {
 }
 
 
-// 购物页手动改动库存后，一次性提醒正文AI"这一轮请在摘要模块的 Inventory 字段里同步这些变化"。
+// 背包页手动改动库存后，一次性提醒正文AI"这一轮请在摘要模块的 Inventory 字段里同步这些变化"。
 // 直接换算成 Inventory 字段本身的格式（所有者·物品名: =N / [REMOVE]）给AI抄，不用AI自己再翻译一遍自然语言，
 // 减少格式跑偏的空间。AI 输出后经由常规的 mergeFloorIntoStatusTable 合并进状态表，就变成"历史"的一部分了——
 // 后续再触发 rebuildStatusTableFromChat 全量重放时也不会把这次手动改动冲掉。
@@ -364,7 +364,7 @@ export function applyPendingInventoryChangePrompt() {
       role,
     );
   } catch (error) {
-    console.error("[剧情助手] 注入购物页库存变更提醒时出错:", error);
+    console.error("[剧情助手] 注入背包页库存变更提醒时出错:", error);
   }
 }
 
@@ -387,7 +387,7 @@ export function clearPendingInventoryChangePromptAfterRound() {
     getPhoneChatState().pendingInventoryChanges = {};
     persistChatMetadata();
   } catch (error) {
-    console.error("[剧情助手] 清空购物页库存变更提醒时出错:", error);
+    console.error("[剧情助手] 清空背包页库存变更提醒时出错:", error);
   }
 }
 

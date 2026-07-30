@@ -355,29 +355,29 @@
     text-overflow: ellipsis;
 }
 
-/* ---- 购物页（携带物品） ---- */
-#pa-phone-page-shopping {
+/* ---- 背包页（携带物品） ---- */
+#pa-phone-page-backpack {
     padding: 10px 10px 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.pa-phone-shopping-card {
+.pa-phone-backpack-card {
     background: rgba(255,255,255,0.14);
     border: 0.5px solid rgba(255,255,255,0.3);
     border-radius: 10px;
     padding: 10px;
 }
 
-.pa-phone-shopping-header {
+.pa-phone-backpack-header {
     display: flex;
     gap: 10px;
     align-items: center;
     cursor: pointer;
 }
 
-.pa-phone-shopping-add-btn {
+.pa-phone-backpack-add-btn {
     display: none; /* 默认收起时不显示，展开后才出现 */
     flex-shrink: 0;
     border: none;
@@ -390,26 +390,26 @@
     cursor: pointer;
 }
 
-.pa-phone-shopping-card-expanded .pa-phone-shopping-add-btn {
+.pa-phone-backpack-card-expanded .pa-phone-backpack-add-btn {
     display: inline-block;
 }
 
-.pa-phone-shopping-add-btn:hover {
+.pa-phone-backpack-add-btn:hover {
     background: #37a066;
 }
 
-.pa-phone-shopping-items {
+.pa-phone-backpack-items {
     display: none; /* 默认收起 */
     flex-direction: column;
     gap: 6px;
     margin-top: 8px;
 }
 
-.pa-phone-shopping-card-expanded .pa-phone-shopping-items {
+.pa-phone-backpack-card-expanded .pa-phone-backpack-items {
     display: flex;
 }
 
-.pa-phone-shopping-item-row {
+.pa-phone-backpack-item-row {
     display: flex;
     gap: 6px;
     align-items: center;
@@ -418,7 +418,7 @@
     padding: 6px 8px;
 }
 
-.pa-phone-shopping-input {
+.pa-phone-backpack-input {
     min-width: 0;
     border: 0.5px solid rgba(255,255,255,0.25);
     border-radius: 6px;
@@ -428,34 +428,34 @@
     padding: 5px 8px;
 }
 
-.pa-phone-shopping-input::placeholder {
+.pa-phone-backpack-input::placeholder {
     color: rgba(255,255,255,0.5);
 }
 
-.pa-phone-shopping-item-name {
+.pa-phone-backpack-item-name {
     flex: 1;
 }
 
-.pa-phone-shopping-item-qty {
+.pa-phone-backpack-item-qty {
     width: 64px;
     flex-shrink: 0;
 }
 
-.pa-phone-shopping-input[readonly],
-.pa-phone-shopping-input[disabled] {
+.pa-phone-backpack-input[readonly],
+.pa-phone-backpack-input[disabled] {
     opacity: 0.6;
 }
 
-.pa-phone-shopping-item-row-pending {
+.pa-phone-backpack-item-row-pending {
     border: 1px dashed rgba(255,214,110,0.7);
 }
 
-.pa-phone-shopping-item-row[data-pending="deleted"] {
+.pa-phone-backpack-item-row[data-pending="deleted"] {
     opacity: 0.6;
     border: 1px dashed rgba(255,255,255,0.35);
 }
 
-.pa-phone-shopping-pending-badge {
+.pa-phone-backpack-pending-badge {
     flex-shrink: 0;
     font-size: 10px;
     color: #2a2000;
@@ -465,12 +465,12 @@
     white-space: nowrap;
 }
 
-.pa-phone-shopping-pending-badge-deleted {
+.pa-phone-backpack-pending-badge-deleted {
     color: #fff;
     background: #7a7a7a;
 }
 
-.pa-phone-shopping-cancel-btn {
+.pa-phone-backpack-cancel-btn {
     flex-shrink: 0;
     border: none;
     border-radius: 6px;
@@ -482,11 +482,11 @@
     cursor: pointer;
 }
 
-.pa-phone-shopping-cancel-btn:hover {
+.pa-phone-backpack-cancel-btn:hover {
     background: #4780cc;
 }
 
-.pa-phone-shopping-delete-btn {
+.pa-phone-backpack-delete-btn {
     flex-shrink: 0;
     border: none;
     border-radius: 6px;
@@ -498,7 +498,7 @@
     cursor: pointer;
 }
 
-.pa-phone-shopping-delete-btn:hover {
+.pa-phone-backpack-delete-btn:hover {
     background: #c94747;
 }
 

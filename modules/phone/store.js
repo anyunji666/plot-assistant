@@ -277,9 +277,9 @@ export async function getRelationshipStageForCharacter(characterName) {
 }
 
 
-// ==== 手机「购物」页：携带物品 ====
+// ==== 手机「背包」页：携带物品 ====
 // 状态表 Inventory 字段现在只有一个书写入口——正文AI自己的摘要输出（经 mergeFloorIntoStatusTable 合并）。
-// 购物页只读这份数据，不直接抢着写世界书：编辑（增/删/改）一律先记成"待生效改动"存在本地对话状态里，
+// 背包页只读这份数据，不直接抢着写世界书：编辑（增/删/改）一律先记成"待生效改动"存在本地对话状态里，
 // 下一轮生成前提醒正文AI照着改，AI 输出后自然经由既有流程合并、变成"历史"的一部分，全量重放也不会被冲掉。
 // key 沿用状态表既有约定 "所有者·物品名"，{{user}} 自己的物品也走这个前缀。
 
@@ -339,7 +339,7 @@ export async function upsertPhoneInventoryItem(ownerName, itemName, oldItemName,
 
 // 删除某个所有者名下的一件物品：
 // - 如果这条本来就是"已确认"的（基准 Inventory 里有），标记成"待移除"，继续显示、等AI下一轮确认了才真正消失；
-// - 如果这条本来就是购物页刚加的、还没被AI确认过的，直接撤销待生效标记就行，不用假装有变化去通知AI。
+// - 如果这条本来就是背包页刚加的、还没被AI确认过的，直接撤销待生效标记就行，不用假装有变化去通知AI。
 export async function deletePhoneInventoryItem(ownerName, itemName) {
   const key = `${ownerName}·${itemName}`;
   const baseMap = await getPhoneInventoryMap();
@@ -361,12 +361,12 @@ export async function cancelPendingInventoryChange(ownerName, itemName) {
 
 
 // 把"基准 Inventory"和"待生效改动"合并、按所有者分组，{{user}} 固定排最前，其余按联系人名单顺序排列；
-// 所有联系人（含 {{user}}）都会出现在结果里，即使暂时没有任何物品，好让购物页始终显示卡片方便新增。
+// 所有联系人（含 {{user}}）都会出现在结果里，即使暂时没有任何物品，好让背包页始终显示卡片方便新增。
 // 每条物品带 pending 标记，供 UI 加提示用：
 //   null      —— 跟已确认状态一致，没有待生效改动
-//   "changed" —— 购物页刚新增/改了数量，还没被正文AI写进状态表
-//   "deleted" —— 购物页标记了待移除，继续显示原值，等AI确认了才会真的消失
-// 物品数量是否为纯数字（BARE_NUMBER_PATTERN）决定购物页里这一行的数量框能不能编辑——
+//   "changed" —— 背包页刚新增/改了数量，还没被正文AI写进状态表
+//   "deleted" —— 背包页标记了待移除，继续显示原值，等AI确认了才会真的消失
+// 物品数量是否为纯数字（BARE_NUMBER_PATTERN）决定背包页里这一行的数量框能不能编辑——
 // 非数字备注（AI 写的文字状态）只允许改名/删除，不允许在这个 UI 里被误改写成数值。
 export function groupPhoneInventoryByOwner(baseMap, pendingChanges, contactNames) {
   const groups = new Map(); // owner -> [{item, value, numeric, pending}]
