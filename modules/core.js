@@ -138,7 +138,7 @@ for 角色 in Snapshot Table当前Busy快照里列出的角色:
 Time: 武定三年三月十五,申时
 Location: 云隐山洞穴
 Relationships: {{user}}→角色A: 恋人；{{user}}→角色B: 师徒(暧昧)；{{user}}→角色C: [REMOVE]
-Inventory: {{user}}·玉佩: =1；{{user}}·金创药: -1；{{user}}·解药: [REMOVE]
+Inventory: {{user}}·玉佩: =1；{{user}}·金创药: -1；{{user}}·解药: [REMOVE]；{{user}}·人民币（元）: =5000；{{user}}·500ml矿泉水（瓶）: -2
 Setups: {{user}}·玉佩纹路之谜: (武定三年三月十五·云隐山洞穴)背面刻着一行字,含义不明；角色A·旧日承诺: [REMOVE]
 Overview: {{user}}向角色A表明心意确定恋人关系；与角色B切磋加深师徒情谊；拾得来历不明玉佩；服下最后一瓶解药；角色C战死永久离场。
 </details>
