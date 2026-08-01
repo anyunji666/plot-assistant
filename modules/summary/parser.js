@@ -710,6 +710,7 @@ export function extractOtherPartyName(relationshipKey) {
 // 让正文 AI 每轮都能看到"谁正忙"，从而在这些角色不再登场时输出 Busy: 角色名: [REMOVE] 清除标记。
 export function serializeStatusTableContent(state, busyMap) {
   const lines = [
+    "<snapshot_table>",
     `Relationships: ${serializeKeyValueList(state.relationships)}`,
     `Inventory: ${serializeKeyValueList(state.inventory)}`,
     `Setups: ${serializeKeyValueList(state.setups)}`,
@@ -731,6 +732,7 @@ export function serializeStatusTableContent(state, busyMap) {
       '（提醒：以上 Busy 中的角色若本轮未出现在正文场景里，请在摘要块的 Busy 字段输出"角色名: [REMOVE]"清除）',
     );
   }
+  lines.push("</snapshot_table>");
   return lines.join("\n");
 }
 

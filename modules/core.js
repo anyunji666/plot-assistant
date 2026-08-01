@@ -128,7 +128,7 @@ for 角色 in Snapshot Table当前Busy快照里列出的角色:
 \`\`\`
 
 ---
-**Snapshot Table**：上文已注入Relationships/Inventory/Setups/Busy的只读快照表，仅用于查看当前状态及填写[REMOVE]清除过期条目。其中Busy列出的是"被判定为忙碌、暂时没空回复私信"的角色——本轮如果这些角色没有出现在正文场景或回复消息了，需要在Busy字段里写"角色名: [REMOVE]"，把它从忙碌状态里清掉。
+**Snapshot Table**：上文已注入<snapshot_table>标签包裹的只读快照表，仅用于查看当前状态及填写[REMOVE]清除过期条目。其中Busy列出的是"被判定为忙碌、暂时没空回复私信"的角色——本轮如果这些角色没有出现在正文场景或回复消息了，需要在Busy字段里写"角色名: [REMOVE]"，把它从忙碌状态里清掉。
 
 ---
 **示例（仅供格式参考）：**
@@ -153,10 +153,10 @@ export const STEP_DELAY = 300; // 批次之间的延迟（毫秒）
 export const STATUS_TABLE_TITLE = "状态表"; // 结构化数据表世界书条目固定标题，与"小总结：起-止""大总结"同级存在
 
 // 状态表要让AI记住"当前"状态，离最新消息越近权重越高，所以创建时用"@D 在深度"而不是小总结/大总结默认的"角色定义之前"。
-// 对应你在世界书面板里手动设置好的参照值：@D 在深度1、[系统]角色、order 666、概率100%。
+// 对应你在世界书面板里手动设置好的参照值：@D 在深度0、[系统]角色、order 666、概率100%。
 export const STATUS_TABLE_ENTRY_DEFAULTS = {
   position: 4, // 原生 world_info_position: atDepth
-  depth: 1,
+  depth: 0,
   role: 0, // extension_prompt_roles: SYSTEM
   order: 666,
   probability: 100,
