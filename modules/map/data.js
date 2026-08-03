@@ -11,6 +11,7 @@ export const mapState = {
   imageOverlay: null,
   routeMode: false,
   routeFromId: null,
+  routeFollowUp: null, // { party, departTime }：从某条路线发起"后续行动"时的一次性预填数据，表单读取后即清空
   pendingFormContext: null,
   transientMapData: null,
 };

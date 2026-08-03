@@ -1454,6 +1454,12 @@
     margin-bottom: 4px;
 }
 
+.mm-route-actions-party {
+    font-size: 0.8em;
+    opacity: 0.75;
+    margin-bottom: 6px;
+}
+
 /* ===== 移动端适配（窄屏：手机竖屏/大部分手机横屏） ===== */
 @media (pointer: coarse), (max-width: 700px) {
     /* 悬浮球本身不再在移动端隐藏——默认停靠位置是右上角（见 #mm-fab 的

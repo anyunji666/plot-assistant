@@ -26,6 +26,7 @@ export function startRouteMode() {
   }
   mapState.routeMode = true;
   mapState.routeFromId = null;
+  mapState.routeFollowUp = null;
   document.getElementById("mm-add-route-btn")?.classList.add("mm-active");
   showRouteHint("请点击【出发点】标记");
 }
@@ -50,14 +51,33 @@ export function beginRouteFromMarker(marker) {
   }
   mapState.routeMode = true;
   mapState.routeFromId = marker.id;
+  mapState.routeFollowUp = null;
   document.getElementById("mm-add-route-btn")?.classList.add("mm-active");
   showRouteHint(`出发点：${marker.name}，请点击【目标点】标记`);
+}
+
+
+// 从"路线操作"弹层里点【后续行动】：把这条路线的终点作为下一段的出发点，
+// 并把队伍信息、（上一段的）预计到达时间记下来，等表单打开时预填进去。
+export function beginFollowUpRoute(route, fromMarker) {
+  if (!isBigMapActive()) return;
+  const map = getActiveMap();
+  if (map.markers.length < 2) {
+    toastr?.warning?.("至少需要两个标记点才能添加路线");
+    return;
+  }
+  mapState.routeMode = true;
+  mapState.routeFromId = fromMarker.id;
+  mapState.routeFollowUp = { party: route.party || "", departTime: route.arriveTime || "" };
+  document.getElementById("mm-add-route-btn")?.classList.add("mm-active");
+  showRouteHint(`${route.party || "该队伍"} 的后续行动，出发点：${fromMarker.name}，请点击【目标点】标记`);
 }
 
 
 export function cancelRouteMode() {
   mapState.routeMode = false;
   mapState.routeFromId = null;
+  mapState.routeFollowUp = null;
   document.getElementById("mm-add-route-btn")?.classList.remove("mm-active");
   hideRouteHint();
 }
@@ -88,7 +108,9 @@ export function handleRoutePointClick(marker) {
   const map = getActiveMap();
   const fromMarker = map.markers.find((m) => m.id === mapState.routeFromId);
   const toMarker = marker;
+  const pendingFollowUp = mapState.routeFollowUp; // cancelRouteMode 会清空这个字段，先存一下
   cancelRouteMode(); // 先退出选点模式，再弹表单，避免表单里点地图触发选点逻辑
+  mapState.routeFollowUp = pendingFollowUp;
   openRouteForm(fromMarker, toMarker);
 }
 
@@ -140,9 +162,86 @@ export function pointAlongLine(from, to, backOffsetPx) {
 }
 
 
+// ============================================================
+// 同起点→终点的多条路线：第一条(curveIndex=0)保持直线，
+// 后面依次错开画成曲线，避免重叠在一起分不清、点不到。
+// ============================================================
+
+const CURVE_SEGMENTS = 24; // 曲线采样点数，越大越平滑
+
+// 第 curveIndex 条（1起）曲线的法向偏移量（像素）：交替左右两侧，幅度随缩放/距离自适应
+function curveOffsetPx(curveIndex, distancePx) {
+  const step = Math.max(30, distancePx * 0.18);
+  const magnitude = step * Math.ceil(curveIndex / 2);
+  const side = curveIndex % 2 === 1 ? 1 : -1;
+  return magnitude * side;
+}
+
+
+// 计算一条二次贝塞尔曲线的屏幕像素采样点：控制点 = 起终点中点，沿垂直方向偏移 offsetPx
+function computeCurveScreenPoints(from, to, offsetPx) {
+  const L = window.L;
+  const zoom = mapState.map.getZoom();
+  const p1 = mapState.map.project(L.latLng(from.y, from.x), zoom);
+  const p2 = mapState.map.project(L.latLng(to.y, to.x), zoom);
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+  const nx = -dy / dist;
+  const ny = dx / dist;
+  const control = {
+    x: (p1.x + p2.x) / 2 + nx * offsetPx,
+    y: (p1.y + p2.y) / 2 + ny * offsetPx,
+  };
+
+  const points = [];
+  for (let i = 0; i <= CURVE_SEGMENTS; i++) {
+    const t = i / CURVE_SEGMENTS;
+    const mt = 1 - t;
+    points.push({
+      x: mt * mt * p1.x + 2 * mt * t * control.x + t * t * p2.x,
+      y: mt * mt * p1.y + 2 * mt * t * control.y + t * t * p2.y,
+    });
+  }
+  return points;
+}
+
+
+// 从曲线终点往回走 backOffsetPx（屏幕像素），找到箭头该停靠的点、该处切线角度，
+// 以及"保留到这个点为止"的采样点截断下标（用于画线身，不让线穿到箭头前面）
+function pointAndAngleAlongScreenPoints(points, backOffsetPx) {
+  let remaining = backOffsetPx;
+  for (let i = points.length - 1; i > 0; i--) {
+    const a = points[i];
+    const b = points[i - 1];
+    const segDx = a.x - b.x;
+    const segDy = a.y - b.y;
+    const segLen = Math.sqrt(segDx * segDx + segDy * segDy) || 0.0001;
+    if (remaining <= segLen) {
+      const ratio = remaining / segLen;
+      const point = { x: a.x - segDx * ratio, y: a.y - segDy * ratio };
+      const angle = (Math.atan2(segDy, segDx) * 180) / Math.PI;
+      return { point, angle, cutIndex: i };
+    }
+    remaining -= segLen;
+  }
+  // 曲线总长比 backOffsetPx 还短（极短路线），退化到起点附近
+  const first = points[0];
+  const second = points[1] || points[0];
+  const angle = (Math.atan2(second.y - first.y, second.x - first.x) * 180) / Math.PI;
+  return { point: first, angle, cutIndex: 1 };
+}
+
+
 export function openRouteForm(fromMarker, toMarker) {
   const L = window.L;
   const defaultBearing = computeBearingText(fromMarker, toMarker);
+
+  // 一次性预填数据：来自"后续行动"，队伍信息、上一段的到达时间直接带过来（读完即清空，不影响下一次）
+  const followUp = mapState.routeFollowUp;
+  mapState.routeFollowUp = null;
+  const defaultParty = followUp?.party || "";
+  const defaultDepart = followUp?.departTime || "";
 
   const formHtml = `
         <div class="mm-form-popup mm-route-form">
@@ -152,9 +251,9 @@ export function openRouteForm(fromMarker, toMarker) {
             <label>距离（可留空）</label>
             <input type="text" id="mm-r-distance" placeholder="例如：20公里">
             <label>队伍信息 *</label>
-            <input type="text" id="mm-r-party" placeholder="例如：黑风小队200人">
+            <input type="text" id="mm-r-party" value="${escapeHtml(defaultParty)}" placeholder="例如：黑风小队200人">
             <label>预计出发时间（可留空）</label>
-            <input type="text" id="mm-r-depart" placeholder="例如：七月十五日卯时">
+            <input type="text" id="mm-r-depart" value="${escapeHtml(defaultDepart)}" placeholder="例如：七月十五日卯时">
             <label>预计到达时间 *</label>
             <input type="text" id="mm-r-arrive" placeholder="例如：七月十五日酉时">
             <div class="mm-form-actions">
@@ -235,34 +334,61 @@ export function renderAllRoutes() {
   if (!isBigMapActive()) return; // 小地图没有路线概念
   const map = getActiveMap();
   const markerById = Object.fromEntries(map.markers.map((m) => [m.id, m]));
+
+  // 同一起点→终点可能有多条路线（不同队伍）：第一条画直线，
+  // 后面的按出现顺序编号，画成左右交替的曲线，避免完全重叠。
+  const groupSeen = {};
   (map.routes || []).forEach((r) => {
     const from = markerById[r.fromId];
     const to = markerById[r.toId];
     if (!from || !to) return; // 引用的标记已被删除，忽略（不渲染，也不在这里清理数据）
-    addLeafletRoute(r, from, to);
+    const key = `${r.fromId}__${r.toId}`;
+    const curveIndex = groupSeen[key] || 0;
+    groupSeen[key] = curveIndex + 1;
+    addLeafletRoute(r, from, to, curveIndex);
   });
 }
 
 
-export function addLeafletRoute(route, from, to) {
+export function addLeafletRoute(route, from, to, curveIndex = 0) {
   const L = window.L;
   const color = colorForFaction(from.faction); // 颜色跟随出发点标记的所属势力
-
-  const headLatLng = pointAlongLine(from, to, 22);
-  const angle = computeRouteAngle(from, to);
   const tooltipText = `${from.name} → ${to.name}`;
 
-  const line = L.polyline(
-    [
+  let latlngs;
+  let headLatLng;
+  let angle;
+
+  if (curveIndex === 0) {
+    // 该起终点组的第一条：保持原来的直线画法
+    headLatLng = pointAlongLine(from, to, 22);
+    angle = computeRouteAngle(from, to);
+    latlngs = [
       [from.y, from.x],
       [headLatLng.lat, headLatLng.lng],
-    ],
-    {
-      color,
-      weight: 3,
-      opacity: 0.85,
-    },
-  ).addTo(mapState.routesLayer);
+    ];
+  } else {
+    // 同组后续路线：错开画成曲线，避免和前面的线重叠
+    const zoom = mapState.map.getZoom();
+    const { dx, dy } = computeScreenVector(from, to);
+    const distPx = Math.sqrt(dx * dx + dy * dy) || 1;
+    const offsetPx = curveOffsetPx(curveIndex, distPx);
+    const screenPoints = computeCurveScreenPoints(from, to, offsetPx);
+    const { point: headPoint, angle: headAngle, cutIndex } = pointAndAngleAlongScreenPoints(screenPoints, 22);
+    const trimmedPoints = screenPoints.slice(0, cutIndex).concat([headPoint]);
+    latlngs = trimmedPoints.map((p) => {
+      const ll = mapState.map.unproject(L.point(p.x, p.y), zoom);
+      return [ll.lat, ll.lng];
+    });
+    headLatLng = mapState.map.unproject(L.point(headPoint.x, headPoint.y), zoom);
+    angle = headAngle;
+  }
+
+  const line = L.polyline(latlngs, {
+    color,
+    weight: 3,
+    opacity: 0.85,
+  }).addTo(mapState.routesLayer);
   line.bindTooltip(tooltipText, { sticky: true });
 
   const headIcon = L.divIcon({
@@ -281,12 +407,60 @@ export function addLeafletRoute(route, from, to) {
 
   const onRouteClick = (e) => {
     L.DomEvent.stopPropagation(e);
-    if (confirm(`删除路线"${tooltipText}"？`)) {
-      deleteRoute(route.id);
-    }
+    openRouteActionsPopup(route, from, to);
   };
   line.on("click", onRouteClick);
   head.on("click", onRouteClick);
+}
+
+
+// 点击路线弹出的操作层：后续行动 / 删除路线（删除不做二次确认）
+export function openRouteActionsPopup(route, from, to) {
+  const L = window.L;
+  const tooltipText = `${from.name} → ${to.name}`;
+
+  const html = `
+        <div class="mm-form-popup mm-route-actions">
+            <div class="mm-route-form-title">${escapeHtml(tooltipText)}</div>
+            ${route.party ? `<div class="mm-route-actions-party">${escapeHtml(route.party)}</div>` : ""}
+            <div class="mm-form-actions">
+                <button id="mm-ra-delete" class="mm-danger">删除路线</button>
+                <button id="mm-ra-followup">后续行动</button>
+            </div>
+        </div>`;
+
+  mapState.pendingFormContext = { type: "route-actions", route, from, to };
+
+  L.popup({
+    closeButton: false,
+    minWidth: 200,
+    autoPan: true,
+  })
+    .setLatLng([to.y, to.x])
+    .setContent(html)
+    .openOn(mapState.map);
+}
+
+
+export function bindRouteActionsEvents(root, ctx) {
+  const { route, to } = ctx;
+
+  const deleteBtn = root.querySelector("#mm-ra-delete");
+  const followUpBtn = root.querySelector("#mm-ra-followup");
+
+  if (deleteBtn) {
+    deleteBtn.onclick = () => {
+      mapState.map.closePopup();
+      deleteRoute(route.id);
+    };
+  }
+
+  if (followUpBtn) {
+    followUpBtn.onclick = () => {
+      mapState.map.closePopup();
+      beginFollowUpRoute(route, to);
+    };
+  }
 }
 
 

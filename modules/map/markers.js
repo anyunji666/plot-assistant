@@ -1,7 +1,7 @@
 "use strict";
 
 import { colorForFaction, escapeHtml, getActiveMap, getSettings, isBigMapActive, mapState, saveSettings } from "./data.js";
-import { beginRouteFromMarker, bindRouteFormEvents, handleRoutePointClick, renderAllRoutes, renderRouteList } from "./routes.js";
+import { beginRouteFromMarker, bindRouteActionsEvents, bindRouteFormEvents, handleRoutePointClick, renderAllRoutes, renderRouteList } from "./routes.js";
 import { scheduleMapInfoSync, toggleMobileSidebar } from "./ui.js";
 
 
@@ -113,6 +113,11 @@ export function bindPopupFormEvents() {
 
     if (ctx.type === "route") {
       bindRouteFormEvents(root, ctx);
+      return;
+    }
+
+    if (ctx.type === "route-actions") {
+      bindRouteActionsEvents(root, ctx);
       return;
     }
 
