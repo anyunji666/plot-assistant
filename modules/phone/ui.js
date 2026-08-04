@@ -1579,7 +1579,11 @@ export async function openPhoneModal() {
   phoneUIState.activeChatCharacter = null;
   const globalBg = await getPhoneGlobalBackground();
   applyPhoneGlobalBackground(globalBg);
-  document.getElementById("pa-phone-modal-overlay").showModal();
+  const overlayEl = document.getElementById("pa-phone-modal-overlay");
+  overlayEl.showModal();
+  // showModal() 默认会把焦点丢给弹窗内第一个可聚焦元素（即关闭按钮），
+  // 部分移动端 webview 会渲染出默认焦点框；这里手动把焦点从按钮上移开，避免出现该框。
+  document.getElementById("pa-phone-close-btn")?.blur();
   await switchPhoneTab("contacts");
 }
 

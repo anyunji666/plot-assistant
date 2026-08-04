@@ -204,6 +204,14 @@
     color: #fff;
     cursor: pointer;
     padding: 4px 6px;
+    outline: none;
+}
+
+/* dialog.showModal() 默认会把焦点给弹窗内第一个可聚焦元素（这里是关闭按钮），
+   浏览器会显示原生焦点框；鼠标点击时不需要这个框，只在键盘 Tab 导航时才保留，兼顾可访问性。 */
+#pa-phone-header button:focus-visible {
+    outline: 1px solid rgba(255,255,255,0.6);
+    outline-offset: 2px;
 }
 
 #pa-phone-back-btn {
