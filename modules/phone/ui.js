@@ -642,10 +642,10 @@ export function buildPhoneModalSkeleton() {
             <div id="pa-phone-base-color-layer"></div>
             <div id="pa-phone-global-bg-layer"></div>
             <div id="pa-phone-header">
-                <button id="pa-phone-back-btn" class="pa-phone-hidden" title="返回" style="background:none;border:none;color:#fff;cursor:pointer;">‹</button>
-                <button id="pa-phone-close-btn" title="关闭" style="background:none;border:none;color:#fff;cursor:pointer;">✕</button>
+                <button id="pa-phone-back-btn" class="pa-phone-hidden" title="返回" style="background:none;border:none;-webkit-appearance:none;appearance:none;color:#fff;cursor:pointer;">‹</button>
+                <button id="pa-phone-close-btn" title="关闭" style="background:none;border:none;-webkit-appearance:none;appearance:none;color:#fff;cursor:pointer;">✕</button>
                 <span id="pa-phone-header-title">通讯录</span>
-                <button id="pa-phone-action-btn" class="pa-phone-hidden"></button>
+                <button id="pa-phone-action-btn" class="pa-phone-hidden" style="-webkit-appearance:none;appearance:none;"></button>
                 <div id="pa-phone-action-menu" class="pa-phone-hidden">
                     <button id="pa-phone-action-menu-clear">清空对话</button>
                     <button id="pa-phone-action-menu-avatar">上传头像</button>

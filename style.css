@@ -199,6 +199,8 @@
     transform: translateY(-50%);
     background: none;
     border: none;
+    -webkit-appearance: none;
+    appearance: none;
     color: #fff;
     cursor: pointer;
     padding: 4px 6px;
@@ -220,6 +222,8 @@
     transform: translateY(-50%);
     background: none;
     border: none;
+    -webkit-appearance: none;
+    appearance: none;
     color: #fff;
     cursor: pointer;
     padding: 4px 6px;
