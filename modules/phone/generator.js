@@ -320,7 +320,10 @@ export function clearPhoneSlotPromptAfterRound() {
     const phoneState = getPhoneChatState();
     // 只清掉这一轮实际注入了的角色。没被注入的——剧情日期没对上、或者注入快照之后、
     // 这轮生成结束之前又新产生的 pending——继续保留，等下一轮再补注入，不会被这里误清掉。
+    // 忙碌中的角色额外保留 pending=true：只要 busy 状态没被正文 AI 用 [REMOVE] 解除，
+    // 私信内容就每轮持续注入，直到 busy 解除的下一轮才会走到这里被清空（此时 busy[name] 已不存在）。
     lastInjectedPhoneNames.forEach((name) => {
+      if (phoneState.busy[name]) return;
       phoneState.pendingInjection[name] = false;
     });
     lastInjectedPhoneNames = [];
