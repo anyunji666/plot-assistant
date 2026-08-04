@@ -435,6 +435,7 @@ export const RELATIONSHIP_STAGE_WORDS = [
   "相熟",
   "好感",
   "暧昧",
+  "亲密",
   "恋人",
   "未婚夫妻",
   "夫妻",
