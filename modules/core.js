@@ -1,6 +1,5 @@
 "use strict";
 
-
 // =====================================================================================
 // 剧情助手（原生 SillyTavern 第三方扩展，不依赖「酒馆助手」插件）
 // 全部使用 SillyTavern.getContext() 暴露的原生接口：
@@ -60,7 +59,6 @@ export const PRE_EMPHASIS_ENTRY_DEFAULTS = {
   probability: 100,
 };
 
-
 // "对话前强调"条目首次创建前（世界书里还没有这条条目时）用于预填编辑框的默认内容——
 // 即摘要输出协议全文，与插件本身的解析逻辑（parseSummaryLayer / applyNumericMapUpdates 等）保持一致。
 // 仅用于"首次打开编辑框时给你一个起点"，默认不启用（disable: true）；一旦你保存过一次（无论是否修改），
@@ -80,7 +78,7 @@ Relationships: \${{{user}}→角色: 关系词}
 Inventory: \${角色名·物品名: 数量}
 Setups: \${角色名·关键词: 简介}
 Busy: \${仅当<snapshot_table>标签内Busy列表角色本轮未出现或拿“通讯器”回复消息时才输出，格式见下方Busy规则}
-ExpiredChapter: \${仅当被要求判断当前章节是否已演绎完/过时时才输出。其余时候不输出，不要自行发起判断}
+ExpiredChapter: \${仅当前文有要求输出ExpiredChapter时才输出，无要求则忽略此字段}
 Overview: \${本轮关键事件按时间顺序列出}
 </details>
 \`\`\`
@@ -157,11 +155,9 @@ Overview: {{user}}向角色A表明心意确定恋人关系；与角色B切磋加
 </details>
 \`\`\``;
 
-
 export const GENERATION_TIMEOUT = 300000; // 5分钟生成超时时间
 
 export const STEP_DELAY = 300; // 批次之间的延迟（毫秒）
-
 
 export const STATUS_TABLE_TITLE = "状态表"; // 结构化数据表世界书条目固定标题，与"小总结：起-止""大总结"同级存在
 
@@ -174,7 +170,6 @@ export const STATUS_TABLE_ENTRY_DEFAULTS = {
   order: 666,
   probability: 100,
 };
-
 
 // 小总结条目的默认位置设置：用"@D 在深度"，深度定得比状态表深一点（深度6）。
 // 触发方式为条件触发（非常驻），靠世界书自身的关键词匹配机制决定是否注入，
@@ -192,7 +187,6 @@ export const SMALL_SUMMARY_ENTRY_DEFAULTS = {
   probability: 100,
 };
 
-
 // 角色卡条目标题前缀，后面拼接角色名，与"小总结：""大总结""状态表""对话前强调""地图信息"同级存在于同一本总结世界书。
 export const CHARACTER_ENTRY_TITLE_PREFIX = "角色卡：";
 
@@ -202,7 +196,6 @@ export const CHARACTER_ENTRY_DEFAULTS = {
   order: 100,
   probability: 100,
 };
-
 
 // 章节条目标题前缀，后面拼接章节名，与"小总结：""大总结""状态表""对话前强调""地图信息""角色卡："
 // 同级存在于同一本总结世界书；用于录入原著章节名+概述（供 AI 查阅参考的原著内容，而非同人创作正文本身），
@@ -247,7 +240,6 @@ export const EXPIRED_CHAPTER_FIELD_LABEL = "ExpiredChapter";
 export const EXPIRED_CHAPTER_INSTRUCTION =
   '参考已注入的 <chapter_reference chapter="章节名"> 标签，若你判断该章节内容已被正文完整演绎或已过时无参考价值，则在摘要块追加 `ExpiredChapter: {与chapter属性一致的章节名}`；否则该字段留空。该字段需写在 Overview 字段之前的独立一行。';
 
-
 // === 手机（通讯器）私信系统相关常量 ===
 // 本地对话缓存（LOCAL_CHAT_STORE_KEY）里存放"忙/闲判定缓存 + 待注入私信槽位标记"的 key，
 // 跟起始楼层偏移量同一套持久化方式（浏览器本地存储），按"角色卡+对话文件"区分，换对话/换角色卡互不干扰。
@@ -281,7 +273,6 @@ export const PHONE_SLOT_PROMPT_KEY = "plotAssistant_phoneSlot";
 // 用法跟 PHONE_SLOT_PROMPT_KEY 一样：生成前注入、渲染完清空，不常驻。
 export const PHONE_INVENTORY_PROMPT_KEY = "plotAssistant_inventoryChangeSlot";
 
-
 export const SUMMARY_BUTTON_ID = "summary-assistant-menu-button";
 
 export const SUMMARY_BUTTON_ICON = "fa-solid fa-book";
@@ -294,7 +285,6 @@ export const SUMMARY_POPUP_ID = "summary-assistant-popup";
 
 export const GENERATING_OVERLAY_ID = "summary-assistant-generating-overlay";
 
-
 // 起始楼层（原"接续小总结"的偏移量）：持久化存在浏览器本地（localStorage），按"角色卡+对话文件"
 // 区分不同对话，重开同一个对话不会丢，换到别的对话也不会互相干扰；只有你再次点击"设定起始楼层"
 // 并确认新值时才会覆盖。注意：这是存在浏览器本地的，换浏览器/清浏览器数据/控制面板里点"清空数据"都会丢，
@@ -302,12 +292,10 @@ export const GENERATING_OVERLAY_ID = "summary-assistant-generating-overlay";
 // 语义：本对话新写入的小总结，世界书楼层号从这个值开始编号。默认/未设置视为 0（不偏移）。
 export const OFFSET_META_KEY = "plotAssistant_summaryOffset";
 
-
 // === Helper: 获取酒馆原生 context（每次都取最新的，避免切换角色/对话后引用过期） ===
 export function getCtx() {
   return SillyTavern.getContext();
 }
-
 
 // === Helper: 提示条 ===
 export function notify(type, message) {
@@ -319,7 +307,6 @@ export function notify(type, message) {
   }
 }
 
-
 // === Helper: "自动小总结"手动停止时用来提前中断当前批次内层循环的信号类 ===
 // 与普通生成失败区分开：捕获到这个错误时不应弹出失败提示，而是按"用户主动停止"处理。
 export class SummaryStopRequestedError extends Error {
@@ -328,7 +315,6 @@ export class SummaryStopRequestedError extends Error {
     this.name = "SummaryStopRequestedError";
   }
 }
-
 
 // === Helper: 错误捕获包装 ===
 export function errorCatched(fn) {
@@ -346,7 +332,6 @@ export function errorCatched(fn) {
   };
 }
 
-
 // === 本地对话缓存：起始楼层记录 + 私信忙闲缓存都存在这一份 localStorage 里 ===
 // 原来存在酒馆的 chatMetadata 里（跟着对话文件本身持久化），现在改成存浏览器本地，
 // 换来的好处是控制面板"清空数据"能一次性清掉所有对话的这两项缓存；代价是这份数据
@@ -355,11 +340,9 @@ export function errorCatched(fn) {
 // "角色卡 avatar 文件名::当前对话文件名" 区分不同对话（暂不支持群聊）。
 export const LOCAL_CHAT_STORE_KEY = "plotAssistant_localChatStore";
 
-
 export let localChatStoreCache = null; // 惰性加载：整份 JSON 只解析一次，后续都在内存里改，改完整份写回
 
 export let transientChatMetadataStore = null; // 拿不到稳定 key（比如没选中角色卡）时的内存兜底，不持久化
-
 
 // 从 localStorage 读整份本地对话缓存到内存，只在第一次调用时真正解析 JSON
 export function loadLocalChatStore() {
@@ -377,7 +360,6 @@ export function loadLocalChatStore() {
   }
   return localChatStoreCache;
 }
-
 
 // 拼一个能区分"具体某个对话"的稳定 key：角色卡 avatar 文件名 + 当前对话文件名。
 // 拿不到（未选中角色卡、群聊、或酒馆版本没暴露 getCurrentChatId 等）时返回 null，
@@ -399,7 +381,6 @@ export function getStableChatKey() {
   }
 }
 
-
 // === Helper: 拿到"当前对话"的本地缓存对象（起始楼层记录 + 私信忙闲缓存都存在这里）===
 export function getChatMetadataStore() {
   const key = getStableChatKey();
@@ -411,7 +392,6 @@ export function getChatMetadataStore() {
   if (!root[key] || typeof root[key] !== "object") root[key] = {};
   return root[key];
 }
-
 
 // === Helper: 把 getChatMetadataStore() 的改动写回 localStorage（内存兜底的情况没地方可写，直接跳过）===
 export async function persistChatMetadata() {
@@ -427,7 +407,6 @@ export async function persistChatMetadata() {
   }
 }
 
-
 // === Helper: 读取"本对话"已设定的起始楼层记录，未设置过返回 null ===
 export function getOffsetRecord() {
   const store = getChatMetadataStore();
@@ -437,7 +416,6 @@ export function getOffsetRecord() {
   return record;
 }
 
-
 // === Helper: 设定/覆盖"本对话"的起始楼层（每次点"设定起始楼层"并确认后调用，属于用户主动操作）===
 export async function setOffsetRecord(offset) {
   const store = getChatMetadataStore();
@@ -445,10 +423,8 @@ export async function setOffsetRecord(offset) {
   await persistChatMetadata();
 }
 
-
 // === Helper: Delay Function ===
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 
 // === Helper: 统一的"功能说明 + 确认"弹窗（原生 Popup），三个总结按钮点击后的第一步 ===
 export async function confirmAction(title, messageHtml) {
