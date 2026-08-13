@@ -80,7 +80,7 @@ Relationships: \${{{user}}→角色: 关系词}
 Inventory: \${角色名·物品名: 数量}
 Setups: \${角色名·关键词: 简介}
 Busy: \${仅当<snapshot_table>标签内Busy列表角色本轮未出现或拿“通讯器”回复消息时才输出，格式见下方Busy规则}
-ExpiredChapter: \${仅当被临时要求判断当前章节是否已演绎完/过时时才输出，格式见下方ExpiredChapter规则}
+ExpiredChapter: \${仅当被要求判断当前章节是否已演绎完/过时时才输出，格式见下方ExpiredChapter规则}
 Overview: \${本轮关键事件按时间顺序列出}
 </details>
 \`\`\`
@@ -135,9 +135,9 @@ for 角色 in 已注入的<snapshot_table>标签内Busy列表:
 # 值只能是[REMOVE]，这是Busy字段唯一合法的值；不要自己新增角色到Busy、不要写"忙"这类其它取值
 \`\`\`
 
-**ExpiredChapter**（仅当生成前被临时要求判断章节演绎进度时才输出这个字段，其余时候不输出，不要自行发起判断）
+**ExpiredChapter**（仅当被要求判断章节演绎进度时才输出这个字段，其余时候不输出，不要自行发起判断）
 \`\`\`
-若判断已注入的<chapter_reference chapter="...">对应章节已被正文完整演绎或已过时无参考价值: 值 = 章节名（须与chapter属性完全一致）
+若判断已注入的<chapter_reference chapter="章节名">对应章节已被正文完整演绎或已过时无参考价值: 值 = 章节名（须与chapter属性完全一致）
 否则: 跳过，不输出这个字段
 \`\`\`
 
@@ -246,12 +246,12 @@ export const EXPIRED_CHAPTER_PROMPT_KEY = "plotAssistant_expiredChapterPrompt";
 // 摘要块里新增字段的标签名，跟 Busy 字段是同一种"仅触发时才输出"的写法。
 export const EXPIRED_CHAPTER_FIELD_LABEL = "ExpiredChapter";
 
-// 生成前注入给 AI 的判定指令原文：要求 AI 结合已注入的 <chapter_reference chapter="..."> 标签自行判断
+// 生成前注入给 AI 的判定指令原文：要求 AI 结合已注入的 <chapter_reference chapter="章节名"> 标签自行判断
 // 当前章节是否已经演绎完/过时，并在摘要块里用 ExpiredChapter 字段回报，报的章节名需要跟 chapter 属性一致，
 // 插件才能精确核对是"针对哪一章"的信号。要求写在 Overview 字段之前——Overview 字段的解析正则会贪婪吃到
 // 字符串末尾（跟 Busy 字段必须写在 Overview 前面是同一个原因），写在后面会被吞进 Overview 文本里。
 export const EXPIRED_CHAPTER_INSTRUCTION =
-  '参考已注入的 <chapter_reference chapter="..."> 标签，若你判断该章节内容已被正文完整演绎或已过时无参考价值，则在摘要块追加 `ExpiredChapter: {与chapter属性一致的章节名}`；否则该字段留空。该字段需写在 Overview 字段之前的独立一行。';
+  '参考已注入的 <chapter_reference chapter="章节名"> 标签，若你判断该章节内容已被正文完整演绎或已过时无参考价值，则在摘要块追加 `ExpiredChapter: {与chapter属性一致的章节名}`；否则该字段留空。该字段需写在 Overview 字段之前的独立一行。';
 
 
 // === 手机（通讯器）私信系统相关常量 ===
