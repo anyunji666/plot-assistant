@@ -137,7 +137,7 @@ for 角色 in 已注入的<snapshot_table>标签内Busy列表:
 
 **ExpiredChapter**（仅当被要求判断章节演绎进度时才输出这个字段，其余时候不输出，不要自行发起判断）
 \`\`\`
-若判断已注入的<chapter_reference chapter="章节名">对应章节已被正文完整演绎或已过时无参考价值: 值 = 章节名（须与chapter属性完全一致）
+若判断已注入的<chapter_reference chapter="章节名">已完整演绎或已过时无参考价值: 值 = 章节名（须与chapter属性完全一致）
 否则: 跳过，不输出这个字段
 \`\`\`
 
