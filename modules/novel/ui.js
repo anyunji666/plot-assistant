@@ -221,6 +221,28 @@ export async function openNovelEntryDialog() {
   $overlay.append($box);
   $("body").append($overlay);
 
+  // 移动端键盘弹出时的高度/位置纠正：CSS 的 100dvh 在不少移动端浏览器/WebView 里并不会
+  // 随软键盘弹出而收缩（dvh 主要针对地址栏收起设计，键盘不一定计入），导致 $box 高度、
+  // 位置都没变化，只是被键盘从下往上盖住；此时浏览器把聚焦的输入框滚入可视区域，会连带
+  // 把贴底的按钮行"滚"到概述框原来的位置。这里改用 window.visualViewport 实时读取真正
+  // 可见的视口尺寸，动态纠正 $box 的 maxHeight / top，让按钮行始终贴在真实可见区域底部。
+  // 不支持 visualViewport 的环境（极少数老浏览器）会退回最初的纯 CSS dvh 效果。
+  function updateBoxForViewport() {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const topOffset = vv.offsetTop + 12;
+    const availableHeight = vv.height - 24;
+    $box.css({
+      top: `${topOffset}px`,
+      maxHeight: `${Math.min(window.innerHeight * 0.85, availableHeight)}px`,
+    });
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", updateBoxForViewport);
+    window.visualViewport.addEventListener("scroll", updateBoxForViewport);
+    updateBoxForViewport();
+  }
+
   // 当前正在编辑的条目 uid；null 表示"新建模式"。
   let editingUid = null;
   let chaptersCache = [];
@@ -348,6 +370,10 @@ export async function openNovelEntryDialog() {
 
   function closeDialog() {
     $(document).off("keydown.novelEntryDialog");
+    if (window.visualViewport) {
+      window.visualViewport.removeEventListener("resize", updateBoxForViewport);
+      window.visualViewport.removeEventListener("scroll", updateBoxForViewport);
+    }
     $overlay.remove();
     $bodyEl.css("overflow", prevBodyOverflow || "");
   }
