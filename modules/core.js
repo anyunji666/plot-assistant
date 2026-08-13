@@ -80,7 +80,7 @@ Relationships: \${{{user}}→角色: 关系词}
 Inventory: \${角色名·物品名: 数量}
 Setups: \${角色名·关键词: 简介}
 Busy: \${仅当<snapshot_table>标签内Busy列表角色本轮未出现或拿“通讯器”回复消息时才输出，格式见下方Busy规则}
-ExpiredChapter: \${仅当被要求判断当前章节是否已演绎完/过时时才输出，格式见下方ExpiredChapter规则}
+ExpiredChapter: \${仅当被要求判断当前章节是否已演绎完/过时时才输出。其余时候不输出，不要自行发起判断}
 Overview: \${本轮关键事件按时间顺序列出}
 </details>
 \`\`\`
@@ -133,12 +133,6 @@ for 角色 in 已注入的<snapshot_table>标签内Busy列表:
     else: 跳过，不输出这个角色
 # 格式：角色名: [REMOVE]；
 # 值只能是[REMOVE]，这是Busy字段唯一合法的值；不要自己新增角色到Busy、不要写"忙"这类其它取值
-\`\`\`
-
-**ExpiredChapter**（仅当被要求判断章节演绎进度时才输出这个字段，其余时候不输出，不要自行发起判断）
-\`\`\`
-若判断已注入的<chapter_reference chapter="章节名">已完整演绎或已过时无参考价值: 值 = 章节名（须与chapter属性完全一致）
-否则: 跳过，不输出这个字段
 \`\`\`
 
 **Overview**（无实质进展留空，不超150字）
