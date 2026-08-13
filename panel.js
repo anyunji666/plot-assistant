@@ -3,6 +3,7 @@
 import { saveSettingsDebounced } from "../../../../script.js";
 import { extension_settings } from "../../../extensions.js";
 import { openCreateCharacterDialog } from "./modules/character.js";
+import { getActiveNovelChapterUid, listNovelChapterEntries, openNovelEntryDialog, setActiveNovelChapter } from "./modules/novel.js";
 import { LOCAL_CHAT_STORE_KEY, PHONE_IDB_NAME, SUMMARY_POPUP_ID, errorCatched, getCtx, getOffsetRecord, localChatStoreCache, notify, transientChatMetadataStore } from "./modules/core.js";
 import { IDB_NAME, MAP_MODULE_NAME, getFabVisible, setFabVisibleSetting } from "./modules/map/data.js";
 import { FAB_POS_KEY, applyFabVisibility, openModal, resetFabPos } from "./modules/map/ui.js";
@@ -12,6 +13,16 @@ import { PHONE_FAB_POS_KEY, applyPhoneFabVisibility, openPhonePresetDialog, rese
 import { ensureSummaryLorebookOnLoad, runAutoLargeSummary, runAutoSmallSummary, runSetOffset } from "./modules/summary/generator.js";
 import { openPreEmphasisDialog } from "./modules/summary/ui.js";
 import { getLorebookEntriesSummaryHtml, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, mountSummaryLorebookGlobally, notifyWorldInfoUpdated } from "./modules/worldinfo.js";
+
+
+// === Helper: 转义 HTML 特殊字符（章节名是用户自由输入的，拼进 <option> 前需要转义） ===
+function escapeNovelChapterLabel(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
 
 // === Function: 删除一个 IndexedDB 数据库（用于"清空数据"）===
@@ -108,6 +119,24 @@ export async function showSummaryPopup() {
       ? `第 ${currentOffsetRecord.offset} 层`
       : "未设置（默认第 0 层，不偏移）";
 
+    // "当前进度"下拉框数据：章节列表已经按标题里的序号排好序，直接用于展示；
+    // 同时探测当前哪一章处于启用状态，作为下拉框默认选中项。
+    const novelChapters = await listNovelChapterEntries(summaryLorebookName);
+    const { activeUid: activeNovelChapterUid, hasConflict: novelChapterConflict } =
+      await getActiveNovelChapterUid(summaryLorebookName);
+    const novelChapterOptionsHTML =
+      novelChapters.length === 0
+        ? `<option value="">暂无章节，请先录入</option>`
+        : [`<option value=""${activeNovelChapterUid === null ? " selected" : ""}>-- 不启用任何章节 --</option>`]
+            .concat(
+              novelChapters.map((chapter) => {
+                const orderLabel = String(chapter.order).padStart(3, "0");
+                const selected = chapter.uid === activeNovelChapterUid ? " selected" : "";
+                return `<option value="${chapter.uid}"${selected}>${orderLabel} ${escapeNovelChapterLabel(chapter.name)}</option>`;
+              }),
+            )
+            .join("");
+
     const popupContent = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #444;">
         <h3 style="margin: 0; color: #e0e0e0; font-weight: 500; font-size: 18px;">剧情助手控制面板</h3>
@@ -125,6 +154,18 @@ export async function showSummaryPopup() {
             <button id="${POPUP_ID}-auto-large" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">自动大总结</button>
           </div>
           <div style="margin-top: 8px; font-size: 12px; color: #888;">本对话当前起始楼层：<span style="color: #aaa;">${currentOffsetDisplay}</span></div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">同人小说</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+            <button id="${POPUP_ID}-novel-entry" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">同人小说录入</button>
+            <span style="color: #888; font-size: 12px;">当前进度：</span>
+            <select id="${POPUP_ID}-novel-chapter-select" ${novelChapters.length === 0 ? "disabled" : ""} style="background: #262626; color: #ddd; border: 1px solid #444; border-radius: 4px; padding: 6px 8px; font-size: 13px; max-width: 200px;">
+              ${novelChapterOptionsHTML}
+            </select>
+          </div>
+          ${novelChapterConflict ? `<div style="margin-top: 6px; font-size: 12px; color: #e0a030;">检测到不止一章同时启用（可能在原生世界书面板里手动改过），下拉框暂显示序号最小的一章；重新选择一次即可统一收敛为一章。</div>` : ""}
         </div>
 
         <div style="margin-bottom: 20px;">
@@ -296,6 +337,33 @@ export async function showSummaryPopup() {
       .on("click", () => {
         closePopup();
         runAutoLargeSummary();
+      })
+      .hover(
+        function () {
+          $(this).css("background", "#2c5d9e");
+        },
+        function () {
+          $(this).css("background", "#3a7bd5");
+        },
+      );
+
+    $(`#${POPUP_ID}-novel-chapter-select`).on("change", async function () {
+      const val = $(this).val();
+      const targetUid = val === "" ? null : parseInt(val, 10);
+      const label = $(this).find("option:selected").text();
+      try {
+        await setActiveNovelChapter(summaryLorebookName, targetUid);
+        notify("success", `已切换到「${label}」`);
+      } catch (error) {
+        console.error("[剧情助手] 切换原著章节进度失败:", error);
+        notify("error", `切换失败：${error.message || error}`);
+      }
+    });
+
+    $(`#${POPUP_ID}-novel-entry`)
+      .on("click", () => {
+        closePopup();
+        openNovelEntryDialog();
       })
       .hover(
         function () {

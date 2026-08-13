@@ -1,6 +1,6 @@
 "use strict";
 
-import { MAP_INFO_TITLE, getCtx, notify } from "../core.js";
+import { MAP_INFO_ENTRY_DEFAULTS, MAP_INFO_TITLE, getCtx, notify } from "../core.js";
 import { BIG_MAP_ID, BIG_MAP_SUMMARY_PLACEHOLDER, PALETTE, SMALL_MAP_NOTE_PLACEHOLDER, clearCurrentCharacterImages, deleteImage, escapeHtml, getActiveMap, getActiveMapId, getFabVisible, getMapCurrentCharacterName, getMapExtRoot, getSettings, isBigMapActive, loadImage, loadLeaflet, makeCharacterMapData, makeSmallMap, mapState, saveImage, saveSettings } from "./data.js";
 import { bindPopupFormEvents, openMarkerForm, renderAllMarkers, renderMarkerList } from "./markers.js";
 import { cancelRouteMode, renderAllRoutes, renderRouteList, startRouteMode } from "./routes.js";
@@ -1069,6 +1069,7 @@ export async function syncMapInfoEntry(force = false) {
       MAP_INFO_TITLE,
       content,
       true,
+      MAP_INFO_ENTRY_DEFAULTS,
     );
   } catch (err) {
     console.warn("[剧情助手/地图] 同步「地图信息」世界书条目失败：", err);

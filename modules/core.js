@@ -30,6 +30,18 @@ export const PRE_EMPHASIS_TITLE = "对话前强调"; // 对话前强调世界书
 
 export const MAP_INFO_TITLE = "地图信息"; // 地图标记模块自动生成/覆盖的世界书条目固定标题，跟其他总结条目同级存在
 
+// 地图信息条目的插入位置：同样是"@D [系统]在深度"（position:4=atDepth，role:0=SYSTEM），
+// 但深度给1（比状态表/同人章节的深度0更靠前一点）、order给100（比同人章节的500更靠前），
+// 因为地图信息相对没那么需要紧贴最新消息。只在"首次创建"该条目时生效——已存在的条目
+// saveOrOverwriteLorebookEntry 只更新标题/内容，不会覆盖你已经手动调整过的位置设置。
+export const MAP_INFO_ENTRY_DEFAULTS = {
+  position: 4, // 原生 world_info_position: atDepth
+  depth: 1,
+  role: 0, // extension_prompt_roles: SYSTEM
+  order: 100,
+  probability: 100,
+};
+
 export const PHONE_PRESET_TITLE = "私信预设"; // 手机私信开场白预设世界书条目固定标题，跟角色卡条目一样 disable:true 常驻、不参与主线注入，插件直接读取内容使用
 
 // "私信预设"条目首次创建前用于预填编辑框的默认内容——手机私信生成提示词里唯一可编辑的部分（开场白/扮演指令），
@@ -186,6 +198,31 @@ export const CHARACTER_ENTRY_TITLE_PREFIX = "角色卡：";
 // 角色卡条目走关键词触发（selective），不是常驻类型：constant:false + key 数组即可，不需要额外的 position/depth 覆盖，
 // 用 saveOrOverwriteLorebookEntry 的默认位置（角色定义之前）就够了，只单独给一个 order，避免和其他常驻条目抢排序。
 export const CHARACTER_ENTRY_DEFAULTS = {
+  order: 100,
+  probability: 100,
+};
+
+
+// 章节条目标题前缀，后面拼接章节名，与"小总结：""大总结""状态表""对话前强调""地图信息""角色卡："
+// 同级存在于同一本总结世界书；用于录入原著章节名+概述（供 AI 查阅参考的原著内容，而非同人创作正文本身），
+// 让 AI 有据可查，而不是凭记忆回忆原著细节。
+export const NOVEL_ENTRY_TITLE_PREFIX = "原著章节：";
+
+// 写在 <chapter_reference> 标签内、概述正文之前的默认提示词，告诉 AI 这段是原著剧情概述、
+// 供演绎时参考而非照抄；新建/编辑章节条目时自动拼在概述前面，不需要每次手动打字。
+export const NOVEL_CHAPTER_REFERENCE_PROMPT =
+  "以下是原著小说的章节概述，仅供你在演绎时参考背景与走向，需结合实际情况自然演绎：";
+
+// 默认 disable:true（不常驻注入）：章节数量可能很多，全部常驻会挤占 token 预算，
+// 是否启用交由世界书面板手动控制，或配合后续按章节进度自动切换的功能使用。
+// constant:true（一旦启用就常驻注入，不依赖关键词匹配）：章节内容不适合靠关键词触发，
+// 应该是"当前章节"精确地被打开/关闭，而不是靠正文提到某个词才触发。
+// 插入位置与状态表同一套："@D [系统]在深度"（position:4=atDepth，role:0=SYSTEM），而不是"角色定义之前"，
+// 保证章节参考资料和状态表一样贴近最新消息、以系统身份注入。
+export const NOVEL_ENTRY_DEFAULTS = {
+  position: 4, // 原生 world_info_position: atDepth
+  depth: 0,
+  role: 0, // extension_prompt_roles: SYSTEM
   order: 100,
   probability: 100,
 };
