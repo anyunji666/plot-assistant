@@ -8,6 +8,7 @@ import { injectPhoneFloatingButton } from "./modules/phone/ui.js";
 import { registerPhoneSlotInjection } from "./modules/phone/generator.js";
 import { getSettings } from "./modules/map/data.js";
 import { injectFloatingButton, registerMapGlobalEvents, syncMapInfoEntry } from "./modules/map/ui.js";
+import { registerNovelAutoJump } from "./modules/novel/generator.js";
 
 
 // === Function: 在扩展菜单里插入「剧情助手」入口 ===
@@ -73,6 +74,9 @@ jQuery(() => {
   // --- 通讯器（手机）悬浮窗模块 ---
   injectPhoneFloatingButton(); // 默认关闭，只有之前手动开启过才会在这里显示出来
   registerPhoneSlotInjection(); // 私信槽位：生成前注入当天新私信，生成后立即清空
+
+  // --- 剧情录入模块：自动跳转章节（默认关闭，面板"自跳转开/自跳转关"按钮控制） ---
+  registerNovelAutoJump();
 
   // --- 地图标记模块 ---
   getSettings(); // 确保当前角色（或临时）的地图数据结构已就绪

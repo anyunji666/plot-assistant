@@ -278,6 +278,7 @@ export function parseFloorSummaryFields(mesText) {
     inventory: extractLabelLine(inner, "Inventory"),
     setups: extractLabelLine(inner, "Setups"),
     busy: extractLabelLine(inner, "Busy"), // 仅供手机私信插件读取"角色: [REMOVE]"信号，不参与状态表 Relationships/Inventory/Setups 的常规合并
+    expiredChapter: extractLabelLine(inner, "ExpiredChapter"), // 仅供剧情录入模块读取"章节名已演绎完"信号，同样不参与状态表合并
     overview: overviewMatch ? overviewMatch[1].trim() : "",
   };
 }

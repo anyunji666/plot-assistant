@@ -3,7 +3,9 @@
 import { saveSettingsDebounced } from "../../../../script.js";
 import { extension_settings } from "../../../extensions.js";
 import { openCreateCharacterDialog } from "./modules/character.js";
-import { getActiveNovelChapterUid, listNovelChapterEntries, openNovelEntryDialog, setActiveNovelChapter } from "./modules/novel.js";
+import { getNovelAutoJumpSettings } from "./modules/novel/generator.js";
+import { getActiveNovelChapterUid, listNovelChapterEntries, setActiveNovelChapter } from "./modules/novel/store.js";
+import { openNovelEntryDialog } from "./modules/novel/ui.js";
 import { LOCAL_CHAT_STORE_KEY, PHONE_IDB_NAME, SUMMARY_POPUP_ID, errorCatched, getCtx, getOffsetRecord, localChatStoreCache, notify, transientChatMetadataStore } from "./modules/core.js";
 import { IDB_NAME, MAP_MODULE_NAME, getFabVisible, setFabVisibleSetting } from "./modules/map/data.js";
 import { FAB_POS_KEY, applyFabVisibility, openModal, resetFabPos } from "./modules/map/ui.js";
@@ -158,12 +160,15 @@ export async function showSummaryPopup() {
 
         <div style="margin-bottom: 20px;">
           <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">同人小说</p>
-          <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
-            <button id="${POPUP_ID}-novel-entry" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">同人小说录入</button>
-            <span style="color: #888; font-size: 12px;">当前进度：</span>
-            <select id="${POPUP_ID}-novel-chapter-select" ${novelChapters.length === 0 ? "disabled" : ""} style="background: #262626; color: #ddd; border: 1px solid #444; border-radius: 4px; padding: 6px 8px; font-size: 13px; max-width: 200px;">
-              ${novelChapterOptionsHTML}
-            </select>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <button id="${POPUP_ID}-novel-entry" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">剧情录入</button>
+              <span style="color: #888; font-size: 12px;">当前进度：</span>
+              <select id="${POPUP_ID}-novel-chapter-select" ${novelChapters.length === 0 ? "disabled" : ""} style="background: #262626; color: #ddd; border: 1px solid #444; border-radius: 4px; padding: 6px 8px; font-size: 13px; max-width: 200px;">
+                ${novelChapterOptionsHTML}
+              </select>
+            </div>
+            <button id="${POPUP_ID}-novel-autojump" title="AI在摘要里判定当前章节已演绎完/过时时，自动切到下一章（没有下一章则关闭章节注入）" style="border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;"></button>
           </div>
           ${novelChapterConflict ? `<div style="margin-top: 6px; font-size: 12px; color: #e0a030;">检测到不止一章同时启用（可能在原生世界书面板里手动改过），下拉框暂显示序号最小的一章；重新选择一次即可统一收敛为一章。</div>` : ""}
         </div>
@@ -373,6 +378,25 @@ export async function showSummaryPopup() {
           $(this).css("background", "#3a7bd5");
         },
       );
+
+    // 剧情录入·自动跳转章节：点击只切换开关状态，不关闭弹窗（跟移动端优化两个开关同一个视觉模式，
+    // 但配色常量单独声明一份——移动端优化那两个 MOBILE_OPT_ON/OFF_STYLE 常量在本函数更后面才 const
+    // 声明，这里提前引用会踩 TDZ）。
+    const NOVEL_AUTOJUMP_ON_STYLE = { background: "#3a9d5a" };
+    const NOVEL_AUTOJUMP_OFF_STYLE = { background: "#555" };
+    const $novelAutoJumpBtn = $(`#${POPUP_ID}-novel-autojump`);
+    function renderNovelAutoJumpButton($btn, isOn) {
+      $btn
+        .text(isOn ? "自跳转开" : "自跳转关")
+        .css(isOn ? NOVEL_AUTOJUMP_ON_STYLE : NOVEL_AUTOJUMP_OFF_STYLE);
+    }
+    renderNovelAutoJumpButton($novelAutoJumpBtn, getNovelAutoJumpSettings().enabled);
+    $novelAutoJumpBtn.on("click", () => {
+      const s = getNovelAutoJumpSettings();
+      s.enabled = !s.enabled;
+      saveSettingsDebounced();
+      renderNovelAutoJumpButton($novelAutoJumpBtn, s.enabled);
+    });
 
     $(`#${POPUP_ID}-pre-emphasis`)
       .on("click", () => {
