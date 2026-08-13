@@ -83,12 +83,11 @@ export async function openPhonePresetDialog() {
       marginTop: "4px",
     });
     const btnCss = {
-      padding: "10px 20px",
+      padding: "6px 10px",
       borderRadius: "6px",
-      minHeight: "44px",
       boxSizing: "border-box",
       cursor: "pointer",
-      fontSize: "0.95em",
+      fontSize: "0.8em",
       touchAction: "manipulation",
     };
     const $cancel = $("<button>")
@@ -229,12 +228,11 @@ export async function openPhoneStickerImportDialog() {
       marginTop: "4px",
     });
     const btnCss = {
-      padding: "10px 20px",
+      padding: "6px 10px",
       borderRadius: "6px",
-      minHeight: "44px",
       boxSizing: "border-box",
       cursor: "pointer",
-      fontSize: "0.95em",
+      fontSize: "0.8em",
       touchAction: "manipulation",
     };
     const $cancel = $("<button>")

@@ -57,9 +57,9 @@ export async function openNovelEntryDialog() {
     background: BOX_BG,
     border: "1px solid #3a3a3a",
     borderRadius: "10px",
-    padding: `${BOX_PADDING} ${BOX_PADDING} 0 ${BOX_PADDING}`,
+    padding: BOX_PADDING,
     width: "min(400px, calc(100% - 24px))",
-    maxHeight: "min(85vh, calc(100dvh - 24px))",
+    maxHeight: "min(85vh, calc(100vh - 24px))",
     display: "flex",
     flexDirection: "column",
     gap: "16px",
@@ -166,34 +166,19 @@ export async function openNovelEntryDialog() {
     display: "none",
   });
 
-  // 按钮行吸底（position: sticky）：$box 本身是可滚动容器（overflowY: auto），
-  // 移动端弹出键盘时 dvh 收缩、概述输入框占位又比较大，如果按钮行只是排在流的最后面，
-  // 会被顶到滚动区域下方看不见、甚至视觉上挤进概述框里。改成 sticky 贴底后，
-  // 不管容器怎么滚动，按钮行始终固定在弹窗可视区域的最下沿。
-  // 背景色 + 顶部分割线用来跟上方滚动内容做视觉区隔；左右负 margin 撑满宽度抵消 $box 的左右 padding，
-  // 自带上下 padding 补回按钮和边缘的间距（$box 的 padding-bottom 已经在上面设为 0，避免和这里重复）。
   const $btnRow = $("<div>").css({
-    position: "sticky",
-    bottom: 0,
-    left: 0,
-    right: 0,
     display: "flex",
     gap: "10px",
     justifyContent: "flex-end",
     flexWrap: "wrap",
-    background: BOX_BG,
-    borderTop: "1px solid #3a3a3a",
-    padding: `10px ${BOX_PADDING} ${BOX_PADDING} ${BOX_PADDING}`,
-    margin: `0 calc(-1 * ${BOX_PADDING}) 0 calc(-1 * ${BOX_PADDING})`,
-    boxSizing: "border-box",
+    marginTop: "4px",
   });
   const btnCss = {
-    padding: "10px 20px",
+    padding: "6px 10px",
     borderRadius: "6px",
-    minHeight: "44px",
     boxSizing: "border-box",
     cursor: "pointer",
-    fontSize: "0.95em",
+    fontSize: "0.8em",
     touchAction: "manipulation",
   };
   const $close = $("<button>").text("关闭").css({
@@ -220,28 +205,6 @@ export async function openNovelEntryDialog() {
   $box.append($title, $ioRow, $selectWrap, $nameWrap, $summaryWrap, $errorMsg, $btnRow);
   $overlay.append($box);
   $("body").append($overlay);
-
-  // 移动端键盘弹出时的高度/位置纠正：CSS 的 100dvh 在不少移动端浏览器/WebView 里并不会
-  // 随软键盘弹出而收缩（dvh 主要针对地址栏收起设计，键盘不一定计入），导致 $box 高度、
-  // 位置都没变化，只是被键盘从下往上盖住；此时浏览器把聚焦的输入框滚入可视区域，会连带
-  // 把贴底的按钮行"滚"到概述框原来的位置。这里改用 window.visualViewport 实时读取真正
-  // 可见的视口尺寸，动态纠正 $box 的 maxHeight / top，让按钮行始终贴在真实可见区域底部。
-  // 不支持 visualViewport 的环境（极少数老浏览器）会退回最初的纯 CSS dvh 效果。
-  function updateBoxForViewport() {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const topOffset = vv.offsetTop + 12;
-    const availableHeight = vv.height - 24;
-    $box.css({
-      top: `${topOffset}px`,
-      maxHeight: `${Math.min(window.innerHeight * 0.85, availableHeight)}px`,
-    });
-  }
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener("resize", updateBoxForViewport);
-    window.visualViewport.addEventListener("scroll", updateBoxForViewport);
-    updateBoxForViewport();
-  }
 
   // 当前正在编辑的条目 uid；null 表示"新建模式"。
   let editingUid = null;
@@ -370,10 +333,6 @@ export async function openNovelEntryDialog() {
 
   function closeDialog() {
     $(document).off("keydown.novelEntryDialog");
-    if (window.visualViewport) {
-      window.visualViewport.removeEventListener("resize", updateBoxForViewport);
-      window.visualViewport.removeEventListener("scroll", updateBoxForViewport);
-    }
     $overlay.remove();
     $bodyEl.css("overflow", prevBodyOverflow || "");
   }
