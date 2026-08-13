@@ -159,11 +159,13 @@ export function buildFloorRestoreUserContent(
 // 冒号前后只吃同一行内的空格/制表符（[ \t]*），不能用 \s*——\s 包含换行符，
 // 一旦某字段本轮为空（很常见，比如没变化的 Relationships/Inventory），\s* 会贪婪地吃穿换行，
 // 把下一行的标签+内容当成当前字段的值，造成标签错位、内容重复（曾实际复现并确认）。
+// 冒号同时兼容半角(:)和中文全角(：)——跟 parseKeyValueListWithSkipped 同样的原因，
+// 中文语境下 AI 输出全角标点是常态，只认半角会导致该字段静默提取失败、返回空字符串。
 // 三处调用方共用同一份正则规则：逐层还原结果解析、单层摘要模块解析、状态表条目快照读取，
 // 避免各自维护一份同样的正则、慢慢跑偏。找不到该标签时返回空字符串，不报错。===
 export function extractLabelLine(text, label) {
   if (!text || typeof text !== "string") return "";
-  const re = new RegExp(`^[ \\t]*${label}[ \\t]*:[ \\t]*(.*)$`, "m");
+  const re = new RegExp(`^[ \\t]*${label}[ \\t]*[:：][ \\t]*(.*)$`, "m");
   const m = text.match(re);
   return m ? m[1].trim() : "";
 }
@@ -269,7 +271,7 @@ export function parseFloorSummaryFields(mesText) {
   if (!detailsMatch) return null;
   const inner = detailsMatch[1];
 
-  const overviewMatch = inner.match(/Overview\s*:\s*([\s\S]*)$/);
+  const overviewMatch = inner.match(/Overview\s*[:：]\s*([\s\S]*)$/);
 
   return {
     time: extractLabelLine(inner, "Time"),
