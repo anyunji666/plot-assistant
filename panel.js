@@ -183,7 +183,7 @@ export async function showSummaryPopup() {
               <button id="${POPUP_ID}-novel-autojump" title="AI在摘要里判定当前章节已演绎完/过时时，自动切到下一章（没有下一章则关闭章节注入）" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
             </div>
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-              <span style="color: #fff; font-size: 13px; white-space: nowrap;">加载章节：</span>
+              <span style="color: #fff; font-size: 13px; white-space: nowrap;">当前注入章节：</span>
               <select id="${POPUP_ID}-novel-chapter-select" ${novelChapters.length === 0 ? "disabled" : ""} style="background: #262626; color: #ddd; border: 1px solid #444; border-radius: 4px; padding: 6px 8px; font-size: 13px; flex: 1; min-width: 0;">
                 ${novelChapterOptionsHTML}
               </select>
