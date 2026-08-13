@@ -151,11 +151,11 @@ export async function openNovelEntryDialog() {
     $("<label>").text("概述").css({ fontSize: "0.82em", color: "#999" }),
   );
   const $summaryInput = $("<textarea>")
-    .attr({ rows: 8, placeholder: "该章节的起因、经过、结局概述" })
+    .attr({ rows: 6, placeholder: "该章节的起因、经过、结局概述" })
     .css({
       ...inputCss,
-      minHeight: "140px",
-      maxHeight: "min(40vh, 40dvh)",
+      minHeight: "96px",
+      maxHeight: "min(26vh, 26dvh)",
       resize: "vertical",
     });
   $summaryWrap.append($summaryInput);

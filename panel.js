@@ -159,6 +159,23 @@ export async function showSummaryPopup() {
         </div>
 
         <div style="margin-bottom: 20px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;">
+            <p style="color: #72b1e8; font-weight: 500; margin: 0;">世界书条目 (${summaryLorebookName})</p>
+            <button id="${POPUP_ID}-mount-global" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
+          </div>
+          <div id="${POPUP_ID}-lorebook" style="background: #333; border-radius: 6px; padding: 10px; font-size: 13px;">
+            ${lorebookEntriesHTML}
+          </div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">输出强调</p>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <button id="${POPUP_ID}-pre-emphasis" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">对话前强调</button>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
           <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">同人小说</p>
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
             <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
@@ -171,13 +188,6 @@ export async function showSummaryPopup() {
             <button id="${POPUP_ID}-novel-autojump" title="AI在摘要里判定当前章节已演绎完/过时时，自动切到下一章（没有下一章则关闭章节注入）" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
           </div>
           ${novelChapterConflict ? `<div style="margin-top: 6px; font-size: 12px; color: #e0a030;">检测到不止一章同时启用（可能在原生世界书面板里手动改过），下拉框暂显示序号最小的一章；重新选择一次即可统一收敛为一章。</div>` : ""}
-        </div>
-
-        <div style="margin-bottom: 20px;">
-          <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">输出强调</p>
-          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-            <button id="${POPUP_ID}-pre-emphasis" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">对话前强调</button>
-          </div>
         </div>
 
         <div style="margin-bottom: 20px;">
@@ -200,24 +210,6 @@ export async function showSummaryPopup() {
         </div>
 
         <div style="margin-bottom: 20px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;">
-            <p style="color: #72b1e8; font-weight: 500; margin: 0;">世界书条目 (${summaryLorebookName})</p>
-            <button id="${POPUP_ID}-mount-global" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
-          </div>
-          <div id="${POPUP_ID}-lorebook" style="background: #333; border-radius: 6px; padding: 10px; font-size: 13px;">
-            ${lorebookEntriesHTML}
-          </div>
-        </div>
-
-        <div style="margin-bottom: 20px;">
-          <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">数据管理</p>
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0;">
-            <span style="font-size: 12px; color: #999; flex: 1;">清空私信记录、头像库、图片库、背景库、地图标记数据、悬浮球位置记忆、所有对话的起始楼层/忙闲缓存等本地缓存（不含世界书总结条目）</span>
-            <button id="${POPUP_ID}-clear-all-data" style="background: #c0392b; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;">清空数据</button>
-          </div>
-        </div>
-
-        <div>
           <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">移动端优化</p>
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0;">
             <span style="font-size: 12px; color: #999; flex: 1;">折叠预设滑块 · 优化输入法弹窗 · 优化长聊渲染</span>
@@ -226,6 +218,14 @@ export async function showSummaryPopup() {
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid #3a3a3a;">
             <span style="font-size: 12px; color: #999; flex: 1;">懒加载头像与角色列表 · 不预载最近聊天页对话</span>
             <button id="${POPUP_ID}-mobile-opt-lazyload" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
+          </div>
+        </div>
+
+        <div>
+          <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">数据管理</p>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0;">
+            <span style="font-size: 12px; color: #999; flex: 1;">清空私信记录、头像库、图片库、背景库、地图标记数据、悬浮球位置记忆、所有对话的起始楼层/忙闲缓存等本地缓存（不含世界书总结条目）</span>
+            <button id="${POPUP_ID}-clear-all-data" style="background: #c0392b; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;">清空数据</button>
           </div>
         </div>
       </div>
