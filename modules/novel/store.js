@@ -1,6 +1,8 @@
 "use strict";
 
-import { NOVEL_CHAPTER_REFERENCE_PROMPT, NOVEL_ENTRY_DEFAULTS, NOVEL_ENTRY_TITLE_PREFIX, getCtx } from "../core.js";
+import { saveSettingsDebounced } from "../../../../../../script.js";
+import { extension_settings } from "../../../../../extensions.js";
+import { NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY, NOVEL_CHAPTER_REFERENCE_PROMPT, NOVEL_ENTRY_DEFAULTS, NOVEL_ENTRY_TITLE_PREFIX, getCtx } from "../core.js";
 import { getFreeUid, notifyWorldInfoUpdated } from "../worldinfo.js";
 
 
@@ -150,9 +152,9 @@ export async function saveNovelChapterEntry(
       uid: newUid,
       comment: title,
       content,
-      disable: true, // 默认关闭：不自动注入正文，需在世界书面板手动启用，或配合后续自动切换功能
-      constant: true, // 启用后即常驻注入，不依赖关键词匹配
-      key: [],
+      disable: true, // 固定关闭：章节条目不参与世界书原生注入，纯粹是数据仓库
+      constant: false, // 固定为选择性触发类型（而非常驻），配合空 key 保证原生引擎在任何情况下都不会触发它
+      key: [], // 固定为空数组：没有关键字可匹配，即使这本书被挂载为全局世界书，原生引擎也不会扫描到这条条目
       useGroupScoring: false,
       excludeRecursion: true,
       preventRecursion: true,
@@ -167,48 +169,69 @@ export async function saveNovelChapterEntry(
 }
 
 
-// === Helper: 查询当前"启用"（disable:false）的原著章节条目 ===
-// 正常情况下同一时间只应该有 0 或 1 条启用；如果检测到不止一条同时启用（比如用户绕过插件、
-// 直接在原生世界书面板里手动改过），activeUid 取序号最小的那条，同时把 hasConflict 置 true，
-// 供面板提示"当前状态异常"，不在这里自作主张帮用户纠正。
+// === Helper: 读写"当前激活章节"指针存储对象（extension_settings，按世界书名分组） ===
+function getActiveChapterSettingsStore() {
+  if (!extension_settings[NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY]) {
+    extension_settings[NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY] = {};
+  }
+  return extension_settings[NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY];
+}
+
+
+// === Helper: 查询当前"激活"的原著章节 uid ===
+// 不再读世界书条目的 disable 字段（章节条目现在固定 disable:true，纯数据仓库），
+// 改为读 extension_settings 里按世界书名存的指针。若指针指向的条目已被删除（自愈），
+// 自动清除这条失效指针并持久化，避免下次继续读到一个不存在的 uid。
+// hasConflict 字段保留只是为了不改动调用方（generator.js/panel.js）的解构写法，
+// 新机制下同一时间只可能有 0 或 1 个激活章节，恒为 false。
 export async function getActiveNovelChapterUid(lorebookName) {
+  const store = getActiveChapterSettingsStore();
+  const storedUid = store[lorebookName];
+  if (storedUid === undefined || storedUid === null) {
+    return { activeUid: null, hasConflict: false };
+  }
+
   const chapters = await listNovelChapterEntries(lorebookName);
-  const context = getCtx();
-  const data = await context.loadWorldInfo(lorebookName);
-  if (!data || !data.entries) return { activeUid: null, hasConflict: false };
+  const stillExists = chapters.some((chapter) => chapter.uid === storedUid);
+  if (!stillExists) {
+    delete store[lorebookName];
+    saveSettingsDebounced();
+    return { activeUid: null, hasConflict: false };
+  }
 
-  const enabledUids = chapters
-    .filter((chapter) => data.entries[chapter.uid]?.disable === false)
-    .map((chapter) => chapter.uid);
-
-  if (enabledUids.length === 0) return { activeUid: null, hasConflict: false };
-  return { activeUid: enabledUids[0], hasConflict: enabledUids.length > 1 };
+  return { activeUid: storedUid, hasConflict: false };
 }
 
 
 // === Function: 切换"当前进度"章节 ===
-// 把 targetUid 对应的原著章节条目设为启用，其它所有原著章节条目设为禁用；
-// targetUid 传 null 表示"不启用任何章节"（全部禁用）。只动 disable 字段，不碰内容/序号/其它设置。
+// targetUid 传 null 表示"不注入任何章节"。只更新 extension_settings 里的指针，
+// 不再读写世界书条目（章节条目的 disable/constant 恒定不变），因此不需要任何网络往返，
+// 切换是本地、即时的。
 export async function setActiveNovelChapter(lorebookName, targetUid) {
-  const context = getCtx();
-  const data = await context.loadWorldInfo(lorebookName);
-  if (!data || !data.entries)
-    throw new Error(`无法加载世界书: ${lorebookName}`);
-
-  let matched = targetUid === null;
-  for (const entry of Object.values(data.entries)) {
-    if (parseNovelChapterTitle(entry.comment) === null) continue;
-    const isTarget = targetUid !== null && entry.uid === targetUid;
-    if (isTarget) matched = true;
-    entry.disable = !isTarget;
+  if (targetUid !== null) {
+    const chapters = await listNovelChapterEntries(lorebookName);
+    const exists = chapters.some((chapter) => chapter.uid === targetUid);
+    if (!exists) {
+      throw new Error("未找到目标章节条目，可能已被删除，请刷新后重试。");
+    }
   }
 
-  if (!matched) {
-    throw new Error("未找到目标章节条目，可能已被删除，请刷新后重试。");
+  const store = getActiveChapterSettingsStore();
+  if (targetUid === null) {
+    delete store[lorebookName];
+  } else {
+    store[lorebookName] = targetUid;
   }
+  saveSettingsDebounced();
+}
 
-  await context.saveWorldInfo(lorebookName, data, true);
-  notifyWorldInfoUpdated(lorebookName);
+
+// === Helper: 获取当前激活章节的完整信息（uid/name/content），没有激活章节则返回 null ===
+export async function getActiveNovelChapter(lorebookName) {
+  const { activeUid } = await getActiveNovelChapterUid(lorebookName);
+  if (activeUid === null) return null;
+  const chapters = await listNovelChapterEntries(lorebookName);
+  return chapters.find((chapter) => chapter.uid === activeUid) || null;
 }
 
 
@@ -294,8 +317,8 @@ export async function importNovelChapters(lorebookName, text) {
         uid: newUid,
         comment: buildNovelChapterTitle(order, chapter.name),
         content,
-        disable: true,
-        constant: true,
+        disable: true, // 固定关闭：章节条目不参与世界书原生注入，纯粹是数据仓库
+        constant: false, // 固定为选择性触发类型，配合空 key 保证原生引擎不会触发它
         key: [],
         useGroupScoring: false,
         excludeRecursion: true,

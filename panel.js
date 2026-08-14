@@ -27,6 +27,23 @@ function escapeNovelChapterLabel(str) {
 }
 
 
+// === Helper: 构建"当前注入章节"下拉框的 <option> 列表 HTML ===
+// 没有任何已录入章节：只显示一个禁用态占位项，提示先去"剧情录入"。
+// 有章节：第一项固定是"不注入章节"（对应 activeUid=null），后面按序号顺序列出所有章节，
+// 当前激活的那一项打上 selected。
+function buildNovelActiveChapterOptionsHtml(chapters, activeUid) {
+  if (!chapters || chapters.length === 0) {
+    return `<option value="">暂无章节，请先录入</option>`;
+  }
+  let html = `<option value="__none__"${activeUid === null ? " selected" : ""}>不注入章节</option>`;
+  chapters.forEach((chapter) => {
+    const selected = chapter.uid === activeUid ? " selected" : "";
+    html += `<option value="${chapter.uid}"${selected}>${escapeNovelChapterLabel(chapter.name)}</option>`;
+  });
+  return html;
+}
+
+
 // === Function: 删除一个 IndexedDB 数据库（用于"清空数据"）===
 // 如果本页面还有该库的连接没关闭，浏览器会触发 onblocked 而不是立刻成功/失败，
 // 这里给个超时兜底，避免整个清空流程卡住不返回；真遇到 blocked 的情况会在控制台留日志，
@@ -116,28 +133,13 @@ export async function showSummaryPopup() {
       await getLorebookEntriesSummaryHtml(summaryLorebookName);
     const isMountedGlobally =
       await isSummaryLorebookGloballyEnabled(summaryLorebookName);
+    const novelChapters = await listNovelChapterEntries(summaryLorebookName);
+    const { activeUid: activeNovelChapterUid } =
+      await getActiveNovelChapterUid(summaryLorebookName);
     const currentOffsetRecord = getOffsetRecord();
     const currentOffsetDisplay = currentOffsetRecord
       ? `第 ${currentOffsetRecord.offset} 层`
       : "未设置（默认第 0 层，不偏移）";
-
-    // "当前进度"下拉框数据：章节列表已经按标题里的序号排好序，直接用于展示；
-    // 同时探测当前哪一章处于启用状态，作为下拉框默认选中项。
-    const novelChapters = await listNovelChapterEntries(summaryLorebookName);
-    const { activeUid: activeNovelChapterUid, hasConflict: novelChapterConflict } =
-      await getActiveNovelChapterUid(summaryLorebookName);
-    const novelChapterOptionsHTML =
-      novelChapters.length === 0
-        ? `<option value="">暂无章节，请先录入</option>`
-        : [`<option value=""${activeNovelChapterUid === null ? " selected" : ""}>-- 不启用任何章节 --</option>`]
-            .concat(
-              novelChapters.map((chapter) => {
-                const orderLabel = String(chapter.order).padStart(3, "0");
-                const selected = chapter.uid === activeNovelChapterUid ? " selected" : "";
-                return `<option value="${chapter.uid}"${selected}>${orderLabel} ${escapeNovelChapterLabel(chapter.name)}</option>`;
-              }),
-            )
-            .join("");
 
     const popupContent = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #444;">
@@ -182,14 +184,11 @@ export async function showSummaryPopup() {
               <button id="${POPUP_ID}-novel-entry" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">剧情录入</button>
               <button id="${POPUP_ID}-novel-autojump" title="AI在摘要里判定当前章节已演绎完/过时时，自动切到下一章（没有下一章则关闭章节注入）" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
             </div>
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-              <span style="color: #fff; font-size: 13px; white-space: nowrap;">当前注入章节：</span>
-              <select id="${POPUP_ID}-novel-chapter-select" ${novelChapters.length === 0 ? "disabled" : ""} style="background: #262626; color: #ddd; border: 1px solid #444; border-radius: 4px; padding: 6px 8px; font-size: 13px; flex: 1; min-width: 0;">
-                ${novelChapterOptionsHTML}
-              </select>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 12px; color: #888;">当前注入章节：</label>
+              <select id="${POPUP_ID}-novel-active-chapter" ${novelChapters.length === 0 ? "disabled" : ""} style="width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 4px; border: 1px solid #3a3a3a; background: #1a1a1a; color: #d0d0d0; font-size: 13px; font-family: inherit;">${buildNovelActiveChapterOptionsHtml(novelChapters, activeNovelChapterUid)}</select>
             </div>
           </div>
-          ${novelChapterConflict ? `<div style="margin-top: 6px; font-size: 12px; color: #e0a030;">检测到不止一章同时启用（可能在原生世界书面板里手动改过），下拉框暂显示序号最小的一章；重新选择一次即可统一收敛为一章。</div>` : ""}
         </div>
 
         <div style="margin-bottom: 20px;">
@@ -354,19 +353,6 @@ export async function showSummaryPopup() {
         },
       );
 
-    $(`#${POPUP_ID}-novel-chapter-select`).on("change", async function () {
-      const val = $(this).val();
-      const targetUid = val === "" ? null : parseInt(val, 10);
-      const label = $(this).find("option:selected").text();
-      try {
-        await setActiveNovelChapter(summaryLorebookName, targetUid);
-        notify("success", `已切换到「${label}」`);
-      } catch (error) {
-        console.error("[剧情助手] 切换原著章节进度失败:", error);
-        notify("error", `切换失败：${error.message || error}`);
-      }
-    });
-
     $(`#${POPUP_ID}-novel-entry`)
       .on("click", () => {
         closePopup();
@@ -399,6 +385,25 @@ export async function showSummaryPopup() {
       saveSettingsDebounced();
       renderNovelAutoJumpButton($novelAutoJumpBtn, s.enabled);
     });
+
+    // "当前注入章节"下拉框：切换即时生效（本地写 extension_settings，不产生网络往返），
+    // 下一次生成时会自动带上新选的章节内容。
+    // 注意：errorCatched 返回的是箭头函数，会丢失 jQuery 通过 this 传入的元素上下文，
+    // 这里改用 event.currentTarget 取元素，不依赖 this。
+    $(`#${POPUP_ID}-novel-active-chapter`).on(
+      "change",
+      errorCatched(async (event) => {
+        const $select = $(event.currentTarget);
+        const val = $select.val();
+        const targetUid = val === "__none__" ? null : parseInt(val, 10);
+        const label = $select.find("option:selected").text();
+        await setActiveNovelChapter(summaryLorebookName, targetUid);
+        notify(
+          "success",
+          targetUid === null ? "已关闭章节注入" : `当前注入章节已切换为「${label}」`,
+        );
+      }),
+    );
 
     $(`#${POPUP_ID}-pre-emphasis`)
       .on("click", () => {

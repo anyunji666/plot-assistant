@@ -3,23 +3,25 @@
 import { extension_settings } from "../../../../../extensions.js";
 import {
   EXPIRED_CHAPTER_INSTRUCTION,
-  EXPIRED_CHAPTER_PROMPT_KEY,
   NOVEL_AUTO_JUMP_SETTINGS_KEY,
+  NOVEL_CHAPTER_PROMPT_KEY,
   getCtx,
   notify,
 } from "../core.js";
 import { parseFloorSummaryFields } from "../summary/parser.js";
 import { getOrCreateSummaryLorebook } from "../worldinfo.js";
-import { getActiveNovelChapterUid, listNovelChapterEntries, setActiveNovelChapter } from "./store.js";
+import { getActiveNovelChapter, getActiveNovelChapterUid, listNovelChapterEntries, setActiveNovelChapter } from "./store.js";
 
 
 // =====================================================================================
-// === 剧情录入功能：自动跳转章节 ===
-// 思路：生成前（有激活章节时）临时注入一句判定指令，要求 AI 结合已注入的原著章节参考资料自行判断
-// 是否演绎完/过时，判断结果写进摘要块的 ExpiredChapter 字段；AI 消息渲染完成后清空这条临时指令，
+// === 剧情录入功能：章节内容注入 + 自动跳转章节 ===
+// 章节内容不再依赖世界书原生引擎注入（不挂载、不受 token 预算/深度排序影响），
+// 而是生成前由插件直接读取"当前激活章节"的正文，与判定指令拼成同一段文本，
+// 用同一次 setExtensionPrompt 调用一起发送，保证两者位置完全一致。
+// 判定指令部分：要求 AI 结合已注入的原著章节参考资料自行判断是否演绎完/过时，
+// 判断结果写进摘要块的 ExpiredChapter 字段；AI 消息渲染完成后清空这条临时指令，
 // 并读取刚渲染那一层的摘要块，核对信号后自动把"当前进度"切到下一章（没有下一章则关闭章节注入）。
-// 判定指令是一次性 extension prompt（跟私信槽位/库存变更提醒同一种用法），不写进世界书、不常驻。
-// 默认关闭，由面板"剧情录入"按钮右侧的"自跳转开/自跳转关"按钮控制；关闭时下面几个函数直接跳过。
+// 只在开启"自跳转"时才拼接判定指令；章节内容本身只要有激活章节就会注入，不受自跳转开关影响。
 // =====================================================================================
 
 
@@ -38,45 +40,53 @@ export function isNovelAutoJumpEnabled() {
 }
 
 
-// === Function: 生成前，若当前有激活章节，临时注入判定指令；没有激活章节则不注入（也不用维护额外状态，
-// 下一次有章节激活时这个函数自然又会开始注入）===
-export async function applyExpiredChapterPrompt() {
+// === Function: 生成前，若当前有激活章节，直接读取其内容并注入；若同时开启了"自跳转"，
+// 再把判定指令拼在后面一起发送。没有激活章节则清空注入（不留旧内容）。===
+export async function applyActiveChapterPrompt() {
   try {
-    if (!isNovelAutoJumpEnabled()) return;
     const context = getCtx();
     if (typeof context.setExtensionPrompt !== "function") return;
 
     const lorebookName = await getOrCreateSummaryLorebook();
-    const { activeUid, hasConflict } = await getActiveNovelChapterUid(lorebookName);
-    // 没有激活章节：没什么可判定的，不注入。
-    // 检测到冲突（不止一章同时启用）：状态本身就异常，不在这里自作主张，交给用户在面板里手动收敛。
-    if (activeUid === null || hasConflict) return;
+    const chapter = await getActiveNovelChapter(lorebookName);
 
     const position = context.extension_prompt_types?.IN_CHAT ?? 1;
     const role = context.extension_prompt_roles?.SYSTEM ?? 0;
+
+    if (!chapter) {
+      // 没有激活章节：没什么可发送的，清空（避免残留上一次的内容/指令）。
+      context.setExtensionPrompt(NOVEL_CHAPTER_PROMPT_KEY, "", position, 0, false, role);
+      return;
+    }
+
+    let promptText = chapter.content;
+    if (isNovelAutoJumpEnabled()) {
+      promptText += `\n\n${EXPIRED_CHAPTER_INSTRUCTION}`;
+    }
+
     context.setExtensionPrompt(
-      EXPIRED_CHAPTER_PROMPT_KEY,
-      EXPIRED_CHAPTER_INSTRUCTION,
+      NOVEL_CHAPTER_PROMPT_KEY,
+      promptText,
       position,
       0,
       false,
       role,
     );
   } catch (error) {
-    console.error("[剧情助手] 注入章节判定指令时出错:", error);
+    console.error("[剧情助手] 注入章节内容/判定指令时出错:", error);
   }
 }
 
 
-export function clearExpiredChapterPromptAfterRound() {
+export function clearActiveChapterPromptAfterRound() {
   try {
     const context = getCtx();
     if (typeof context.setExtensionPrompt !== "function") return;
     const position = context.extension_prompt_types?.IN_CHAT ?? 1;
     const role = context.extension_prompt_roles?.SYSTEM ?? 0;
-    context.setExtensionPrompt(EXPIRED_CHAPTER_PROMPT_KEY, "", position, 0, false, role);
+    context.setExtensionPrompt(NOVEL_CHAPTER_PROMPT_KEY, "", position, 0, false, role);
   } catch (error) {
-    console.error("[剧情助手] 清空章节判定指令时出错:", error);
+    console.error("[剧情助手] 清空章节内容/判定指令时出错:", error);
   }
 }
 
@@ -128,14 +138,15 @@ export async function handleExpiredChapterAutoJump() {
 }
 
 
-// === Function: 注册自动跳转监听（无条件注册，跟项目里其它 registerXxx 函数一致；开关状态在
-// 上面几个函数内部各自判断，关闭时直接提前返回，不实际做事）===
+// === Function: 注册章节内容注入 + 自动跳转监听（无条件注册，跟项目里其它 registerXxx 函数一致；
+// 章节内容只要有激活章节就会注入，自跳转判定指令/自动切章则由各函数内部按开关状态判断，
+// 关闭时直接提前返回，不实际做事）===
 export function registerNovelAutoJump() {
   try {
     const context = getCtx();
     if (!context.eventSource || !context.event_types) {
       console.warn(
-        "[剧情助手] 未找到 eventSource/event_types，剧情自动跳转未启用。",
+        "[剧情助手] 未找到 eventSource/event_types，章节内容注入与剧情自动跳转均未启用。",
       );
       return;
     }
@@ -145,11 +156,11 @@ export function registerNovelAutoJump() {
       context.event_types.GENERATE_BEFORE_COMBINE_PROMPTS;
     if (startEventName) {
       context.eventSource.on(startEventName, () => {
-        applyExpiredChapterPrompt();
+        applyActiveChapterPrompt();
       });
     } else {
       console.warn(
-        "[剧情助手] 未找到生成开始事件，剧情自动跳转的判定指令注入未启用。",
+        "[剧情助手] 未找到生成开始事件，章节内容/判定指令注入未启用。",
       );
     }
 
@@ -158,7 +169,7 @@ export function registerNovelAutoJump() {
       context.event_types.MESSAGE_RECEIVED;
     if (renderEventName) {
       context.eventSource.on(renderEventName, () => {
-        clearExpiredChapterPromptAfterRound();
+        clearActiveChapterPromptAfterRound();
         handleExpiredChapterAutoJump();
       });
     } else {
@@ -167,6 +178,6 @@ export function registerNovelAutoJump() {
       );
     }
   } catch (error) {
-    console.error("[剧情助手] 注册剧情自动跳转监听时出错:", error);
+    console.error("[剧情助手] 注册章节内容注入/剧情自动跳转监听时出错:", error);
   }
 }

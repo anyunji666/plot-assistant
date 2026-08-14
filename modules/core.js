@@ -207,16 +207,16 @@ export const NOVEL_ENTRY_TITLE_PREFIX = "原著章节：";
 export const NOVEL_CHAPTER_REFERENCE_PROMPT =
   "以下是原著小说的章节概述，仅供你在演绎时参考背景与走向，需结合实际情况自然演绎：";
 
-// 默认 disable:true（不常驻注入）：章节数量可能很多，全部常驻会挤占 token 预算，
-// 是否启用交由世界书面板手动控制，或配合后续按章节进度自动切换的功能使用。
-// constant:true（一旦启用就常驻注入，不依赖关键词匹配）：章节内容不适合靠关键词触发，
-// 应该是"当前章节"精确地被打开/关闭，而不是靠正文提到某个词才触发。
-// 插入位置与状态表同一套："@D [系统]在深度"（position:4=atDepth，role:0=SYSTEM），而不是"角色定义之前"，
-// 保证章节参考资料和状态表一样贴近最新消息、以系统身份注入。
+// 章节条目不走世界书原生引擎注入（不依赖挂载/深度/token 预算），只作为数据仓库存在：
+// disable 固定为 true、constant 固定为 false、key 固定为空数组——世界书原生引擎在任何情况下
+// （哪怕这本书被挂载为全局世界书）都不会扫描/触发这条条目。"当前激活哪一章"和"是否注入"
+// 完全由插件自己在生成前通过 setExtensionPrompt 直接读取内容并发送（见 NOVEL_CHAPTER_PROMPT_KEY），
+// 与状态表/小总结等仍依赖世界书原生引擎的条目类型不同。
+// position 显式设为 0（原生 world_info_position: 角色定义之前）、触发策略为关键词（constant:false）——
+// 虽然这条目实际上永远不会被原生引擎扫描到，但显式写死这两项，而不是依赖 saveWorldInfo 的隐式默认值，
+// 保证条目在原生世界书面板里呈现的样式稳定、不随酒馆版本更新而变化。
 export const NOVEL_ENTRY_DEFAULTS = {
-  position: 4, // 原生 world_info_position: atDepth
-  depth: 0,
-  role: 0, // extension_prompt_roles: SYSTEM
+  position: 0, // 原生 world_info_position: 角色定义之前
   order: 100,
   probability: 100,
 };
@@ -226,9 +226,16 @@ export const NOVEL_ENTRY_DEFAULTS = {
 // 面板"剧情录入"按钮右侧的"自跳转开/自跳转关"按钮读写这个 key。
 export const NOVEL_AUTO_JUMP_SETTINGS_KEY = "plot_assistant_novel_auto_jump";
 
-// 判定指令用的 extension prompt key，用法跟 PHONE_SLOT_PROMPT_KEY 一样：只在"当前有激活章节"时
-// 生成前临时注入、AI 渲染完这一轮后立即清空，不写进世界书、不常驻。
-export const EXPIRED_CHAPTER_PROMPT_KEY = "plotAssistant_expiredChapterPrompt";
+// "当前激活章节"指针存进 extension_settings，按世界书名分组：{ [lorebookName]: uid }。
+// 不再借用世界书条目的 disable 字段表示"当前章节"——章节条目的 disable 现在固定为 true，
+// 纯粹是数据仓库，不参与任何原生注入判断。面板下拉框"当前注入章节"读写的就是这个 key。
+export const NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY = "plot_assistant_novel_active_chapter";
+
+// 章节内容 + 判定指令合并注入用的 extension prompt key，用法跟 PHONE_SLOT_PROMPT_KEY 一样：
+// 只在"当前有激活章节"时生成前临时注入、AI 渲染完这一轮后立即清空，不写进世界书、不常驻。
+// 章节内容本身（<chapter_reference>）与 EXPIRED_CHAPTER_INSTRUCTION 拼在同一段文本里、
+// 用同一次 setExtensionPrompt 调用发送，保证两者位置完全一致。
+export const NOVEL_CHAPTER_PROMPT_KEY = "plotAssistant_novelChapterPrompt";
 
 // 摘要块里新增字段的标签名，跟 Busy 字段是同一种"仅触发时才输出"的写法。
 export const EXPIRED_CHAPTER_FIELD_LABEL = "ExpiredChapter";
