@@ -46,7 +46,7 @@ export const PHONE_PRESET_TITLE = "私信预设"; // 手机私信开场白预设
 // "私信预设"条目首次创建前用于预填编辑框的默认内容——手机私信生成提示词里唯一可编辑的部分（开场白/扮演指令），
 // 其余结构（人设/最新正文/私信历史块）和输出格式要求都写死在代码里，不放进这段可编辑文本。
 // "联系人"是占位符，实际调用时会被替换成真实联系人姓名。
-export const DEFAULT_PHONE_PRESET_CONTENT = `请你在<private_letter="联系人">中扮演联系人和{{user}}聊天，注意俩人当前关系，口吻参考角色性格背景。`;
+export const DEFAULT_PHONE_PRESET_CONTENT = `请你在<private_letter name="联系人">中扮演联系人和{{user}}聊天，注意俩人当前关系，口吻参考角色性格背景。`;
 
 // 对话前强调条目的默认位置设置：@D 在深度0、order 999、概率100%，仅在条目首次创建时生效；
 // 已存在的条目只更新标题/内容/启用状态，
@@ -78,7 +78,7 @@ Relationships: \${{{user}}→角色: 关系词}
 Inventory: \${角色名·物品名: 数量}
 Setups: \${角色名·关键词: 简介}
 Busy: \${仅当<snapshot_table>标签内Busy列表角色本轮未出现或拿“通讯器”回复消息时才输出，格式见下方Busy规则}
-ExpiredChapter: \${仅当前文有要求输出ExpiredChapter时才输出，无要求则忽略此字段}
+ExpiredChapter: \${仅当前文含有<expired_chapter_instruction>规则，且判定该章节已完整演绎/过时时才输出，无该规则或未判定过时则忽略此字段}
 Overview: \${本轮关键事件按时间顺序列出}
 </details>
 \`\`\`
@@ -117,7 +117,7 @@ for 道具变化 in 本轮:
 **Setups**（只写本轮变化，无变化则留空，多组分号分隔，按顺序执行）
 \`\`\`
 Step1 存量清理：旧条目已兑现/作废/不可能再被拾起 → 角色名·关键词: [REMOVE]
-Step2 新增：本轮及<private_letter="角色名">包裹的私信中是否出现值得长线追踪的伏笔/线索/约定？
+Step2 新增：本轮及<private_letter name="角色名">包裹的私信中是否出现值得长线追踪的伏笔/线索/约定？
     以下情况不记录：
       - 单纯的意图/打算（"她想...""他计划..."）不记 → 需要记录的是已发生的事实
       - 单纯关系状态变化(归Relationships) / 纯事件叙述(归Overview) / 本轮内已解决的伏笔(归Overview)
@@ -238,7 +238,7 @@ export const EXPIRED_CHAPTER_FIELD_LABEL = "ExpiredChapter";
 // 插件才能精确核对是"针对哪一章"的信号。要求写在 Overview 字段之前——Overview 字段的解析正则会贪婪吃到
 // 字符串末尾（跟 Busy 字段必须写在 Overview 前面是同一个原因），写在后面会被吞进 Overview 文本里。
 export const EXPIRED_CHAPTER_INSTRUCTION =
-  '参考已注入的 <chapter_reference chapter="章节名"> 标签，若你判断该章节内容已被正文完整演绎或已过时无参考价值，则在摘要块追加 `ExpiredChapter: {与chapter属性一致的章节名}`；否则该字段留空。该字段需写在 Overview 字段之前的独立一行。';
+  '<expired_chapter_instruction>\n参考已注入的 <chapter_reference chapter="章节名"> 标签，若你判断该章节内容已被正文完整演绎或已过时无参考价值，则在摘要块追加 `ExpiredChapter: {与chapter属性一致的章节名}`；否则该字段留空。该字段需写在 Overview 字段之前的独立一行。\n</expired_chapter_instruction>';
 
 // === 手机（通讯器）私信系统相关常量 ===
 // 本地对话缓存（LOCAL_CHAT_STORE_KEY）里存放"忙/闲判定缓存 + 待注入私信槽位标记"的 key，

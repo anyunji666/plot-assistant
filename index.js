@@ -7,7 +7,8 @@ import { applyMobileOptSettingsOnLoad } from "./modules/mobile-opt.js";
 import { injectPhoneFloatingButton } from "./modules/phone/ui.js";
 import { registerPhoneSlotInjection } from "./modules/phone/generator.js";
 import { getSettings } from "./modules/map/data.js";
-import { injectFloatingButton, registerMapGlobalEvents, syncMapInfoEntry } from "./modules/map/ui.js";
+import { injectFloatingButton, registerMapGlobalEvents } from "./modules/map/ui.js";
+import { syncMapInfoEntry } from "./modules/map/data.js";
 import { registerNovelAutoJump } from "./modules/novel/generator.js";
 
 

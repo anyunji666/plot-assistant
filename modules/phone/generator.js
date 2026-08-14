@@ -60,7 +60,7 @@ export async function generateCharacterPhoneReply(
       cardBody || "gender: \nother: "
     }\n</character_information>`,
     `<Latest_plot>\n${lastAiMes || "（暂无正文）"}\n</Latest_plot>`,
-    `<private_letter="${characterName}">\n{{user}}和${characterName}的私信：\n${letterBody}\n</private_letter="${characterName}">`,
+    `<private_letter name="${characterName}">\n{{user}}和${characterName}的私信：\n${letterBody}\n</private_letter>`,
     "回复的语气和内容基于 <Latest_plot> 结尾处的最新进展。如果正文角色已经看到了消息并回复了，直接抄录正文角色回复的消息输出就行，" +
       "如果正文角色没有回复消息，且正文结尾角色已经和发信人面对面在一起了，依照情境判断私信是属于悄悄话还是过时的内容，过时内容回复笑脸表情就行。",
     "只输出这一条私信正文本身：第一人称、符合角色说话习惯的一两句话，可以带口语化的语气词/表情，" +
@@ -259,7 +259,7 @@ export async function buildPhoneSlotContent() {
     });
 
     blocks.push(
-      `<private_letter="${name}">\n今日{{user}}和${name}的私信：\n${lines.join("\n")}\n</private_letter="${name}">`,
+      `<private_letter name="${name}">\n今日{{user}}和${name}的私信：\n${lines.join("\n")}\n</private_letter>`,
     );
     injectedNames.push(name);
   }
@@ -355,7 +355,7 @@ export function applyPendingInventoryChangePrompt() {
       })
       .filter(Boolean);
     if (segments.length === 0) return;
-    const content = `用户对Inventory字段进行了校准，请在本轮摘要模块的Inventory字段中输出：\n${segments.join("；")}；`;
+    const content = `<inventory_calibration>\n用户对Inventory字段进行了校准，请在本轮摘要模块的Inventory字段中输出：\n${segments.join("；")}；\n</inventory_calibration>`;
     const position = context.extension_prompt_types?.IN_CHAT ?? 1;
     const role = context.extension_prompt_roles?.SYSTEM ?? 0;
     context.setExtensionPrompt(

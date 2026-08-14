@@ -1,8 +1,8 @@
 "use strict";
 
-import { colorForFaction, escapeHtml, getActiveMap, getSettings, isBigMapActive, mapState, saveSettings } from "./data.js";
+import { colorForFaction, escapeHtml, getActiveMap, getSettings, isBigMapActive, mapState, saveSettings, scheduleMapInfoSync } from "./data.js";
 import { beginRouteFromMarker, bindRouteActionsEvents, bindRouteFormEvents, handleRoutePointClick, renderAllRoutes, renderRouteList } from "./routes.js";
-import { scheduleMapInfoSync, toggleMobileSidebar } from "./ui.js";
+import { toggleMobileSidebar } from "./ui.js";
 
 
 // ============================================================
