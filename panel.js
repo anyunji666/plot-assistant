@@ -161,16 +161,6 @@ export async function showSummaryPopup() {
         </div>
 
         <div style="margin-bottom: 20px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;">
-            <p style="color: #72b1e8; font-weight: 500; margin: 0;">世界书条目 (${summaryLorebookName})</p>
-            <button id="${POPUP_ID}-mount-global" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
-          </div>
-          <div id="${POPUP_ID}-lorebook" style="background: #333; border-radius: 6px; padding: 10px; font-size: 13px;">
-            ${lorebookEntriesHTML}
-          </div>
-        </div>
-
-        <div style="margin-bottom: 20px;">
           <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">输出强调</p>
           <div style="display: flex; flex-wrap: wrap; gap: 8px;">
             <button id="${POPUP_ID}-pre-emphasis" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">对话前强调</button>
@@ -188,6 +178,16 @@ export async function showSummaryPopup() {
               <label style="font-size: 12px; color: #888;">当前注入章节：</label>
               <select id="${POPUP_ID}-novel-active-chapter" ${novelChapters.length === 0 ? "disabled" : ""} style="width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 4px; border: 1px solid #3a3a3a; background: #1a1a1a; color: #d0d0d0; font-size: 13px; font-family: inherit;">${buildNovelActiveChapterOptionsHtml(novelChapters, activeNovelChapterUid)}</select>
             </div>
+          </div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;">
+            <p style="color: #72b1e8; font-weight: 500; margin: 0;">世界书条目 (${summaryLorebookName})</p>
+            <button id="${POPUP_ID}-mount-global" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
+          </div>
+          <div id="${POPUP_ID}-lorebook" style="background: #333; border-radius: 6px; padding: 10px; font-size: 13px;">
+            ${lorebookEntriesHTML}
           </div>
         </div>
 
