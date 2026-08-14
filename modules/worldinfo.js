@@ -1,6 +1,6 @@
 "use strict";
 
-import { confirmAction, getCtx } from "./core.js";
+import { confirmAction, getCtx, NOVEL_ENTRY_TITLE_PREFIX } from "./core.js";
 
 
 // === Helper: 世界书条目对象 -> 数组（原生世界书 entries 是以 uid 为 key 的对象，不是数组） ===
@@ -231,7 +231,10 @@ export async function getLorebookEntriesSummaryHtml(lorebookName) {
   try {
     if (!lorebookName) return "未关联世界书";
 
-    const entries = await getLorebookEntriesArray(lorebookName);
+    const allEntries = await getLorebookEntriesArray(lorebookName);
+    const entries = (allEntries || []).filter(
+      (entry) => !(entry.comment || "").startsWith(NOVEL_ENTRY_TITLE_PREFIX),
+    );
     if (!entries || entries.length === 0) return "当前世界书中没有条目";
 
     let summaryHTML =
