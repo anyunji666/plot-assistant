@@ -6,7 +6,7 @@ import { openCreateCharacterDialog } from "./modules/character.js";
 import { getNovelAutoJumpSettings } from "./modules/novel/generator.js";
 import { getActiveNovelChapterUid, listNovelChapterEntries, setActiveNovelChapter } from "./modules/novel/store.js";
 import { openNovelEntryDialog } from "./modules/novel/ui.js";
-import { LOCAL_CHAT_STORE_KEY, PHONE_IDB_NAME, SUMMARY_POPUP_ID, errorCatched, getCtx, getOffsetRecord, localChatStoreCache, notify, transientChatMetadataStore } from "./modules/core.js";
+import { LOCAL_CHAT_STORE_KEY, NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY, NOVEL_AUTO_JUMP_SETTINGS_KEY, PHONE_IDB_NAME, SUMMARY_POPUP_ID, errorCatched, getCtx, getOffsetRecord, localChatStoreCache, notify, transientChatMetadataStore } from "./modules/core.js";
 import { IDB_NAME, MAP_MODULE_NAME, getFabVisible, setFabVisibleSetting } from "./modules/map/data.js";
 import { FAB_POS_KEY, applyFabVisibility, openModal, resetFabPos } from "./modules/map/ui.js";
 import { MOBILE_OPT_SETTINGS_KEY, disableLazyLoadGroup, disableRenderOptimizeGroup, enableLazyLoadGroup, enableRenderOptimizeGroup, getMobileOptSettings } from "./modules/mobile-opt.js";
@@ -97,6 +97,8 @@ export async function clearAllPluginLocalData() {
     delete extension_settings[PHONE_MODULE_NAME];
     delete extension_settings[MAP_MODULE_NAME];
     delete extension_settings[MOBILE_OPT_SETTINGS_KEY];
+    delete extension_settings[NOVEL_AUTO_JUMP_SETTINGS_KEY];
+    delete extension_settings[NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY];
     saveSettingsDebounced();
   } catch (error) {
     console.error("[剧情助手] 重置插件配置失败:", error);
@@ -225,7 +227,7 @@ export async function showSummaryPopup() {
         <div>
           <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">数据管理</p>
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0;">
-            <span style="font-size: 12px; color: #999; flex: 1;">清空私信记录、头像库、图片库、背景库、地图标记数据、悬浮球位置记忆、所有对话的起始楼层/忙闲缓存等本地缓存（不含世界书总结条目）</span>
+            <span style="font-size: 12px; color: #999; flex: 1;">清空除世界书「${summaryLorebookName}」外的本插件设置</span>
             <button id="${POPUP_ID}-clear-all-data" style="background: #c0392b; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;">清空数据</button>
           </div>
         </div>
@@ -511,7 +513,7 @@ export async function showSummaryPopup() {
       errorCatched(async () => {
         const context = getCtx();
         const confirmed = await context.callGenericPopup(
-          "确定要清空本插件的本地缓存数据吗？包括：私信记录、头像库、图片库、背景库、地图标记数据、悬浮球位置记忆、所有对话的起始楼层记录和私信忙闲缓存。<br>不包含世界书里生成的总结条目。<br>此操作不可撤销。",
+          "确定要清空本插件的本地缓存数据吗？",
           context.POPUP_TYPE.CONFIRM,
           "",
           { okButton: "清空", cancelButton: "取消" },
