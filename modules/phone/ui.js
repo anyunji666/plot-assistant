@@ -1,9 +1,10 @@
 "use strict";
 
 import { openCreateCharacterDialog } from "../character.js";
-import { PHONE_PRESET_TITLE, errorCatched, getCtx, notify } from "../core.js";
+import { PHONE_PRESET_TITLE, errorCatched, escapeHtml, getCtx, notify } from "../core.js";
 import { sendPhoneMessageToCharacter } from "./generator.js";
-import { PHONE_INVENTORY_SELF_KEY, addPhoneStickers, cancelPendingInventoryChange, clearPhoneMessages, deletePhoneChatBackground, deletePhoneGlobalBackground, deletePhoneMessage, deletePhoneSticker, deletePhoneInventoryItem, getAllPhoneAvatarsForCurrentCharacter, getAllPhoneMessages, getPhoneChatBackground, getPhoneChatState, getPhoneContactsList, getPhoneFabVisible, getPhoneGlobalBackground, getPhoneInventoryMap, getPhoneStickerList, groupPhoneInventoryByOwner, loadPhonePresetContent, parseContactExtra, parsePhoneStickerImportText, readImageFileCompressed, renamePhoneSticker, savePhoneAvatar, savePhoneChatBackground, savePhoneGlobalBackground, savePhonePresetContent, splitStoryTime, updatePhoneMessageText, upsertPhoneInventoryItem } from "./store.js";
+import { PHONE_INVENTORY_SELF_KEY, addPhoneStickers, cancelPendingInventoryChange, clearPhoneMessages, deletePhoneChatBackground, deletePhoneGlobalBackground, deletePhoneMessage, deletePhoneSticker, deletePhoneInventoryItem, getAllPhoneAvatarsForCurrentCharacter, getAllPhoneMessages, getPhoneChatBackground, getPhoneChatState, getPhoneContactsList, getPhoneFabVisible, getPhoneGlobalBackground, getPhoneInventoryMap, getPhoneStickerList, groupPhoneInventoryByOwner, loadPhonePresetContent, parsePhoneStickerImportText, readImageFileCompressed, renamePhoneSticker, savePhoneAvatar, savePhoneChatBackground, savePhoneGlobalBackground, savePhonePresetContent, splitStoryTime, updatePhoneMessageText, upsertPhoneInventoryItem } from "./store.js";
+import { parseContactExtra } from "./parser.js";
 
 
 // === Function: 打开"私信预设"编辑框（纯文本，取消/保存，样式对齐"对话前强调"弹窗）===
@@ -349,7 +350,7 @@ export function openImageCropDialog({
       const html = `
         <dialog id="pa-crop-dialog">
           <div id="pa-crop-panel">
-            <div id="pa-crop-title">${escapePhoneHtml(title)}</div>
+            <div id="pa-crop-title">${escapeHtml(title)}</div>
             <div id="pa-crop-viewport" class="${shape === "circle" ? "pa-crop-viewport-circle" : ""}" style="width:${viewportW}px;height:${viewportH}px;">
               <img id="pa-crop-img" draggable="false" alt="" />
             </div>
@@ -609,17 +610,6 @@ export const phoneUIState = {
 };
 
 
-export function escapePhoneHtml(str) {
-  return String(str ?? "").replace(
-    /[&<>"']/g,
-    (ch) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        ch
-      ],
-  );
-}
-
-
 // 聊天页头部"…"下拉菜单（清空对话/上传头像）的开关，供 action-btn 点击和各处导航切换时调用。
 export function togglePhoneActionMenu() {
   document.getElementById("pa-phone-action-menu")?.classList.toggle("pa-phone-hidden");
@@ -874,14 +864,14 @@ export async function renderPhoneContactsPage() {
       const metaText = gender ? `${gender}` : "";
       const avatarUrl = avatarMap.get(c.name);
       const avatarInner = avatarUrl
-        ? `<img class="pa-phone-avatar-img" src="${avatarUrl}" alt="${escapePhoneHtml(c.name)}" />`
-        : escapePhoneHtml(c.name.slice(0, 1));
+        ? `<img class="pa-phone-avatar-img" src="${avatarUrl}" alt="${escapeHtml(c.name)}" />`
+        : escapeHtml(c.name.slice(0, 1));
       return `
-      <div class="pa-phone-contact-item" data-name="${escapePhoneHtml(c.name)}">
+      <div class="pa-phone-contact-item" data-name="${escapeHtml(c.name)}">
         <div class="pa-phone-avatar">${avatarInner}</div>
         <div class="pa-phone-contact-meta">
-          <div class="pa-phone-contact-name">${escapePhoneHtml(c.name)}</div>
-          <div class="pa-phone-contact-extra">${escapePhoneHtml(metaText)}</div>
+          <div class="pa-phone-contact-name">${escapeHtml(c.name)}</div>
+          <div class="pa-phone-contact-extra">${escapeHtml(metaText)}</div>
         </div>
       </div>`;
     })
@@ -921,19 +911,19 @@ export async function renderPhoneBackpackPage() {
       const gender = contact ? parseContactExtra(contact.extra).gender : "";
       const avatarUrl = isSelf ? null : avatarMap.get(owner);
       const avatarInner = avatarUrl
-        ? `<img class="pa-phone-avatar-img" src="${avatarUrl}" alt="${escapePhoneHtml(displayName)}" />`
-        : escapePhoneHtml(displayName.slice(0, 1));
+        ? `<img class="pa-phone-avatar-img" src="${avatarUrl}" alt="${escapeHtml(displayName)}" />`
+        : escapeHtml(displayName.slice(0, 1));
       const itemsHtml = items
         .map((it) => renderPhoneBackpackItemRow(owner, it.item, it.value, it.numeric, it.pending))
         .join("");
       const expanded = owner === phoneUIState.expandedBackpackOwner;
       return `
-      <div class="pa-phone-backpack-card${expanded ? " pa-phone-backpack-card-expanded" : ""}" data-owner="${escapePhoneHtml(owner)}">
+      <div class="pa-phone-backpack-card${expanded ? " pa-phone-backpack-card-expanded" : ""}" data-owner="${escapeHtml(owner)}">
         <div class="pa-phone-backpack-header">
           <div class="pa-phone-avatar">${avatarInner}</div>
           <div class="pa-phone-contact-meta">
-            <div class="pa-phone-contact-name">${escapePhoneHtml(displayName)}</div>
-            <div class="pa-phone-contact-extra">${escapePhoneHtml(gender)}</div>
+            <div class="pa-phone-contact-name">${escapeHtml(displayName)}</div>
+            <div class="pa-phone-contact-extra">${escapeHtml(gender)}</div>
           </div>
           <button class="pa-phone-backpack-add-btn">增加</button>
         </div>
@@ -963,9 +953,9 @@ function renderPhoneBackpackItemRow(owner, item, value, numeric, pending) {
     ? `<button class="pa-phone-backpack-cancel-btn">撤销</button>`
     : `<button class="pa-phone-backpack-delete-btn">删除</button>`;
   return `
-    <div class="pa-phone-backpack-item-row${rowClass}" data-owner="${escapePhoneHtml(owner)}" data-item="${escapePhoneHtml(item)}" data-pending="${pending || ""}">
-      <input class="pa-phone-backpack-input pa-phone-backpack-item-name" type="text" value="${escapePhoneHtml(item)}" placeholder="物品名" ${isDeleted ? "disabled" : ""} />
-      <input class="pa-phone-backpack-input pa-phone-backpack-item-qty" type="${numeric ? "number" : "text"}" value="${escapePhoneHtml(value)}" placeholder="数量" ${numeric && !isDeleted ? "" : "readonly"} ${isDeleted ? "disabled" : ""} />
+    <div class="pa-phone-backpack-item-row${rowClass}" data-owner="${escapeHtml(owner)}" data-item="${escapeHtml(item)}" data-pending="${pending || ""}">
+      <input class="pa-phone-backpack-input pa-phone-backpack-item-name" type="text" value="${escapeHtml(item)}" placeholder="物品名" ${isDeleted ? "disabled" : ""} />
+      <input class="pa-phone-backpack-input pa-phone-backpack-item-qty" type="${numeric ? "number" : "text"}" value="${escapeHtml(value)}" placeholder="数量" ${numeric && !isDeleted ? "" : "readonly"} ${isDeleted ? "disabled" : ""} />
       ${pendingBadge}
       ${actionBtn}
     </div>`;
@@ -1093,10 +1083,10 @@ export async function renderPhoneSettingsPage() {
     ? stickers
         .map(
           (s) => `
-      <div class="pa-phone-sticker-manage-item" data-id="${escapePhoneHtml(s.id)}">
+      <div class="pa-phone-sticker-manage-item" data-id="${escapeHtml(s.id)}">
         <button class="pa-phone-sticker-delete-btn" title="删除">✕</button>
-        <div class="pa-phone-sticker-manage-thumb"><img src="${s.dataUrl}" alt="${escapePhoneHtml(s.name)}" /></div>
-        <div class="pa-phone-sticker-manage-name" title="点击改名">${escapePhoneHtml(s.name)}</div>
+        <div class="pa-phone-sticker-manage-thumb"><img src="${s.dataUrl}" alt="${escapeHtml(s.name)}" /></div>
+        <div class="pa-phone-sticker-manage-name" title="点击改名">${escapeHtml(s.name)}</div>
       </div>`,
         )
         .join("")
@@ -1219,7 +1209,7 @@ export async function renderPhoneSettingsPage() {
       const item = nameEl.closest(".pa-phone-sticker-manage-item");
       const id = item.dataset.id;
       const current = nameEl.textContent;
-      nameEl.outerHTML = `<input class="pa-phone-sticker-name-input" value="${escapePhoneHtml(current)}" />`;
+      nameEl.outerHTML = `<input class="pa-phone-sticker-name-input" value="${escapeHtml(current)}" />`;
       const input = item.querySelector(".pa-phone-sticker-name-input");
       input.focus();
       input.select();
@@ -1268,7 +1258,7 @@ export async function openPhoneChat(characterName) {
     <div id="pa-phone-sticker-panel" class="pa-phone-hidden"></div>
     <div id="pa-phone-chat-inputbar">
       <button id="pa-phone-sticker-btn" title="图片">☺</button>
-      <input id="pa-phone-chat-input" type="text" placeholder="发消息给${escapePhoneHtml(
+      <input id="pa-phone-chat-input" type="text" placeholder="发消息给${escapeHtml(
         characterName,
       )}..." />
       <button id="pa-phone-chat-send-btn">发送</button>
@@ -1334,8 +1324,8 @@ export async function renderPhoneStickerPanel(characterName, panel) {
   panel.innerHTML = list
     .map(
       (s) => `
-    <div class="pa-phone-sticker-item" data-id="${escapePhoneHtml(s.id)}" title="${escapePhoneHtml(s.name)}">
-      <img src="${s.dataUrl}" alt="${escapePhoneHtml(s.name)}" />
+    <div class="pa-phone-sticker-item" data-id="${escapeHtml(s.id)}" title="${escapeHtml(s.name)}">
+      <img src="${s.dataUrl}" alt="${escapeHtml(s.name)}" />
     </div>`,
     )
     .join("");
@@ -1397,7 +1387,7 @@ export async function renderPhoneChatMessages(characterName) {
         .find((d) => d);
       const dividerText = firstStoryDate || g.dateKey;
       return `
-      <div class="pa-phone-date-divider">${escapePhoneHtml(dividerText)}</div>
+      <div class="pa-phone-date-divider">${escapeHtml(dividerText)}</div>
       ${g.msgs
         .map((m) => {
           const storyParts = splitStoryTime(m.storyTime);
@@ -1410,10 +1400,10 @@ export async function renderPhoneChatMessages(characterName) {
             ? "pa-phone-msg-bubble pa-phone-msg-bubble-sticker"
             : "pa-phone-msg-bubble";
           const bubbleInner = sticker
-            ? `<img class="pa-phone-msg-sticker-img" src="${sticker.dataUrl}" alt="${escapePhoneHtml(sticker.name)}" />`
-            : escapePhoneHtml(m.text);
+            ? `<img class="pa-phone-msg-sticker-img" src="${sticker.dataUrl}" alt="${escapeHtml(sticker.name)}" />`
+            : escapeHtml(m.text);
           return `
-          <div class="pa-phone-msg-row ${side}" data-id="${escapePhoneHtml(m.id)}" data-text="${escapePhoneHtml(m.text)}">
+          <div class="pa-phone-msg-row ${side}" data-id="${escapeHtml(m.id)}" data-text="${escapeHtml(m.text)}">
             <div class="pa-phone-msg-bubble-line">
               <div class="${bubbleClass}">${bubbleInner}</div>
               <button class="pa-phone-msg-more-btn" title="编辑/删除">⋯</button>
@@ -1460,7 +1450,7 @@ export function bindPhoneChatMessageActions(list, characterName) {
         const originalText = row.dataset.text || "";
         bubbleLine.outerHTML = `
         <div class="pa-phone-msg-edit-box">
-          <textarea class="pa-phone-msg-edit-input">${escapePhoneHtml(originalText)}</textarea>
+          <textarea class="pa-phone-msg-edit-input">${escapeHtml(originalText)}</textarea>
           <div class="pa-phone-msg-edit-btns">
             <button class="pa-phone-msg-edit-cancel">取消</button>
             <button class="pa-phone-msg-edit-save">保存</button>

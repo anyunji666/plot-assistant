@@ -1,7 +1,8 @@
 "use strict";
 
-import { AUTO_BATCH_SIZE, GENERATING_OVERLAY_ID, GENERATION_TIMEOUT, LARGE_SUMMARY_TITLE, PRE_EMPHASIS_ENTRY_DEFAULTS, PRE_EMPHASIS_TITLE, SMALL_SUMMARY_ENTRY_DEFAULTS, SMALL_SUMMARY_TITLE_PREFIX, STATUS_TABLE_ENTRY_DEFAULTS, STATUS_TABLE_TITLE, STEP_DELAY, SummaryStopRequestedError, confirmAction, delay, errorCatched, getCtx, getOffsetRecord, notify, setOffsetRecord } from "../core.js";
+import { AUTO_BATCH_SIZE, GENERATION_TIMEOUT, LARGE_SUMMARY_TITLE, PRE_EMPHASIS_ENTRY_DEFAULTS, PRE_EMPHASIS_TITLE, SMALL_SUMMARY_ENTRY_DEFAULTS, SMALL_SUMMARY_TITLE_PREFIX, STATUS_TABLE_ENTRY_DEFAULTS, STATUS_TABLE_TITLE, STEP_DELAY, SummaryStopRequestedError, confirmAction, delay, errorCatched, getCtx, getOffsetRecord, notify, setOffsetRecord } from "../core.js";
 import { buildFloorRestoreInstruction, buildFloorRestoreUserContent, buildLargeSummaryInstruction, buildMessagesText, convertInventorySnapshotToHardset, extractLabelLine, extractYearMonthKeyword, findNearestAnchorFloor, getLastMessageId, getMaxSummaryEnd, getSummaryProgress, handleMessageForStatusTable, parseFloorSummaryFields, parseLargeSummaryBlock, parseRestoredFloorFields, parseSummaryContent, serializeStatusTableContent } from "./parser.js";
+import { closeGeneratingOverlay, showGeneratingOverlay } from "./ui.js";
 import { getCurrentCharacterName, getFreeUid, getLorebookEntriesArray, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, notifyWorldInfoUpdated, saveOrOverwriteLorebookEntry } from "../worldinfo.js";
 
 
@@ -154,138 +155,6 @@ export async function generateSummaryRaw(systemPrompt, userContent) {
   if (typeof result === "string") return result;
   if (result && typeof result.content === "string") return result.content; // 兼容极端情况下的对象返回
   throw new Error("生成返回了无法识别的结果类型。");
-}
-
-
-// === Helper: "生成中"提示框（居中弹窗，半透明遮罩+卡片，带加载动画） ===
-// 与批次相关的 toastr 进度提示（如"正在总结第X楼..."）相互独立，互不干扰、并存显示。
-// options.showStopButton: 是否显示"停止总结"按钮（仅批量循环类功能需要）；
-// options.onStop: 点击停止按钮时的回调（会设置调用方内部的停止标志位，当前批次仍会正常跑完并保存）；
-// options.statusText: 覆盖默认的提示文字。
-export function showGeneratingOverlay(options) {
-  const {
-    showStopButton = false,
-    onStop = null,
-    statusText = "正在生成总结，请稍候...",
-  } = options || {};
-  try {
-    if ($(`#${GENERATING_OVERLAY_ID}`).length > 0) return; // 已存在则不重复创建
-
-    if ($(`#${GENERATING_OVERLAY_ID}-style`).length === 0) {
-      const styleElement = document.createElement("style");
-      styleElement.id = `${GENERATING_OVERLAY_ID}-style`;
-      styleElement.textContent = `
-        @keyframes summaryAssistantSpin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes summaryAssistantFadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-      `;
-      document.head.appendChild(styleElement);
-    }
-
-    const $overlay = $("<div></div>").attr("id", GENERATING_OVERLAY_ID).css({
-      position: "fixed",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: "rgba(0, 0, 0, 0.5)",
-      backdropFilter: "blur(2px)",
-      zIndex: 10000,
-      animation: "summaryAssistantFadeIn 0.15s ease-out",
-    });
-
-    // 与「剧情助手控制面板」「对话前强调」弹窗保持一致：固定锚定在屏幕顶部附近，而不是用 flex 居中。
-    // 居中方案在移动端地址栏/工具栏收缩、或弹出虚拟键盘时，vh 不会随可视视口实时更新，
-    // 会导致卡片被顶部裁掉、错位；顶部锚定 + dvh 可以避免这个问题。
-    const $card = $("<div></div>").css({
-      position: "fixed",
-      top: "12px",
-      left: "50%",
-      transform: "translateX(-50%)",
-      width: "min(320px, calc(100% - 24px))",
-      maxHeight: "min(85vh, calc(100dvh - 24px))",
-      overflowY: "auto",
-      WebkitOverflowScrolling: "touch",
-      background: "#262626",
-      color: "#e0e0e0",
-      borderRadius: "8px",
-      boxShadow: "0 15px 30px rgba(0, 0, 0, 0.6)",
-      padding: "24px 32px",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      gap: "14px",
-      fontFamily: "system-ui, -apple-system, sans-serif",
-      fontSize: "14px",
-      boxSizing: "border-box",
-    });
-
-    const $spinner = $("<div></div>").css({
-      width: "32px",
-      height: "32px",
-      border: "3px solid #444",
-      borderTopColor: "#3a7bd5",
-      borderRadius: "50%",
-      animation: "summaryAssistantSpin 0.8s linear infinite",
-    });
-
-    const $text = $("<div></div>").text(statusText);
-
-    $card.append($spinner).append($text);
-
-    if (showStopButton) {
-      const $stopButton = $("<button></button>")
-        .attr("id", `${GENERATING_OVERLAY_ID}-stop`)
-        .text("停止总结")
-        .css({
-          background: "#d53a3a",
-          border: "none",
-          color: "#fff",
-          cursor: "pointer",
-          fontSize: "12px",
-          padding: "6px 14px",
-          borderRadius: "4px",
-          marginTop: "4px",
-          transition: "background-color 0.2s",
-        })
-        .on("click", function () {
-          $(this)
-            .prop("disabled", true)
-            .css("cursor", "default")
-            .css("opacity", 0.6)
-            .text("已请求停止，当前批次完成后停止...");
-          if (typeof onStop === "function") onStop();
-        })
-        .hover(
-          function () {
-            if (!$(this).prop("disabled")) $(this).css("background", "#b32e2e");
-          },
-          function () {
-            if (!$(this).prop("disabled")) $(this).css("background", "#d53a3a");
-          },
-        );
-      $card.append($stopButton);
-    }
-
-    $overlay.append($card);
-    $("body").append($overlay);
-  } catch (error) {
-    console.error("[剧情助手] 显示生成中提示框时出错:", error);
-  }
-}
-
-
-export function closeGeneratingOverlay() {
-  try {
-    $(`#${GENERATING_OVERLAY_ID}`).remove();
-  } catch (error) {
-    console.error("[剧情助手] 关闭生成中提示框时出错:", error);
-  }
 }
 
 

@@ -1,7 +1,8 @@
 "use strict";
 
 import { PHONE_INVENTORY_PROMPT_KEY, PHONE_SLOT_PROMPT_KEY, getCtx, notify, persistChatMetadata } from "../core.js";
-import { appendPhoneMessage, characterActiveInText, getAllPhoneMessages, getCurrentStoryTime, getLastAiFloor, getPhoneChatState, getPhoneContactCardBody, getRelationshipStageForCharacter, loadPhonePresetContent, markPhoneUpdatedToday, splitInventoryKey, splitStoryTime } from "./store.js";
+import { appendPhoneMessage, getAllPhoneMessages, getPhoneChatState, getPhoneContactCardBody, getRelationshipStageForCharacter, loadPhonePresetContent, markPhoneUpdatedToday, splitInventoryKey, splitStoryTime } from "./store.js";
+import { characterActiveInText, getCurrentStoryTime, getLastAiFloor } from "./parser.js";
 import { refreshPhoneChatViewIfOpen, setPhoneTypingIndicator } from "./ui.js";
 import { generateSummaryRaw } from "../summary/generator.js";
 import { rebuildStatusTableFromChat } from "../summary/parser.js";

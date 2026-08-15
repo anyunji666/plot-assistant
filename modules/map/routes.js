@@ -1,6 +1,8 @@
 "use strict";
 
-import { COMPASS_NAMES, colorForFaction, escapeHtml, getActiveMap, isBigMapActive, mapState, saveSettings, scheduleMapInfoSync } from "./data.js";
+import { escapeHtml } from "../core.js";
+import { COMPASS_NAMES, colorForFaction, getActiveMap, isBigMapActive, mapState, saveSettings } from "./data.js";
+import { scheduleMapInfoSync } from "./generator.js";
 import { toggleMobileSidebar } from "./ui.js";
 
 
