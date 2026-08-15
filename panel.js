@@ -6,7 +6,7 @@ import { openCreateCharacterDialog } from "./modules/character.js";
 import { getNovelAutoJumpSettings } from "./modules/novel/generator.js";
 import { getActiveNovelChapterUid, listNovelChapterEntries, setActiveNovelChapter } from "./modules/novel/store.js";
 import { openNovelEntryDialog } from "./modules/novel/ui.js";
-import { LOCAL_CHAT_STORE_KEY, NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY, NOVEL_AUTO_JUMP_SETTINGS_KEY, PHONE_IDB_NAME, SUMMARY_POPUP_ID, errorCatched, getCtx, getOffsetRecord, localChatStoreCache, notify, transientChatMetadataStore } from "./modules/core.js";
+import { LOCAL_CHAT_STORE_KEY, NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY, NOVEL_AUTO_JUMP_SETTINGS_KEY, PHONE_IDB_NAME, SUMMARY_POPUP_ID, errorCatched, getCtx, localChatStoreCache, notify, transientChatMetadataStore } from "./modules/core.js";
 import { IDB_NAME, MAP_MODULE_NAME, getFabVisible, setFabVisibleSetting } from "./modules/map/data.js";
 import { FAB_POS_KEY, applyFabVisibility, openModal, resetFabPos } from "./modules/map/ui.js";
 import { MOBILE_OPT_SETTINGS_KEY, disableLazyLoadGroup, disableRenderOptimizeGroup, enableLazyLoadGroup, enableRenderOptimizeGroup, getMobileOptSettings } from "./modules/mobile-opt.js";
@@ -138,11 +138,6 @@ export async function showSummaryPopup() {
     const novelChapters = await listNovelChapterEntries(summaryLorebookName);
     const { activeUid: activeNovelChapterUid } =
       await getActiveNovelChapterUid(summaryLorebookName);
-    const currentOffsetRecord = getOffsetRecord();
-    const currentOffsetDisplay = currentOffsetRecord
-      ? `第 ${currentOffsetRecord.offset} 层`
-      : "未设置（默认第 0 层，不偏移）";
-
     const popupContent = `
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #444;">
         <h3 style="margin: 0; color: #e0e0e0; font-weight: 500; font-size: 18px;">剧情助手控制面板</h3>
@@ -159,7 +154,6 @@ export async function showSummaryPopup() {
             <button id="${POPUP_ID}-set-offset" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">设定起始楼层</button>
             <button id="${POPUP_ID}-auto-large" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">自动大总结</button>
           </div>
-          <div style="margin-top: 8px; font-size: 12px; color: #888;">本对话当前起始楼层：<span style="color: #aaa;">${currentOffsetDisplay}</span></div>
         </div>
 
         <div style="margin-bottom: 20px;">
