@@ -280,6 +280,11 @@ export const PHONE_SLOT_PROMPT_KEY = "plotAssistant_phoneSlot";
 // 用法跟 PHONE_SLOT_PROMPT_KEY 一样：生成前注入、渲染完清空，不常驻。
 export const PHONE_INVENTORY_PROMPT_KEY = "plotAssistant_inventoryChangeSlot";
 
+// === 星期/节假日播报 相关常量 ===
+// 用法跟 PHONE_SLOT_PROMPT_KEY 一样：生成前从最后一层摘要模块的 Time 字段重新计算、临时注入，
+// 渲染完这一轮立即清空，不常驻、不写世界书。不依赖通讯器模块是否开启，插件加载即生效，无独立开关。
+export const HOLIDAY_SLOT_PROMPT_KEY = "plotAssistant_holidaySlot";
+
 export const SUMMARY_BUTTON_ID = "summary-assistant-menu-button";
 
 export const SUMMARY_BUTTON_ICON = "fa-solid fa-book";
