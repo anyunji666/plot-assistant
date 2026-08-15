@@ -50,7 +50,7 @@ export function extractCharacterInfoBody(content) {
 // extractLabelLine 只取标签所在那一行，取不到多行内容，这里单独按"从标签行到末尾"整体截取。===
 export function extractMultilineLabelField(text, label) {
   if (!text || typeof text !== "string") return "";
-  const re = new RegExp(`^[ \\t]*${label}[ \\t]*:[ \\t]*([\\s\\S]*)$`, "m");
+  const re = new RegExp(`^[ \\t]*${label}[ \\t]*[:：][ \\t]*([\\s\\S]*)$`, "m");
   const m = text.match(re);
   return m ? m[1].trim() : "";
 }
