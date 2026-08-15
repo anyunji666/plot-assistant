@@ -111,16 +111,13 @@ export async function buildRangeSummaryContent(batchStart, batchEnd, overlayOpti
       ? times[0]
       : `${times[0]} ~ ${times[times.length - 1]}`
     : "未知";
-  // 地点取整个batch内最后一个非空 Location（即这段区间结束时所在的场景）。
-  const locations = unifiedFloors.map((f) => f.location).filter(Boolean);
-  const locationLabel = locations.length
-    ? locations[locations.length - 1]
-    : "未知";
   const bullets = unifiedFloors
     .filter((f) => f.overview)
     .map((f) => `- [第${f.idx}楼] ${f.overview}`);
 
-  const content = `时间：${timeLabel}\n地点：${locationLabel}\n关键事件：\n${bullets.length ? bullets.join("\n") : "（本段无实质推进）"}`;
+  // 世界书里的小总结正文只保留时间跨度和关键事件——地点取"批次内最后一个场景"意义有限，
+  // 且作为世界书条目被注入进上下文后反而可能跟正文实际所在场景不一致，造成干扰，故不写入正文。
+  const content = `时间：${timeLabel}\n关键事件：\n${bullets.length ? bullets.join("\n") : "（本段无实质推进）"}`;
 
   // 关键词取整个batch内第一个带 Time 的楼层，只取"年月"粒度；整批都没有可用 Time 时关键词留空。
   const firstTimedFloor = unifiedFloors.find((f) => f.time);
