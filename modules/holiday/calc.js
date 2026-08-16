@@ -11,7 +11,7 @@ export const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
 export const WORLD_HOLIDAYS = [
   { month: 1, day: 1, name: "元旦" },
   { month: 2, day: 14, name: "情人节" },
-  { month: 5, day: 1, name: "国际劳动节" },
+  { month: 5, day: 1, name: "国际劳工节" },
   { month: 10, day: 31, name: "万圣节" },
   { month: 12, day: 24, name: "平安夜" },
   { month: 12, day: 25, name: "圣诞节" },

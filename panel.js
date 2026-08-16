@@ -154,9 +154,9 @@ export async function showSummaryPopup() {
         <div style="margin-bottom: 20px;">
           <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">总结功能</p>
           <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <button id="${POPUP_ID}-auto-large" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">自动大总结</button>
             <button id="${POPUP_ID}-auto-small" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">自动小总结</button>
             <button id="${POPUP_ID}-set-offset" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">设定起始楼层</button>
-            <button id="${POPUP_ID}-auto-large" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">自动大总结</button>
           </div>
         </div>
 
@@ -640,11 +640,11 @@ export async function showSummaryPopup() {
     // 未挂载 -> 点击走"挂载"流程（会检测其他全局书，问是否顺带清理，只保留这一本）；
     // 已挂载 -> 点击只做单纯的 toggle off，不碰其他全局书，方便"先摘旧角色卡，再挂新角色卡"这种切换场景。
     const MOUNT_GLOBAL_ON_STYLE = { background: "#3a9d5a", cursor: "pointer" };
-    const MOUNT_GLOBAL_OFF_STYLE = { background: "#3a7bd5", cursor: "pointer" };
+    const MOUNT_GLOBAL_OFF_STYLE = { background: "#555", cursor: "pointer" };
 
     function renderMountGlobalButton($btn, isOn) {
       $btn
-        .text(isOn ? "取消挂载" : "挂载为全局世界书")
+        .text(isOn ? "全局挂载" : "尚未挂载")
         .css(isOn ? MOUNT_GLOBAL_ON_STYLE : MOUNT_GLOBAL_OFF_STYLE);
     }
 
