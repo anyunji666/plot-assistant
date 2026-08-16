@@ -6,7 +6,7 @@ import { registerLorebookAutoCreate, registerStatusTableAutoUpdate } from "./mod
 import { applyMobileOptSettingsOnLoad } from "./modules/mobile-opt.js";
 import { injectPhoneFloatingButton } from "./modules/phone/ui.js";
 import { registerPhoneSlotInjection } from "./modules/phone/generator.js";
-import { registerHolidayInjection } from "./modules/phone/holiday.js";
+import { registerHolidayInjection } from "./modules/holiday/inject.js";
 import { getSettings } from "./modules/map/data.js";
 import { injectFloatingButton, registerMapGlobalEvents } from "./modules/map/ui.js";
 import { syncMapInfoEntry } from "./modules/map/generator.js";
@@ -77,8 +77,8 @@ jQuery(() => {
   injectPhoneFloatingButton(); // 默认关闭，只有之前手动开启过才会在这里显示出来
   registerPhoneSlotInjection(); // 私信槽位：生成前注入当天新私信，生成后立即清空
 
-  // --- 星期/节假日播报模块（独立于通讯器，无开关，插件加载即生效） ---
-  registerHolidayInjection(); // 生成前从最后一层摘要 Time 字段现算星期/附近节假日并注入，生成后立即清空
+  // --- 节假日模块（完全独立模块，默认关闭，面板"节假日开/节假日关"按钮控制） ---
+  registerHolidayInjection(); // 生成前若开关开启，从最后一层摘要 Time 字段现算星期/附近节假日并注入，生成后立即清空
 
   // --- 剧情录入模块：自动跳转章节（默认关闭，面板"自跳转开/自跳转关"按钮控制） ---
   registerNovelAutoJump();

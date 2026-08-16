@@ -1,6 +1,6 @@
 "use strict";
 
-import { SMALL_SUMMARY_TITLE_PREFIX, STATUS_TABLE_ENTRY_DEFAULTS, STATUS_TABLE_TITLE, getCtx, notify, persistChatMetadata } from "../core.js";
+import { SMALL_SUMMARY_TITLE_PREFIX, STATUS_TABLE_ENTRY_DEFAULTS, STATUS_TABLE_TITLE, getCtx, getLastAiFloor, notify, persistChatMetadata } from "../core.js";
 import { handleCharacterBecameFree } from "../phone/generator.js";
 import { getPhoneChatState } from "../phone/store.js";
 import { getLorebookEntriesArray, getOrCreateSummaryLorebook, saveOrOverwriteLorebookEntry } from "../worldinfo.js";
@@ -873,9 +873,9 @@ export async function rebuildStatusTableFromChat() {
   // 忙碌状态本身只在"当前"有意义，没必要像 Relationships 那样重放整个对话。
   const phoneState = getPhoneChatState();
   const freedCharacters = [];
-  const latestAiMessage = [...chat].reverse().find((m) => m && !m.is_user);
-  if (latestAiMessage) {
-    const latestFields = parseFloorSummaryFields(latestAiMessage.mes);
+  const { idx: latestAiIdx, mes: latestAiMes } = getLastAiFloor();
+  if (latestAiIdx !== -1) {
+    const latestFields = parseFloorSummaryFields(latestAiMes);
     if (latestFields && latestFields.busy) {
       const { map: busyRemoveMap } = parseKeyValueListWithSkipped(
         latestFields.busy,

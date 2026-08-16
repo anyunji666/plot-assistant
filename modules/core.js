@@ -280,10 +280,7 @@ export const PHONE_SLOT_PROMPT_KEY = "plotAssistant_phoneSlot";
 // 用法跟 PHONE_SLOT_PROMPT_KEY 一样：生成前注入、渲染完清空，不常驻。
 export const PHONE_INVENTORY_PROMPT_KEY = "plotAssistant_inventoryChangeSlot";
 
-// === 星期/节假日播报 相关常量 ===
-// 用法跟 PHONE_SLOT_PROMPT_KEY 一样：生成前从最后一层摘要模块的 Time 字段重新计算、临时注入，
-// 渲染完这一轮立即清空，不常驻、不写世界书。不依赖通讯器模块是否开启，插件加载即生效，无独立开关。
-export const HOLIDAY_SLOT_PROMPT_KEY = "plotAssistant_holidaySlot";
+// === 星期/节假日播报 相关常量已迁移到 modules/holiday/inject.js（独立模块，自带开关/自带 prompt key）===
 
 export const SUMMARY_BUTTON_ID = "summary-assistant-menu-button";
 
@@ -307,6 +304,18 @@ export const OFFSET_META_KEY = "plotAssistant_summaryOffset";
 // === Helper: 获取酒馆原生 context（每次都取最新的，避免切换角色/对话后引用过期） ===
 export function getCtx() {
   return SillyTavern.getContext();
+}
+
+// === Helper: 取"最后一层 AI 楼层"的索引与正文，找不到返回 idx=-1 ===
+// 通用基础设施：单纯扫描 chat 数组找最后一条 is_user 为 false 的消息，跟具体功能模块无关，
+// 供手机私信、节假日播报、状态表重放等多个模块共用，避免各自重复实现。
+export function getLastAiFloor() {
+  const chat = getCtx().chat;
+  if (!Array.isArray(chat)) return { idx: -1, mes: "" };
+  for (let i = chat.length - 1; i >= 0; i--) {
+    if (chat[i] && !chat[i].is_user) return { idx: i, mes: chat[i].mes || "" };
+  }
+  return { idx: -1, mes: "" };
 }
 
 // === Helper: HTML 转义（各模块拼接 innerHTML 时统一用这个，避免各写各的）===

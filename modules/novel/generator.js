@@ -6,6 +6,7 @@ import {
   NOVEL_AUTO_JUMP_SETTINGS_KEY,
   NOVEL_CHAPTER_PROMPT_KEY,
   getCtx,
+  getLastAiFloor,
   notify,
 } from "../core.js";
 import { parseFloorSummaryFields } from "../summary/parser.js";
@@ -96,13 +97,10 @@ export async function handleExpiredChapterAutoJump() {
   try {
     if (!isNovelAutoJumpEnabled()) return;
 
-    const context = getCtx();
-    const chat = context.chat;
-    if (!chat || chat.length === 0) return;
-    const lastMessage = chat[chat.length - 1];
-    if (!lastMessage || lastMessage.is_user) return; // 只关心 AI 楼层
+    const { idx: lastAiIdx, mes: lastAiMes } = getLastAiFloor();
+    if (lastAiIdx === -1) return;
 
-    const fields = parseFloorSummaryFields(lastMessage.mes);
+    const fields = parseFloorSummaryFields(lastAiMes);
     const expiredChapter = fields ? fields.expiredChapter : "";
     if (!expiredChapter) return; // 没输出这个字段，说明 AI 判定还没演绎完，什么都不做
 

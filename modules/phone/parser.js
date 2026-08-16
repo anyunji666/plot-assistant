@@ -1,7 +1,7 @@
 "use strict";
 
 import { extractCharacterKeywords } from "../character.js";
-import { getCtx } from "../core.js";
+import { getCtx, getLastAiFloor } from "../core.js";
 import { extractLabelLine, parseFloorSummaryFields } from "../summary/parser.js";
 
 
@@ -11,17 +11,6 @@ export function characterActiveInText(characterName, text) {
   return extractCharacterKeywords(characterName).some(
     (kw) => kw && text.includes(kw),
   );
-}
-
-
-// === Helper: 取"最后一层 AI 楼层"的索引与正文，找不到返回 idx=-1 ===
-export function getLastAiFloor() {
-  const chat = getCtx().chat;
-  if (!Array.isArray(chat)) return { idx: -1, mes: "" };
-  for (let i = chat.length - 1; i >= 0; i--) {
-    if (chat[i] && !chat[i].is_user) return { idx: i, mes: chat[i].mes || "" };
-  }
-  return { idx: -1, mes: "" };
 }
 
 
