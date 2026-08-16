@@ -1,12 +1,12 @@
 "use strict";
 
 import { AUTO_BATCH_SIZE, GENERATION_TIMEOUT, LARGE_SUMMARY_TITLE, PRE_EMPHASIS_ENTRY_DEFAULTS, PRE_EMPHASIS_TITLE, SMALL_SUMMARY_ENTRY_DEFAULTS, SMALL_SUMMARY_TITLE_PREFIX, STATUS_TABLE_ENTRY_DEFAULTS, STATUS_TABLE_TITLE, STEP_DELAY, SummaryStopRequestedError, confirmAction, delay, errorCatched, getCtx, getOffsetRecord, notify, setOffsetRecord } from "../core.js";
-import { buildFloorRestoreInstruction, buildFloorRestoreUserContent, buildLargeSummaryInstruction, buildMessagesText, convertInventorySnapshotToHardset, extractLabelLine, extractYearMonthKeyword, findNearestAnchorFloor, getLastMessageId, getMaxSummaryEnd, getSummaryProgress, handleMessageForStatusTable, parseFloorSummaryFields, parseLargeSummaryBlock, parseRestoredFloorFields, parseSummaryContent, serializeStatusTableContent } from "./parser.js";
+import { buildFloorRestoreInstruction, buildFloorRestoreUserContent, buildMessagesText, convertInventorySnapshotToHardset, extractLabelLine, extractYearMonthKeyword, findNearestAnchorFloor, getLastMessageId, getMaxSummaryEnd, getSummaryProgress, handleMessageForStatusTable, parseFloorSummaryFields, parseRestoredFloorFields, parseSummaryContent, serializeStatusTableContent } from "./parser.js";
 import { closeGeneratingOverlay, showGeneratingOverlay } from "./ui.js";
 import { getCurrentCharacterName, getFreeUid, getLorebookEntriesArray, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, notifyWorldInfoUpdated, saveOrOverwriteLorebookEntry } from "../worldinfo.js";
 
 
-export async function buildRangeSummaryContent(batchStart, batchEnd, overlayOptions) {
+export async function buildRangeSummaryContent(batchStart, batchEnd, offset = 0, overlayOptions) {
   const chat = getCtx().chat;
   const floorInfos = [];
   for (let i = batchStart; i <= batchEnd; i++) {
@@ -113,7 +113,7 @@ export async function buildRangeSummaryContent(batchStart, batchEnd, overlayOpti
     : "未知";
   const bullets = unifiedFloors
     .filter((f) => f.overview)
-    .map((f) => `- [第${f.idx}楼] ${f.overview}`);
+    .map((f) => `- [第${f.idx + offset}楼] ${f.overview}`);
 
   // 世界书里的小总结正文只保留时间跨度和关键事件——地点取"批次内最后一个场景"意义有限，
   // 且作为世界书条目被注入进上下文后反而可能跟正文实际所在场景不一致，造成干扰，故不写入正文。
@@ -202,6 +202,15 @@ export const runAutoSmallSummary = errorCatched(async () => {
 
   let progress = await getSummaryProgress(summaryLorebookName, offset);
 
+  // 设置过起始楼层（offset > 0）且本对话还没生成过任何小总结时，第0楼是"状态存档"粘贴内容
+  // （不是新产生的剧情），第1楼通常是接续后的第一条用户发言（本身也不会有摘要模块，正常扫描也会跳过）。
+  // 这里直接把起点定到第2楼，不必再把第0楼纳入扫描——省一次无意义的解析，也彻底避免它被当成"新内容"处理。
+  // 只在"从未总结过"（progress < 0）时生效：一旦本对话已经生成过小总结，progress 就会有实际值，
+  // 不会再触发这个跳过逻辑，不影响后续正常批次。
+  if (progress < 0 && offset > 0) {
+    progress = 1;
+  }
+
   if (progress >= lastMessageId) {
     notify(
       "info",
@@ -233,7 +242,7 @@ export const runAutoSmallSummary = errorCatched(async () => {
 
     try {
       const { content: summaryContent, keyword: rangeKeyword } =
-        await buildRangeSummaryContent(batchStart, batchEnd, {
+        await buildRangeSummaryContent(batchStart, batchEnd, offset, {
           showStopButton: true,
           onStop: requestStop,
           statusText: `正在处理第${rangeLabel}楼，请稍候...`,
@@ -332,7 +341,7 @@ export const runSetOffset = errorCatched(async () => {
   const defaultOffset = maxEnd < 0 ? 0 : maxEnd + 1;
 
   const inputRaw = await context.callGenericPopup(
-    `新对话的小总结楼层号从第几层开始编号？<br>（全新故事填 0；用于大总结后的新对话续写，已根据世界书当前内容自动预填建议值，直接确认即可）`,
+    `新对话的小总结楼层号从第几层开始编号？<br>（全新故事填 0；用于状态存档后的新对话续写，已根据世界书当前内容自动预填建议值，直接确认即可）`,
     context.POPUP_TYPE.INPUT,
     String(defaultOffset),
     { okButton: "确定", cancelButton: "取消" },
@@ -359,15 +368,21 @@ export const runSetOffset = errorCatched(async () => {
 
 
 // =====================================================================================
-// === Function: 自动大总结 ===
-// 只读取世界书中已有的全部"小总结：xx-xx"条目，整合成一段连贯概况文字，不重新读取原始聊天记录。
+// === Function: 状态存档（原"自动大总结"）===
+// 不再调用AI、不再读取"小总结"条目：直接读取当前状态表世界书条目里的 Relationships/Inventory/Setups，
+// 原样套进 <details><summary>摘要</summary>...</details> 这个粘贴格式（不含 Time/Location/Overview）。
+// 外壳仍然保留是因为新对话第0层要靠 parseFloorSummaryFields 识别出这是一层"摘要模块"，
+// 从而在首次触发 rebuildStatusTableFromChat 全量重放时把这些字段解析合并回状态表；
+// 不含 Time/Overview 字段是特意的：buildRangeSummaryContent 里 times/overview 的聚合逻辑本身就会
+// 用 filter(Boolean) 跳过空字段，这样第0层不会把整个故事的时间跨度混进新对话第一批小总结的
+// 时间范围/关键词计算里（之前"大总结"版本会有这个污染问题）。
 // =====================================================================================
 export const runAutoLargeSummary = errorCatched(async () => {
   const summaryLorebookName = await getOrCreateSummaryLorebook();
 
   const proceed = await confirmAction(
-    "自动大总结",
-    "大总结会基于已有的小总结条目，生成一段连贯的故事概况（用于节省Token。开始新聊天后粘贴到第0层以接续对话）。<br><br>是否继续？",
+    "状态存档",
+    "状态存档会读取当前状态表（人物关系/物品/伏笔），生成可粘贴到新对话第0层的存档内容，用于新对话接续时恢复状态表（不含时间/地点/事件经过，这些交给小总结负责）。<br><br>是否继续？",
   );
   if (!proceed) {
     notify("info", "已取消。");
@@ -375,109 +390,51 @@ export const runAutoLargeSummary = errorCatched(async () => {
   }
 
   const entries = await getLorebookEntriesArray(summaryLorebookName);
-  const smallSummaries = entries
-    .filter(
-      (entry) =>
-        typeof entry.comment === "string" &&
-        entry.comment.startsWith(SMALL_SUMMARY_TITLE_PREFIX),
-    )
-    .map((entry) => {
-      const match = entry.comment.match(/(\d+)-(\d+)\s*$/);
-      const start = match ? parseInt(match[1]) : Number.MAX_SAFE_INTEGER;
-      return { ...entry, _start: start };
-    })
-    .sort((a, b) => a._start - b._start);
+  const statusTableEntry = entries.find(
+    (entry) => entry.comment === STATUS_TABLE_TITLE,
+  );
+  const statusTableText = statusTableEntry ? statusTableEntry.content : "";
+  const relationshipsSnapshot = extractLabelLine(
+    statusTableText,
+    "Relationships",
+  );
+  const inventorySnapshot = convertInventorySnapshotToHardset(
+    extractLabelLine(statusTableText, "Inventory"),
+  );
+  const setupsSnapshot = extractLabelLine(statusTableText, "Setups");
 
-  if (smallSummaries.length === 0) {
-    notify("warning", "世界书中没有找到任何小总结条目，无法生成大总结。");
+  if (!relationshipsSnapshot && !inventorySnapshot && !setupsSnapshot) {
+    notify("warning", "当前状态表是空的，没有可存档的内容。");
     return;
   }
 
-  const combinedText = smallSummaries
-    .map((entry) => `${entry.comment}\n${entry.content}`)
-    .join("\n\n---\n\n");
+  const summaryContent = [
+    "<details><summary>摘要</summary>",
+    `Relationships: ${relationshipsSnapshot}`,
+    `Inventory: ${inventorySnapshot}`,
+    `Setups: ${setupsSnapshot}`,
+    "</details>",
+  ].join("\n");
 
-  notify(
-    "info",
-    `正在生成大总结（共整合 ${smallSummaries.length} 条小总结）...`,
-  );
-
-  let summaryContent = null;
+  // 状态存档是手动复制到重开对话开头用的，不需要在当前对话里被引擎扫描注入上下文：
+  // 新建时改成条件触发（非常驻）+ 默认禁用；禁用状态下 position/depth/order/key 不生效，沿用原生默认即可。
   try {
-    const systemPrompt = buildLargeSummaryInstruction();
-    const userContent = `以下是已有的分段小总结：\n\n${combinedText}`;
-    const rawResult = await generateSummaryWithOverlay(
-      systemPrompt,
-      userContent,
-    );
-    const aiSummaryBlock = parseLargeSummaryBlock(rawResult);
-    if (!aiSummaryBlock) {
-      throw new Error(
-        "AI回复中未找到有效的 <details><summary>摘要</summary>...</details> 内容。",
-      );
-    }
-
-    // AI 只负责 Time/Location/Overview 三项（它本来也拿不到状态表数据）；
-    // Relationships/Inventory/Setups 由代码从当前状态表世界书条目里读快照，二次拼接进去。
-    // 这样粘到新对话第0层后天然带着完整字段，新对话首次触发 rebuildStatusTableFromChat 全量重放时
-    // 就能把这些字段解析回状态表，不会因为第0层缺字段而被当成"没有历史数据"清空。
-    const aiFields = parseFloorSummaryFields(aiSummaryBlock) || {
-      time: "",
-      location: "",
-      overview: "",
-    };
-
-    const statusTableEntry = entries.find(
-      (entry) => entry.comment === STATUS_TABLE_TITLE,
-    );
-    const statusTableText = statusTableEntry ? statusTableEntry.content : "";
-    const relationshipsSnapshot = extractLabelLine(
-      statusTableText,
-      "Relationships",
-    );
-    const inventorySnapshot = convertInventorySnapshotToHardset(
-      extractLabelLine(statusTableText, "Inventory"),
-    );
-    const setupsSnapshot = extractLabelLine(statusTableText, "Setups");
-
-    summaryContent = [
-      "<details><summary>摘要</summary>",
-      `Time: ${aiFields.time}`,
-      `Location: ${aiFields.location}`,
-      `Relationships: ${relationshipsSnapshot}`,
-      `Inventory: ${inventorySnapshot}`,
-      `Setups: ${setupsSnapshot}`,
-      "Overview: ",
-      aiFields.overview,
-      "</details>",
-    ].join("\n");
-  } catch (genError) {
-    console.error("[剧情助手] 大总结生成失败:", genError);
-    const context = getCtx();
-    await context.callGenericPopup(
-      `生成大总结时出错：${genError.message}`,
-      context.POPUP_TYPE.TEXT,
-      "",
+    await saveOrOverwriteLorebookEntry(
+      summaryLorebookName,
+      LARGE_SUMMARY_TITLE,
+      summaryContent,
+      true,
       {
-        okButton: "知道了",
+        constant: false,
+        disable: true,
       },
     );
+  } catch (saveError) {
+    console.error("[剧情助手] 状态存档保存失败:", saveError);
+    notify("error", `状态存档保存失败：${saveError.message}`);
     return;
   }
-
-  // 大总结是手动复制到重开对话开头用的，不需要在当前对话里被引擎扫描注入上下文：
-  // 新建时改成条件触发（非常驻）+ 默认禁用；禁用状态下 position/depth/order/key 不生效，沿用原生默认即可。
-  await saveOrOverwriteLorebookEntry(
-    summaryLorebookName,
-    LARGE_SUMMARY_TITLE,
-    summaryContent,
-    true,
-    {
-      constant: false,
-      disable: true,
-    },
-  );
-  notify("success", `大总结已生成并保存 (${LARGE_SUMMARY_TITLE})。`);
+  notify("success", `状态存档已生成并保存 (${LARGE_SUMMARY_TITLE})。`);
 });
 
 

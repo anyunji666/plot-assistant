@@ -199,52 +199,12 @@ export function parseRestoredFloorFields(text) {
 }
 
 
-// === Helper: 大总结提示词 ===
-// 不再单独输出"当前人物关系"字段，理由同小总结：关系状态由状态表世界书条目实时持久化，这里只做主线脉络的叙事性提炼。
-// 输出格式刻意与楼层摘要模块（<details><summary>摘要</summary>...）保持一致：
-// 生成结果是整块直接保存供用户复制粘贴到新对话第0层续写用的，格式一致意味着粘贴后能被 parseFloorSummaryFields
-// 直接识别为有效摘要模块，不必再为第0层多触发一次AI还原摘要的调用。
-export function buildLargeSummaryInstruction() {
-  return `现在请你基于下面给出的多段小总结，提炼出故事目前为止的主线脉络，不要输出 <details>...</details> 标签之外的任何文字。
-
-提炼原则：
-- "主线脉络"只保留影响故事整体走向、后续无法轻易逆转的转折点（如阵营/立场的根本转变、关键身份或能力的解锁、影响多条故事线的重大决定、造成关系不可逆变化的节点）
-- 判断标准：如果删掉这条事件，后面的剧情逻辑会讲不通，就保留；如果只是让某个场景更生动、删了不影响后续理解，就不保留
-- 不要保留具体对话交锋、场景过程、短期情绪波动等细节，只保留事件本身对故事走向的意义
-- 按时间顺序列出，条数不设硬性上限，由小总结数量和实际转折点多少决定
-- 全文总长度控制在约2000字以内
-
-请严格按以下格式输出：
-
-<details><summary>摘要</summary>
-Time: {整个故事目前为止的时间跨度}
-Location: {故事目前最新所在地点}
-Overview: 
-- {阶段性关键事件1}
-- {阶段性关键事件2}
-...
-</details>`;
-}
-
-
 // === Helper: 解析 <summary> 标签内容（供逐层还原调用方使用，输出的是裸 <summary>[第N楼]...</summary>，
-// 不带 <details> 外壳，不要跟下面的 parseLargeSummaryBlock 混用）===
+// 不带 <details> 外壳）===
 export function parseSummaryContent(text) {
   if (!text || typeof text !== "string") return null;
   const match = text.match(/<summary>([\s\S]*?)<\/summary>/);
   return match ? match[1].trim() : null;
-}
-
-
-// === Helper: 提取大总结的完整 <details>...</details> 原文块（含标签本身，不拆字段）。
-// 与 parseFloorSummaryFields 不同：那个函数是把内部字段拆开供小总结拼素材用；
-// 这里要的是整块可直接粘贴当第0层用的原文，所以取 match[0] 而非 match[1]。===
-export function parseLargeSummaryBlock(text) {
-  if (!text || typeof text !== "string") return null;
-  const match = text.match(
-    /<details>\s*<summary>\s*摘要\s*<\/summary>[\s\S]*?<\/details>/,
-  );
-  return match ? match[0].trim() : null;
 }
 
 
@@ -376,7 +336,7 @@ export function serializeKeyValueList(map) {
 // 状态表里数值型 Inventory 条目的存储形式本身就是裸数字（applyNumericMapUpdates 写回时用 formatNumericValue
 // 生成的就是不带符号的纯数字字符串），但 mergeFloorIntoStatusTable 只认 +N/-N/=N 三种带符号前缀的写法，
 // 裸数字会被 looksLikeAttemptedNumericButMalformed 判定成"疑似想写数值但格式不对"，整条跳过不写入。
-// 大总结是要粘回新对话第0层、经由 rebuildStatusTableFromChat 重新解析合并回状态表的，所以必须提前把裸数字
+// 状态存档是要粘回新对话第0层、经由 rebuildStatusTableFromChat 重新解析合并回状态表的，所以必须提前把裸数字
 // 转换成 =N 的合法写法，否则这些数值条目会在新对话第一次全量重放时被静默丢弃。
 // 非纯数字的 value（文字备注，如"未开封"）原样保留，不做任何改写。===
 export const BARE_NUMBER_PATTERN = /^-?\d+(\.\d+)?$/;
@@ -928,7 +888,7 @@ export const handleMessageForStatusTable = async () => {
 
 // === Helper: 生成一段楼层范围的"小总结"内容——连续有摘要模块的楼层直接读取并保留 Time/Location/Overview 拼接，
 // 连续没有摘要模块的楼层区间才调用 AI 重新总结（方案A：分段回退）。不再提取/生成关系字段——
-// 关系状态统一由状态表世界书条目实时持久化（见 mergeFloorIntoStatusTable），小总结/大总结只做叙事性回顾。===
+// 关系状态统一由状态表世界书条目实时持久化（见 mergeFloorIntoStatusTable），小总结只做叙事性回顾，状态存档只做状态快照。===
 // === Helper: 从摘要模块的 Time 原始文本里截取"年月"粒度的关键词——按字面"年"/"月"两个字切分，
 // 不解析语义（纪年法/数字格式怎么变都不影响），取字符串开头到"月"字（含）为止；
 // 找不到"年"或"月"就返回空字符串，交由调用方决定兜底策略。===

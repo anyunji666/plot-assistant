@@ -8,9 +8,9 @@
 //   - 世界书读写：context.loadWorldInfo / context.saveWorldInfo / context.getWorldInfoNames / context.updateWorldInfoList
 //   - 弹窗/确认框：context.callGenericPopup + context.POPUP_TYPE / context.POPUP_RESULT
 //   - 提示条：toastr（酒馆全局自带）
-// 六个按钮：自动小总结 / 设定起始楼层 / 自动大总结 / 对话前强调 / 创建角色 / 地图标记。
+// 六个按钮：设定起始楼层 / 自动小总结 / 状态存档 / 对话前强调 / 创建角色 / 地图标记。
 // 入口收敛为扩展菜单里的一个「剧情助手」条目，点开弹出控制面板；地图编辑器另有一个右下角悬浮球入口。
-// "对话前强调"与自动/大总结共用同一本总结世界书（getOrCreateSummaryLorebook 拿到的"角色名+总结"）。
+// "对话前强调"与自动小总结/状态存档共用同一本总结世界书（getOrCreateSummaryLorebook 拿到的"角色名+总结"）。
 // "地图标记"按角色名自动区分数据，内容写入同一本"角色名总结"世界书里固定标题为「地图信息」的一条条目，
 // 跟其他总结条目同级存在。
 // "创建角色"和总结/状态表共用同一本"角色名总结"世界书，标题固定加「角色卡：」前缀；
@@ -23,7 +23,7 @@ export const AUTO_BATCH_SIZE = 30; // 自动小总结每批楼层数
 
 export const SMALL_SUMMARY_TITLE_PREFIX = "小总结："; // 小总结世界书条目标题前缀，后面拼接"起-止"楼层号
 
-export const LARGE_SUMMARY_TITLE = "大总结"; // 大总结世界书条目固定标题
+export const LARGE_SUMMARY_TITLE = "状态存档"; // 状态存档世界书条目固定标题（原"大总结"，现改为纯状态表快照，不含时间/地点/事件经过）
 
 export const PRE_EMPHASIS_TITLE = "对话前强调"; // 对话前强调世界书条目固定标题
 
@@ -159,9 +159,9 @@ export const GENERATION_TIMEOUT = 300000; // 5分钟生成超时时间
 
 export const STEP_DELAY = 300; // 批次之间的延迟（毫秒）
 
-export const STATUS_TABLE_TITLE = "状态表"; // 结构化数据表世界书条目固定标题，与"小总结：起-止""大总结"同级存在
+export const STATUS_TABLE_TITLE = "状态表"; // 结构化数据表世界书条目固定标题，与"小总结：起-止""状态存档"同级存在
 
-// 状态表要让AI记住"当前"状态，离最新消息越近权重越高，所以创建时用"@D 在深度"而不是小总结/大总结默认的"角色定义之前"。
+// 状态表要让AI记住"当前"状态，离最新消息越近权重越高，所以创建时用"@D 在深度"而不是小总结/状态存档默认的"角色定义之前"。
 // 对应你在世界书面板里手动设置好的参照值：@D 在深度0、[系统]角色、order 666、概率100%。
 export const STATUS_TABLE_ENTRY_DEFAULTS = {
   position: 4, // 原生 world_info_position: atDepth
@@ -187,7 +187,7 @@ export const SMALL_SUMMARY_ENTRY_DEFAULTS = {
   probability: 100,
 };
 
-// 角色卡条目标题前缀，后面拼接角色名，与"小总结：""大总结""状态表""对话前强调""地图信息"同级存在于同一本总结世界书。
+// 角色卡条目标题前缀，后面拼接角色名，与"小总结：""状态存档""状态表""对话前强调""地图信息"同级存在于同一本总结世界书。
 export const CHARACTER_ENTRY_TITLE_PREFIX = "角色卡：";
 
 // 角色卡条目走关键词触发（selective），不是常驻类型：constant:false + key 数组即可，不需要额外的 position/depth 覆盖，
@@ -197,7 +197,7 @@ export const CHARACTER_ENTRY_DEFAULTS = {
   probability: 100,
 };
 
-// 章节条目标题前缀，后面拼接章节名，与"小总结：""大总结""状态表""对话前强调""地图信息""角色卡："
+// 章节条目标题前缀，后面拼接章节名，与"小总结：""状态存档""状态表""对话前强调""地图信息""角色卡："
 // 同级存在于同一本总结世界书；用于录入原著章节名+概述（供 AI 查阅参考的原著内容，而非同人创作正文本身），
 // 让 AI 有据可查，而不是凭记忆回忆原著细节。
 export const NOVEL_ENTRY_TITLE_PREFIX = "原著章节：";

@@ -1,7 +1,11 @@
 "use strict";
 
 import { MAP_INFO_ENTRY_DEFAULTS, MAP_INFO_TITLE } from "../core.js";
-import { getOrCreateSummaryLorebook, lorebookEntryExists, saveOrOverwriteLorebookEntry } from "../worldinfo.js";
+import {
+  getOrCreateSummaryLorebook,
+  lorebookEntryExists,
+  saveOrOverwriteLorebookEntry,
+} from "../worldinfo.js";
 import { getMapCurrentCharacterName, getSettings } from "./data.js";
 
 // ============================================================
@@ -26,7 +30,6 @@ export function buildRouteSummaryList(bigMap) {
     })
     .filter(Boolean);
 }
-
 
 export function buildSummaryText() {
   const settings = getSettings();
@@ -77,8 +80,7 @@ export function buildSummaryText() {
   return `<cartographic_information>\n用户当前设有以下地点信息/行动${disclaimer}：\n${parts.join("\n\n")}\n</cartographic_information>`;
 }
 
-
-// === 把「地图信息」写入当前角色的"角色名总结"世界书（跟小总结/大总结同一本、同一套默认位置）===
+// === 把「地图信息」写入当前角色的"角色名总结"世界书===
 // 群聊 / 未选中角色卡时直接跳过，不创建/不写入任何世界书，数据只留在内存里。
 // force=false（默认，几乎所有自动触发点用这个）：条目不存在就直接跳过，不自动新建——
 //   避免你手动把「地图信息」条目删掉之后，随便编辑一下标记/切个对话它又自己冒出来。
@@ -104,7 +106,6 @@ export async function syncMapInfoEntry(force = false) {
     console.warn("[剧情助手/地图] 同步「地图信息」世界书条目失败：", err);
   }
 }
-
 
 // 标记/路线/小地图任何一次编辑都会调用这个，短暂防抖一下，避免连续操作时反复读写世界书。
 // force 透传给 syncMapInfoEntry：默认 false，只在条目已存在时更新。
