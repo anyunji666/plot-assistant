@@ -11,6 +11,7 @@ import { getSettings } from "./modules/map/data.js";
 import { injectFloatingButton, registerMapGlobalEvents } from "./modules/map/ui.js";
 import { syncMapInfoEntry } from "./modules/map/generator.js";
 import { registerNovelAutoJump } from "./modules/novel/generator.js";
+import { initNovelSummaryModule } from "./modules/novel-summary/ui.js";
 
 
 // === Function: 在扩展菜单里插入「剧情助手」入口 ===
@@ -82,6 +83,12 @@ jQuery(() => {
 
   // --- 剧情录入模块：自动跳转章节（默认关闭，面板"自跳转开/自跳转关"按钮控制） ---
   registerNovelAutoJump();
+
+  // --- 摘要提取模块（原独立扩展 novel-summary，现合并进本插件）：
+  // 顶部导航栏图标默认关闭，只有面板"摘要提取"按钮的确认弹窗选"是"才会显示 ---
+  initNovelSummaryModule().catch((error) => {
+    console.error("[剧情助手] 摘要提取模块初始化失败:", error);
+  });
 
   // --- 地图标记模块 ---
   getSettings(); // 确保当前角色（或临时）的地图数据结构已就绪

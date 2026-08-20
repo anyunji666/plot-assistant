@@ -6,6 +6,8 @@ import { openCreateCharacterDialog } from "./modules/character.js";
 import { getNovelAutoJumpSettings } from "./modules/novel/generator.js";
 import { getActiveNovelChapterUid, listNovelChapterEntries, setActiveNovelChapter } from "./modules/novel/store.js";
 import { openNovelEntryDialog } from "./modules/novel/ui.js";
+import { NOVEL_SUMMARY_IDB_NAME, NOVEL_SUMMARY_SETTINGS_KEY } from "./modules/novel-summary/store.js";
+import { openNovelSummaryNavbarToggleDialog } from "./modules/novel-summary/ui.js";
 import { LOCAL_CHAT_STORE_KEY, NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY, NOVEL_AUTO_JUMP_SETTINGS_KEY, PHONE_IDB_NAME, SUMMARY_POPUP_ID, errorCatched, getCtx, localChatStoreCache, notify, transientChatMetadataStore } from "./modules/core.js";
 import { IDB_NAME, MAP_MODULE_NAME, getFabVisible, setFabVisibleSetting } from "./modules/map/data.js";
 import { FAB_POS_KEY, applyFabVisibility, openModal, resetFabPos } from "./modules/map/ui.js";
@@ -78,15 +80,18 @@ export function deleteIndexedDatabase(name) {
 
 
 // === Function: 清空本插件的全部本地缓存数据（控制面板"清空数据"按钮）===
-// 范围：两个 IndexedDB 库（私信/头像/图片/背景 + 地图图片）、两个悬浮球位置的 localStorage、
-// 四块插件自己的 extension_settings（通讯器/地图/移动端优化/节假日，删掉后下次读取会自动用默认值重建，
-// 节假日这块连同你已经录入的自定义节假日一起清空）、
+// 范围：三个 IndexedDB 库（私信/头像/图片/背景 + 地图图片 + 小说摘要提取的分段原文/摘要进度）、
+// 两个悬浮球位置的 localStorage、
+// 六块插件自己的 extension_settings（通讯器/地图/移动端优化/节假日/小说自动跳转与当前章节/小说摘要提取，
+// 删掉后下次读取会自动用默认值重建，节假日这块连同你已经录入的自定义节假日一起清空，
+// 小说摘要提取这块连同你填的 API 地址/Key/模型/提示词一起清空）、
 // 以及所有对话的起始楼层记录和私信忙闲缓存（本地存储，一份 localStorage 覆盖所有对话，一次性清空）。
 // 不包含：总结功能生成的世界书条目（用户自己在世界书里删）。
 export async function clearAllPluginLocalData() {
   const results = await Promise.all([
     deleteIndexedDatabase(PHONE_IDB_NAME),
     deleteIndexedDatabase(IDB_NAME),
+    deleteIndexedDatabase(NOVEL_SUMMARY_IDB_NAME),
   ]);
 
   try {
@@ -103,6 +108,7 @@ export async function clearAllPluginLocalData() {
     delete extension_settings[NOVEL_AUTO_JUMP_SETTINGS_KEY];
     delete extension_settings[NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY];
     delete extension_settings[HOLIDAY_SETTINGS_KEY];
+    delete extension_settings[NOVEL_SUMMARY_SETTINGS_KEY];
     saveSettingsDebounced();
   } catch (error) {
     console.error("[剧情助手] 重置插件配置失败:", error);
@@ -171,7 +177,10 @@ export async function showSummaryPopup() {
           <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">同人小说</p>
           <div style="display: flex; flex-direction: column; gap: 8px;">
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-              <button id="${POPUP_ID}-novel-entry" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">剧情录入</button>
+              <div style="display: flex; gap: 8px;">
+                <button id="${POPUP_ID}-novel-entry" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">剧情录入</button>
+                <button id="${POPUP_ID}-novel-summary-toggle" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">摘要提取</button>
+              </div>
               <button id="${POPUP_ID}-novel-autojump" title="AI在摘要里判定当前章节已演绎完/过时时，自动切到下一章（没有下一章则关闭章节注入）" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
             </div>
             <div style="display: flex; flex-direction: column; gap: 4px;">
@@ -368,6 +377,22 @@ export async function showSummaryPopup() {
       .on("click", () => {
         closePopup();
         openNovelEntryDialog();
+      })
+      .hover(
+        function () {
+          $(this).css("background", "#2c5d9e");
+        },
+        function () {
+          $(this).css("background", "#3a7bd5");
+        },
+      );
+
+    // 摘要提取：点击弹出"是否在顶部导航栏增加「小说摘要提取」功能"确认框（原生弹窗，
+    // 选是/选否都会自动关闭该弹窗），选择完成后再关闭剧情助手控制面板本身。
+    $(`#${POPUP_ID}-novel-summary-toggle`)
+      .on("click", async () => {
+        await openNovelSummaryNavbarToggleDialog();
+        closePopup();
       })
       .hover(
         function () {

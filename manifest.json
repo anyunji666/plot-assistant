@@ -6,7 +6,7 @@
     "js": "index.js",
     "css": "style.css",
     "author": "用户自定义 / Claude (Anthropic)",
-    "version": "3.5.0",
+    "version": "3.6.0",
     "homePage": "",
     "auto_update": false
 }
