@@ -10,9 +10,9 @@ import {
   createSummaryApiClient,
 } from "./lib/api.js";
 import {
-  fingerprintArrayBuffer,
   splitNovelText,
   tailContext,
+  summaryTailSection,
   niIsSupportedNovelFile,
   niExtractNovelText,
 } from "./lib/parser.js";
@@ -34,7 +34,6 @@ import { getNovelSummarySettings, isNovelSummaryNavbarVisible, saveNovelSummaryS
 const S = {
   fileName: "",
   fileSize: 0,
-  fingerprint: "",
   rawText: "",
   chunkKbUsed: 0,
   chunks: [],
@@ -85,7 +84,6 @@ async function doSave() {
   await saveNovelState({
     fileName: S.fileName,
     fileSize: S.fileSize,
-    fingerprint: S.fingerprint,
     rawText: S.rawText,
     chunkKbUsed: S.chunkKbUsed,
     chunks: S.chunks,
@@ -99,7 +97,6 @@ async function restoreFromDb() {
   if (!saved || !Array.isArray(saved.chunks) || !saved.chunks.length) return false;
   S.fileName = saved.fileName || "";
   S.fileSize = saved.fileSize || 0;
-  S.fingerprint = saved.fingerprint || "";
   S.rawText = saved.rawText || "";
   S.chunkKbUsed = saved.chunkKbUsed || 0;
   S.chunks = saved.chunks;
@@ -141,12 +138,10 @@ async function handleFile(file) {
     const { text } = niExtractNovelText(buf, file.name);
     if (!text || !text.trim()) throw new Error("未能从文件中提取到正文");
 
-    const fingerprint = await fingerprintArrayBuffer(buf);
     const kb = getCfgKb();
 
     S.fileName = file.name;
     S.fileSize = file.size;
-    S.fingerprint = fingerprint;
     S.rawText = text;
     S.chunkKbUsed = kb;
     S.chunks = splitNovelText(text, kb, 0.5);
@@ -315,14 +310,27 @@ function syncRunButtons() {
 // ============================================================
 // 摘要提取核心流程
 // ============================================================
-const NI_TAIL_CONTEXT_CHARS = 60;
+// 生成分段摘要时，找不到"上一段摘要结果"（比如前一段还失败没成功过）时，
+// 退回取上一段原文结尾的字符数兜底。
+const NI_TAIL_RAW_CHARS_FALLBACK = 800;
+
+// 取当前段（第 i 段）的"衔接参考"：优先用上一段（i-1）已生成的摘要——按摘要自身的
+// "## 章节名"标题边界取最后一整块，不按字符数硬切；只有上一段还没有摘要结果时
+// （比如重试失败段落，前一段仍未成功过），才退回取上一段原文结尾 800 字兜底。
+function getPreviousContext(i) {
+  if (i <= 0) return "";
+  const prevSummary = S.chunkStatus[i - 1] === "done" ? (S.chunkResults[i - 1] || "").trim() : "";
+  if (prevSummary) return summaryTailSection(prevSummary);
+  if (S.chunks[i - 1]) return tailContext(S.chunks[i - 1], NI_TAIL_RAW_CHARS_FALLBACK);
+  return "";
+}
 
 function buildMessages(i) {
-  const previousContext = i > 0 && S.chunks[i - 1] ? tailContext(S.chunks[i - 1], NI_TAIL_CONTEXT_CHARS) : "";
+  const previousContext = getPreviousContext(i);
   const systemPrompt = getNovelSummarySettings().customPrompt?.trim() || DEFAULT_SUMMARY_PROMPT;
   const userContent = previousContext
-    ? `<previous_context>\n${previousContext}\n</previous_context>\n仅供衔接参考，不要重复摘要。\n\n---\n\n<chunk_text>\n${S.chunks[i]}\n</chunk_text>\n以上为本次需要处理的原文。`
-    : `<chunk_text>\n${S.chunks[i]}\n</chunk_text>\n以上为本次需要处理的原文。`;
+    ? `<previous_context>\n${previousContext}\n</previous_context>\n<previous_context>是已处理的上段内容，不要对这部分内容进行分析和摘要处理，仅供时间和角色名参考。\n---\n<chunk_text>\n${S.chunks[i]}\n</chunk_text>\n<chunk_text>为本次需要处理的原文内容。`
+    : `<chunk_text>\n${S.chunks[i]}\n</chunk_text>\n<chunk_text>为本次需要处理的原文内容。`;
   return [
     { role: "system", content: systemPrompt },
     { role: "user", content: userContent },
@@ -436,7 +444,6 @@ async function resetAll() {
   if (!ok) return;
   S.fileName = "";
   S.fileSize = 0;
-  S.fingerprint = "";
   S.chunkKbUsed = 0;
   S.chunks = [];
   S.chunkStatus = [];
