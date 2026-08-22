@@ -23,7 +23,7 @@ const DEFAULT_NOVEL_SUMMARY_SETTINGS = {
   // 只有明确填写了 chat/completions 兼容端点后，才会走本模块自己的反代请求。
   apiUrl: "",
   apiKey: "",
-  model: "gpt-4o",
+  model: "",
   stream: true,
   apiTimeoutMin: 15,
   apiRateLimit: 3,
