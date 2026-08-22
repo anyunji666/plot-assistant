@@ -268,7 +268,7 @@ export async function showSummaryPopup() {
         <div>
           <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">数据管理</p>
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0;">
-            <span style="font-size: 12px; color: #999; flex: 1;">清空除世界书「${summaryLorebookName}」外的本插件设置</span>
+            <span style="font-size: 12px; color: #999; flex: 1;">清除世界书以外的本插件数据</span>
             <button id="${POPUP_ID}-clear-all-data" style="background: #c0392b; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;">清空数据</button>
           </div>
         </div>
