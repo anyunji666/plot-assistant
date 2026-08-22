@@ -7,7 +7,7 @@ import { getNovelAutoJumpSettings } from "./modules/novel/generator.js";
 import { getActiveNovelChapterUid, listNovelChapterEntries, setActiveNovelChapter } from "./modules/novel/store.js";
 import { openNovelEntryDialog } from "./modules/novel/ui.js";
 import { NOVEL_SUMMARY_IDB_NAME, NOVEL_SUMMARY_SETTINGS_KEY } from "./modules/novel-summary/store.js";
-import { openNovelSummaryNavbarToggleDialog } from "./modules/novel-summary/ui.js";
+import { applyNovelSummaryNavbarVisibility, openNovelSummaryNavbarToggleDialog } from "./modules/novel-summary/ui.js";
 import { LOCAL_CHAT_STORE_KEY, NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY, NOVEL_AUTO_JUMP_SETTINGS_KEY, PHONE_IDB_NAME, SUMMARY_POPUP_ID, errorCatched, getCtx, localChatStoreCache, notify, transientChatMetadataStore } from "./modules/core.js";
 import { IDB_NAME, MAP_MODULE_NAME, getFabVisible, setFabVisibleSetting } from "./modules/map/data.js";
 import { FAB_POS_KEY, applyFabVisibility, openModal, resetFabPos } from "./modules/map/ui.js";
@@ -123,6 +123,19 @@ export async function clearAllPluginLocalData() {
   }
 
   const allDbOk = results.every(Boolean);
+
+  // 清空设置后，界面上已渲染的显隐状态（导航栏图标/悬浮球）不会自动跟着刷新——
+  // 这几个开关都是"读设置 → 手动设 CSS display"的模式，只在各自的开关按钮点击时触发，
+  // 清空数据不属于那个入口，所以这里需要显式调用一遍同步，让清空动作立刻在界面上生效，
+  // 不用等用户手动刷新页面或重新点一次对应开关。
+  try {
+    applyNovelSummaryNavbarVisibility();
+    applyFabVisibility();
+    applyPhoneFabVisibility();
+  } catch (error) {
+    console.error("[剧情助手] 清空数据后同步显隐状态失败:", error);
+  }
+
   return { allDbOk };
 }
 
