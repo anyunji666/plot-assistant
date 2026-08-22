@@ -26,6 +26,21 @@ function openDb() {
     return dbPromise;
 }
 
+// === 主动关闭当前持有的连接（用于"清空数据"删库前，避免 indexedDB.deleteDatabase 被 onblocked 卡住）===
+// 平时读写都走上面缓存的长连接，这里只在真正要删库之前调用一次；
+// 关闭后把 dbPromise 置空，下次 openDb() 会重新建立连接，不影响正常使用。
+export async function closeDb() {
+    if (!dbPromise) return;
+    try {
+        const db = await dbPromise;
+        db.close();
+    } catch (error) {
+        // 打开阶段本身失败的话，dbPromise 已经是个 rejected promise，没有连接需要关
+    } finally {
+        dbPromise = null;
+    }
+}
+
 export async function saveNovelState(state) {
     try {
         const db = await openDb();

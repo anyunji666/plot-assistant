@@ -7,6 +7,7 @@ import { getNovelAutoJumpSettings } from "./modules/novel/generator.js";
 import { getActiveNovelChapterUid, listNovelChapterEntries, setActiveNovelChapter } from "./modules/novel/store.js";
 import { openNovelEntryDialog } from "./modules/novel/ui.js";
 import { NOVEL_SUMMARY_IDB_NAME, NOVEL_SUMMARY_SETTINGS_KEY } from "./modules/novel-summary/store.js";
+import { closeDb as closeNovelSummaryDb } from "./modules/novel-summary/lib/storage.js";
 import { applyNovelSummaryNavbarVisibility, openNovelSummaryNavbarToggleDialog } from "./modules/novel-summary/ui.js";
 import { LOCAL_CHAT_STORE_KEY, NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY, NOVEL_AUTO_JUMP_SETTINGS_KEY, PHONE_IDB_NAME, SUMMARY_POPUP_ID, errorCatched, getCtx, notify, resetLocalChatStoreCache, resetTransientChatMetadataStore } from "./modules/core.js";
 import { IDB_NAME, MAP_MODULE_NAME, getFabVisible, setFabVisibleSetting } from "./modules/map/data.js";
@@ -88,6 +89,15 @@ export function deleteIndexedDatabase(name) {
 // 以及所有对话的起始楼层记录和私信忙闲缓存（本地存储，一份 localStorage 覆盖所有对话，一次性清空）。
 // 不包含：总结功能生成的世界书条目（用户自己在世界书里删）。
 export async function clearAllPluginLocalData() {
+  // 小说摘要模块的连接是长期缓存的（用过一次就不会自动断开），
+  // 不主动关掉的话下面 deleteDatabase(NOVEL_SUMMARY_IDB_NAME) 会被 onblocked 卡住。
+  // 私信库、地图图片库每次操作都是用完即走，不缓存连接，不需要这一步。
+  try {
+    await closeNovelSummaryDb();
+  } catch (error) {
+    console.error("[剧情助手] 关闭小说摘要数据库连接失败:", error);
+  }
+
   const results = await Promise.all([
     deleteIndexedDatabase(PHONE_IDB_NAME),
     deleteIndexedDatabase(IDB_NAME),
