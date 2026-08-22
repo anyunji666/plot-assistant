@@ -378,6 +378,21 @@ export let localChatStoreCache = null; // 惰性加载：整份 JSON 只解析�
 
 export let transientChatMetadataStore = null; // 拿不到稳定 key（比如没选中角色卡）时的内存兜底，不持久化
 
+// === Helper: 重置这两个内存缓存 ===
+// 导入方（如 panel.js"清空数据"流程）不能直接对 import 进来的 let 绑定赋值——
+// ES 模块规范里，导入的绑定在导入方是只读的，即使源模块里是 let，直接赋值也会抛
+// "Assignment to constant variable" TypeError（曾实际复现：清空数据点击后这两行
+// 静默抛错，被外层 try/catch 吞掉，导致内存缓存其实一直没被真正清空）。
+// 只有在变量真正声明的这个模块内部才能合法赋值，所以改为暴露专门的重置函数，
+// 外部统一调用它们，而不是试图直接改 import 进去的绑定。
+export function resetLocalChatStoreCache() {
+  localChatStoreCache = null;
+}
+
+export function resetTransientChatMetadataStore() {
+  transientChatMetadataStore = null;
+}
+
 // 从 localStorage 读整份本地对话缓存到内存，只在第一次调用时真正解析 JSON
 export function loadLocalChatStore() {
   if (localChatStoreCache) return localChatStoreCache;

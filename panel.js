@@ -8,7 +8,7 @@ import { getActiveNovelChapterUid, listNovelChapterEntries, setActiveNovelChapte
 import { openNovelEntryDialog } from "./modules/novel/ui.js";
 import { NOVEL_SUMMARY_IDB_NAME, NOVEL_SUMMARY_SETTINGS_KEY } from "./modules/novel-summary/store.js";
 import { applyNovelSummaryNavbarVisibility, openNovelSummaryNavbarToggleDialog } from "./modules/novel-summary/ui.js";
-import { LOCAL_CHAT_STORE_KEY, NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY, NOVEL_AUTO_JUMP_SETTINGS_KEY, PHONE_IDB_NAME, SUMMARY_POPUP_ID, errorCatched, getCtx, localChatStoreCache, notify, transientChatMetadataStore } from "./modules/core.js";
+import { LOCAL_CHAT_STORE_KEY, NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY, NOVEL_AUTO_JUMP_SETTINGS_KEY, PHONE_IDB_NAME, SUMMARY_POPUP_ID, errorCatched, getCtx, notify, resetLocalChatStoreCache, resetTransientChatMetadataStore } from "./modules/core.js";
 import { IDB_NAME, MAP_MODULE_NAME, getFabVisible, setFabVisibleSetting } from "./modules/map/data.js";
 import { FAB_POS_KEY, applyFabVisibility, openModal, resetFabPos } from "./modules/map/ui.js";
 import { MOBILE_OPT_SETTINGS_KEY, disableLazyLoadGroup, disableRenderOptimizeGroup, enableLazyLoadGroup, enableRenderOptimizeGroup, getMobileOptSettings } from "./modules/mobile-opt.js";
@@ -116,8 +116,8 @@ export async function clearAllPluginLocalData() {
 
   try {
     localStorage.removeItem(LOCAL_CHAT_STORE_KEY);
-    localChatStoreCache = null; // 内存缓存也一并重置，避免清空后马上又读到清空前的旧对象
-    transientChatMetadataStore = null;
+    resetLocalChatStoreCache(); // 内存缓存也一并重置，避免清空后马上又读到清空前的旧对象
+    resetTransientChatMetadataStore();
   } catch (error) {
     console.error("[剧情助手] 清空所有对话的楼层/忙闲缓存失败:", error);
   }
