@@ -27,7 +27,6 @@ const DEFAULT_NOVEL_SUMMARY_SETTINGS = {
   stream: true,
   apiTimeoutMin: 15,
   apiRateLimit: 3,
-  apiConcurrency: 1,
   chunkKb: 100,
   customPrompt: "",
 };

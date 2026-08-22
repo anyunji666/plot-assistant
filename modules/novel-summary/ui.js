@@ -3,7 +3,6 @@
 import { getRequestHeaders } from "../../../../../../script.js";
 import { getCtx, notify } from "../core.js";
 import {
-  concurrencyLimit,
   DynamicSemaphore,
   RateQueue,
   niFetchModelIds,
@@ -54,13 +53,9 @@ function q(sel) {
 // ============================================================
 let currentAbortController = null;
 const rateQueue = new RateQueue({ getLimit: () => getNovelSummarySettings().apiRateLimit, fallbackLimit: 3 });
-const semaphore = new DynamicSemaphore(() => {
-  const cfg = getNovelSummarySettings();
-  // 未设置 API 地址时走酒馆当前连接（context.generateRaw），底层复用同一条生成通道，
-  // 不适合真并发，这里无视用户填的并发数设置，强制按 1 处理。
-  if (!String(cfg.apiUrl ?? "").trim()) return 1;
-  return concurrencyLimit(cfg.apiConcurrency, 1);
-});
+// 摘要提取固定为串行处理：一次只发一段、等它跑完（含内部重试）再发下一段，
+// 不再支持并发，semaphore 的并发上限恒定为 1。
+const semaphore = new DynamicSemaphore(() => 1);
 const { callSummaryApi } = createSummaryApiClient({
   getSettings: getNovelSummarySettings,
   rateQueue,
@@ -378,17 +373,10 @@ async function processChunk(i) {
 }
 
 async function runQueue(indices) {
-  const limit = concurrencyLimit(getNovelSummarySettings().apiConcurrency, 1);
-  let cursor = 0;
-  async function worker() {
-    while (cursor < indices.length) {
-      if (S.stopRequested) return;
-      const idx = indices[cursor++];
-      await processChunk(idx);
-    }
+  for (const idx of indices) {
+    if (S.stopRequested) return;
+    await processChunk(idx);
   }
-  const workers = Array.from({ length: Math.min(limit, indices.length) || 1 }, () => worker());
-  await Promise.all(workers);
 }
 
 async function startRun({ onlyFailed = false } = {}) {
