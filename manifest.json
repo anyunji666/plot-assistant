@@ -7,6 +7,6 @@
     "css": "style.css",
     "author": "用户自定义 / Claude (Anthropic)",
     "version": "3.6.0",
-    "homePage": "",
+    "homePage": "https://github.com/anyunji666/plot-assistant",
     "auto_update": false
 }
