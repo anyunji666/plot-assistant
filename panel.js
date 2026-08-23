@@ -209,7 +209,7 @@ export async function showSummaryPopup() {
             </div>
             <div style="display: flex; flex-direction: column; gap: 4px;">
               <label style="font-size: 12px; color: #888;">当前注入章节：</label>
-              <select id="${POPUP_ID}-novel-active-chapter" ${novelChapters.length === 0 ? "disabled" : ""} style="width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 4px; border: 1px solid #3a3a3a; background: #1a1a1a; color: #d0d0d0; font-size: 13px; font-family: inherit;">${buildNovelActiveChapterOptionsHtml(novelChapters, activeNovelChapterUid)}</select>
+              <select id="${POPUP_ID}-novel-active-chapter" ${novelChapters.length === 0 ? "disabled" : ""} style="width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 4px; border: 1px solid #3a3a3a; background: #000000; color: #ffffff; font-size: 13px; font-family: inherit;">${buildNovelActiveChapterOptionsHtml(novelChapters, activeNovelChapterUid)}</select>
             </div>
           </div>
         </div>
