@@ -76,6 +76,7 @@ async function openTextDialog({ title, hint, initialValue }) {
       border: "1px solid #3a3a3a",
       background: "#000000",
       color: "#ffffff",
+      colorScheme: "dark",
       fontSize: "max(0.95em, 16px)",
       fontFamily: "inherit",
       outline: "none",
