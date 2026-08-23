@@ -492,7 +492,10 @@ export const runAutoLargeSummary = errorCatched(async () => {
 
 
 // === Function: 进入角色卡/切换聊天时，主动确保总结世界书和状态表条目存在（不再等到第一次状态表合并才创建）===
-// 世界书绑定提醒不再只弹一次，而是和初始化提示一样，每次运行到这里都会提醒一遍，避免用户漏看/忘记绑定。
+// 世界书绑定提醒改为"每个角色卡只提醒一次"：同一本世界书只要提醒过就不再重复弹，
+// 直到你把它挂载为全局世界书后又手动取消挂载，才会重新触发一次新的提醒。
+let warnedLorebookName = null;
+
 export async function ensureSummaryLorebookOnLoad() {
   let characterName;
   try {
@@ -535,10 +538,16 @@ export async function ensureSummaryLorebookOnLoad() {
   const isMountedGlobally =
     await isSummaryLorebookGloballyEnabled(readyLorebookName);
   if (!isMountedGlobally) {
-    notify(
-      "warning",
-      `需「${readyLorebookName}」加入世界书全局启用列表配合使用。`,
-    );
+    if (warnedLorebookName !== readyLorebookName) {
+      notify(
+        "warning",
+        `需「${readyLorebookName}」加入世界书全局启用列表配合使用。`,
+      );
+      warnedLorebookName = readyLorebookName;
+    }
+  } else {
+    // 已挂载全局：清空提醒记录，万一之后又被手动取消挂载，能重新提醒一次。
+    if (warnedLorebookName === readyLorebookName) warnedLorebookName = null;
   }
   return true;
 }
