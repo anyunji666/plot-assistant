@@ -23,7 +23,7 @@ export const AUTO_BATCH_SIZE = 30; // 自动小总结每批楼层数
 
 export const SMALL_SUMMARY_TITLE_PREFIX = "小总结："; // 小总结世界书条目标题前缀，后面拼接"起-止"楼层号
 
-export const LARGE_SUMMARY_TITLE = "状态存档"; // 状态存档世界书条目固定标题（原"大总结"，现改为纯状态表快照，不含时间/地点/事件经过）
+export const LARGE_SUMMARY_TITLE = "状态存档"; // 状态存档世界书条目固定标题：状态表快照（Relationships/Inventory/Setups，不调用AI）+ Time（本地拼接已有小总结的时间头尾，不调用AI）+ Overview（调用AI对已有小总结做二次总结，不超1000字）
 
 export const PRE_EMPHASIS_TITLE = "对话前强调"; // 对话前强调世界书条目固定标题
 

@@ -1,7 +1,7 @@
 "use strict";
 
 import { AUTO_BATCH_SIZE, GENERATION_TIMEOUT, LARGE_SUMMARY_TITLE, PRE_EMPHASIS_ENTRY_DEFAULTS, PRE_EMPHASIS_TITLE, SMALL_SUMMARY_ENTRY_DEFAULTS, SMALL_SUMMARY_TITLE_PREFIX, STATUS_TABLE_ENTRY_DEFAULTS, STATUS_TABLE_TITLE, STEP_DELAY, SummaryStopRequestedError, confirmAction, delay, errorCatched, getCtx, getOffsetRecord, notify, setOffsetRecord } from "../core.js";
-import { buildFloorRestoreInstruction, buildFloorRestoreUserContent, buildMessagesText, convertInventorySnapshotToHardset, extractLabelLine, extractYearMonthKeyword, findNearestAnchorFloor, getLastMessageId, getMaxSummaryEnd, getSummaryProgress, handleMessageForStatusTable, parseFloorSummaryFields, parseRestoredFloorFields, parseSummaryContent, serializeStatusTableContent } from "./parser.js";
+import { buildArchiveOverviewInstruction, buildArchiveOverviewUserContent, buildArchiveTimeLabel, buildFloorRestoreInstruction, buildFloorRestoreUserContent, buildMessagesText, convertInventorySnapshotToHardset, extractLabelLine, extractYearMonthKeyword, findNearestAnchorFloor, getLastMessageId, getMaxSummaryEnd, getSortedSmallSummaryEntries, getSummaryProgress, handleMessageForStatusTable, parseFloorSummaryFields, parseRestoredFloorFields, parseSummaryContent, serializeStatusTableContent } from "./parser.js";
 import { closeGeneratingOverlay, showGeneratingOverlay } from "./ui.js";
 import { getCurrentCharacterName, getFreeUid, getLorebookEntriesArray, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, notifyWorldInfoUpdated, saveOrOverwriteLorebookEntry } from "../worldinfo.js";
 
@@ -368,21 +368,25 @@ export const runSetOffset = errorCatched(async () => {
 
 
 // =====================================================================================
-// === Function: 状态存档（原"自动大总结"）===
-// 不再调用AI、不再读取"小总结"条目：直接读取当前状态表世界书条目里的 Relationships/Inventory/Setups，
-// 原样套进 <details><summary>摘要</summary>...</details> 这个粘贴格式（不含 Time/Location/Overview）。
-// 外壳仍然保留是因为新对话第0层要靠 parseFloorSummaryFields 识别出这是一层"摘要模块"，
-// 从而在首次触发 rebuildStatusTableFromChat 全量重放时把这些字段解析合并回状态表；
-// 不含 Time/Overview 字段是特意的：buildRangeSummaryContent 里 times/overview 的聚合逻辑本身就会
-// 用 filter(Boolean) 跳过空字段，这样第0层不会把整个故事的时间跨度混进新对话第一批小总结的
-// 时间范围/关键词计算里（之前"大总结"版本会有这个污染问题）。
+// === Function: 状态存档 ===
+// Relationships/Inventory/Setups：直接读取当前状态表世界书条目，不调用AI，原样存档。
+// Time：本地拼接，不调用AI——扫描世界书全部"小总结：起-止"条目，取最早条目的时间起点、
+// 最晚条目的时间止点（见 buildArchiveTimeLabel），不重新计算或推理。
+// Overview：唯一的AI调用点——把全部小总结正文按顺序拼进 <story_history> 标签交给AI二次提炼，
+// 生成一份不超过1000字的剧情总览（见 buildArchiveOverviewInstruction/buildArchiveOverviewUserContent）。
+// 外壳仍然是 <details><summary>摘要</summary>...</details>，因为新对话第0层要靠
+// parseFloorSummaryFields 识别出这是一层"摘要模块"，首次触发 rebuildStatusTableFromChat
+// 全量重放时把 Relationships/Inventory/Setups 解析合并回状态表；Time 顺带能被
+// findNearestAnchorFloor 当作新对话里逐层还原摘要时的上文时间锚点使用。
+// 世界书里没有任何"小总结"条目时（比如刚开局就存档），跳过AI调用，Time/Overview 都留空，
+// 其余逻辑不受影响。
 // =====================================================================================
 export const runAutoLargeSummary = errorCatched(async () => {
   const summaryLorebookName = await getOrCreateSummaryLorebook();
 
   const proceed = await confirmAction(
     "状态存档",
-    "状态存档会读取当前状态表（人物关系/物品/伏笔），生成可粘贴到新对话第0层的存档内容，用于新对话接续时恢复状态表（不含时间/地点/事件经过，这些交给小总结负责）。<br><br>是否继续？",
+    "状态存档会读取当前状态表（人物关系/物品/伏笔）和已有的小总结（时间线/剧情总览），生成可粘贴到新对话第0层的存档内容，用于新对话接续时恢复进度。<br><br>是否继续？",
   );
   if (!proceed) {
     notify("info", "已取消。");
@@ -408,11 +412,40 @@ export const runAutoLargeSummary = errorCatched(async () => {
     return;
   }
 
+  const sortedSmallSummaries = await getSortedSmallSummaryEntries(
+    summaryLorebookName,
+  );
+
+  const timeLabel = buildArchiveTimeLabel(sortedSmallSummaries);
+
+  let overview = "";
+  if (sortedSmallSummaries.length > 0) {
+    notify("info", "正在总结Overview，请稍候...");
+    const systemPrompt = buildArchiveOverviewInstruction();
+    const userContent = buildArchiveOverviewUserContent(sortedSmallSummaries);
+    try {
+      const rawResult = await generateSummaryWithOverlay(
+        systemPrompt,
+        userContent,
+        { statusText: "正在总结剧情总览，请稍候..." },
+      );
+      overview = (rawResult || "").trim();
+    } catch (generateError) {
+      console.error("[剧情助手] 状态存档生成Overview失败:", generateError);
+      notify(
+        "error",
+        `生成剧情总览失败：${generateError.message}，将只存档状态表快照。`,
+      );
+    }
+  }
+
   const summaryContent = [
     "<details><summary>摘要</summary>",
+    `Time: ${timeLabel}`,
     `Relationships: ${relationshipsSnapshot}`,
     `Inventory: ${inventorySnapshot}`,
     `Setups: ${setupsSnapshot}`,
+    `Overview: ${overview}`,
     "</details>",
   ].join("\n");
 
