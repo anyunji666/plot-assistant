@@ -180,7 +180,7 @@ export async function generateSummaryWithOverlay(
 export const runAutoSmallSummary = errorCatched(async () => {
   const proceed = await confirmAction(
     "自动小总结",
-    "将从世界书中已有的小总结进度开始，按每批30层自动往后总结，直至覆盖当前对话的全部楼层。<br><br>如果本对话设置过起始楼层，会自动按该起始楼层继续编号。<br><br>是否继续？",
+    "将从世界书中已有的小总结进度开始，按每批30层自动往后总结，直至覆盖当前对话的全部楼层。<br><br>每批总结保存成功后，对应楼层会自动隐藏，避免原文与小总结内容重复占用上下文。<br><br>如果本对话设置过起始楼层，会自动按该起始楼层继续编号。<br><br>是否继续？",
   );
   if (!proceed) {
     notify("info", "已取消。");
@@ -266,6 +266,24 @@ export const runAutoSmallSummary = errorCatched(async () => {
         { ...SMALL_SUMMARY_ENTRY_DEFAULTS, order: summaryEntryOrder },
         rangeKeyword ? [rangeKeyword] : [],
       );
+
+      // 小总结联动隐藏楼层：这一批已经被小总结覆盖存档，原始楼层不再需要留给AI看，
+      // 隐藏失败不影响本批总结已保存的结果，只记日志+提示，不中断循环。
+      try {
+        const context = getCtx();
+        await context.executeSlashCommandsWithOptions(
+          `/hide ${batchStart}-${batchEnd}`,
+        );
+      } catch (hideError) {
+        console.error(
+          `[剧情助手] 自动小总结联动隐藏第${rangeLabel}楼失败:`,
+          hideError,
+        );
+        notify(
+          "warning",
+          `第${rangeLabel}楼小总结已保存，但自动隐藏失败：${hideError.message}`,
+        );
+      }
 
       progress = batchEnd;
       batchesDone += 1;
@@ -450,7 +468,8 @@ export const runAutoLargeSummary = errorCatched(async () => {
   ].join("\n");
 
   // 状态存档是手动复制到重开对话开头用的，不需要在当前对话里被引擎扫描注入上下文：
-  // 新建时改成条件触发（非常驻）+ 默认禁用；禁用状态下 position/depth/order/key 不生效，沿用原生默认即可。
+  // 新建时改成条件触发（非常驻）+ 默认禁用 + 触发概率0；禁用状态下 position/depth/order/key 不生效，沿用原生默认即可，
+  // 概率归零是双保险——万一之后被手动启用，也不会被原生引擎意外抽中注入。
   try {
     await saveOrOverwriteLorebookEntry(
       summaryLorebookName,
@@ -460,6 +479,7 @@ export const runAutoLargeSummary = errorCatched(async () => {
       {
         constant: false,
         disable: true,
+        probability: 0,
       },
     );
   } catch (saveError) {

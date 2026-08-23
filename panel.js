@@ -18,7 +18,7 @@ import { HOLIDAY_SETTINGS_KEY, getHolidayEnabled, setHolidayEnabledSetting } fro
 import { openRestPresetDialog, openCustomHolidaysDialog } from "./modules/holiday/ui.js";
 import { PHONE_FAB_POS_KEY, applyPhoneFabVisibility, openPhonePresetDialog, resetPhoneFabPos } from "./modules/phone/ui.js";
 import { ensureSummaryLorebookOnLoad, runAutoLargeSummary, runAutoSmallSummary, runSetOffset } from "./modules/summary/generator.js";
-import { openPreEmphasisDialog } from "./modules/summary/ui.js";
+import { openHideFloorDialog, openPreEmphasisDialog } from "./modules/summary/ui.js";
 import { getLorebookEntriesSummaryHtml, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, mountSummaryLorebookGlobally, notifyWorldInfoUpdated } from "./modules/worldinfo.js";
 
 
@@ -186,6 +186,7 @@ export async function showSummaryPopup() {
             <button id="${POPUP_ID}-set-offset" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">设定起始楼层</button>
             <button id="${POPUP_ID}-auto-small" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">自动小总结</button>
             <button id="${POPUP_ID}-auto-large" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">状态存档</button>
+            <button id="${POPUP_ID}-hide-floor" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">隐藏楼层</button>
           </div>
         </div>
 
@@ -386,6 +387,20 @@ export async function showSummaryPopup() {
       .on("click", () => {
         closePopup();
         runAutoLargeSummary();
+      })
+      .hover(
+        function () {
+          $(this).css("background", "#2c5d9e");
+        },
+        function () {
+          $(this).css("background", "#3a7bd5");
+        },
+      );
+
+    $(`#${POPUP_ID}-hide-floor`)
+      .on("click", () => {
+        closePopup();
+        openHideFloorDialog();
       })
       .hover(
         function () {

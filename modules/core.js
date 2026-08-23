@@ -172,10 +172,10 @@ export const STATUS_TABLE_ENTRY_DEFAULTS = {
 };
 
 // 小总结条目的默认位置设置：用"@D 在深度"，深度定得比状态表深一点（深度6）。
-// 触发方式为条件触发（非常驻），靠世界书自身的关键词匹配机制决定是否注入，
-// 缓解长上下文里"始终存在"的条目被模型降权关注的问题。
+// 触发方式改为永久（常量注入，不再依赖关键词匹配）——之前用条件触发是为了缓解长上下文里
+// "始终存在"的条目被模型降权关注的问题，现在按使用反馈改回常驻，确保每个批次的小总结都稳定注入上下文。
 export const SMALL_SUMMARY_ENTRY_DEFAULTS = {
-  constant: false, // 触发类型由常驻改成条件触发，靠 key 关键词匹配决定是否注入
+  constant: true, // 触发类型：永久（常量注入）
   position: 4, // 原生 world_info_position: atDepth
   depth: 6,
   role: 0, // extension_prompt_roles: SYSTEM
