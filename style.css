@@ -667,24 +667,6 @@
     border-radius: 0;
 }
 
-.pa-phone-typing-dots span {
-    display: inline-block;
-    animation: pa-phone-typing-blink 1.4s infinite both;
-}
-
-.pa-phone-typing-dots span:nth-child(2) {
-    animation-delay: 0.2s;
-}
-
-.pa-phone-typing-dots span:nth-child(3) {
-    animation-delay: 0.4s;
-}
-
-@keyframes pa-phone-typing-blink {
-    0%, 80%, 100% { opacity: 0.25; }
-    40% { opacity: 1; }
-}
-
 .pa-phone-msg-sticker-img {
     width: 84px;
     height: 84px;

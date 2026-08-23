@@ -1502,18 +1502,17 @@ export function bindPhoneChatMessageActions(list, characterName) {
 
 
 // 角色"变闲"自动补发回复后，如果手机聊天页当前正好开着这个联系人，实时刷新一下。
+// 返回渲染的 Promise，方便调用方 await，确保消息真正上屏后再继续后续流程（避免和其他 DOM 更新抢跑）。
 export function refreshPhoneChatViewIfOpen(characterName) {
   const overlay = document.getElementById("pa-phone-modal-overlay");
-  if (!overlay || !overlay.open) return;
-  if (phoneUIState.activeChatCharacter !== characterName) return;
-  renderPhoneChatMessages(characterName);
+  if (!overlay || !overlay.open) return Promise.resolve();
+  if (phoneUIState.activeChatCharacter !== characterName) return Promise.resolve();
+  return renderPhoneChatMessages(characterName);
 }
 
 
-// 调用AI生成回复前后，如果聊天页当前正好开着这个联系人：
-// 1) 把顶部标题（姓名位置）换成"对方正在输入…"，isTyping=false 时换回联系人名字；
-// 2) 同时在消息列表最底下插入一条跟左侧气泡样式一致的"对方正在输入…"提示条并滚到底部，
-//    放在用户视线本来就会盯着看的消息区域里，比单看顶部标题更不容易错过。
+// 调用AI生成回复前后，如果聊天页当前正好开着这个联系人，把顶部标题（姓名位置）换成"对方正在输入…"，
+// isTyping=false 时换回联系人名字。只改标题，不在消息列表里插入气泡。
 export function setPhoneTypingIndicator(characterName, isTyping) {
   const overlay = document.getElementById("pa-phone-modal-overlay");
   if (!overlay || !overlay.open) return;
@@ -1521,24 +1520,6 @@ export function setPhoneTypingIndicator(characterName, isTyping) {
 
   const titleEl = document.getElementById("pa-phone-header-title");
   if (titleEl) titleEl.textContent = isTyping ? "对方正在输入…" : characterName;
-
-  const list = document.getElementById("pa-phone-chat-messages");
-  if (!list) return;
-  const existing = document.getElementById("pa-phone-typing-indicator");
-  if (isTyping) {
-    if (existing) return; // 已经在显示了，不重复插入
-    const row = document.createElement("div");
-    row.id = "pa-phone-typing-indicator";
-    row.className = "pa-phone-msg-row pa-phone-msg-left";
-    row.innerHTML = `
-      <div class="pa-phone-msg-bubble-line">
-        <div class="pa-phone-msg-bubble pa-phone-typing-bubble">对方正在输入<span class="pa-phone-typing-dots"><span>.</span><span>.</span><span>.</span></span></div>
-      </div>`;
-    list.appendChild(row);
-    list.scrollTop = list.scrollHeight;
-  } else if (existing) {
-    existing.remove();
-  }
 }
 
 

@@ -135,7 +135,7 @@ export async function sendPhoneMessageToCharacter(characterName, payload) {
     ts: Date.now(),
     storyTime: getCurrentStoryTime(),
   });
-  refreshPhoneChatViewIfOpen(characterName); // 先把用户自己发的这条显示出来，再去判断忙闲状态
+  await refreshPhoneChatViewIfOpen(characterName); // 先把用户自己发的这条显示出来，再去判断忙闲状态
 
   const phoneState = getPhoneChatState();
   const { idx: lastAiIdx, mes: lastAiMes } = getLastAiFloor();
