@@ -60,7 +60,9 @@ export function setPhoneFabVisibleSetting(visible) {
 
 // 读取"当前对话"的手机私信状态记录，不存在则就地初始化一份默认结构并返回（引用，改了要记得调用 persistChatMetadata）。
 // 结构：{ busy: {角色名: true}, idleFloor: {角色名: 楼层号}, pendingInjection: {角色名: true/false},
-//        pendingInventoryChanges: {"所有者·物品名": {quantity} 或 {deleted:true}} }
+//        pendingInventoryChanges: {"所有者·物品名": {quantity} 或 {deleted:true}},
+//        pendingInventorySplice: null 或 {floorIdx, snapshot} —— 记录"待生效改动最近一次被拼进了哪一层楼（floorIdx）、
+//          拼的是哪份快照（snapshot，见 peekPendingInventoryChangeSegments）"，用于楼层"翻篇"后判断哪些条目可以真正清空 }
 export function getPhoneChatState() {
   const store = getChatMetadataStore();
   if (
@@ -72,6 +74,7 @@ export function getPhoneChatState() {
       idleFloor: {},
       pendingInjection: {},
       pendingInventoryChanges: {},
+      pendingInventorySplice: null,
     };
   }
   const s = store[PHONE_CHAT_META_KEY];
@@ -84,6 +87,7 @@ export function getPhoneChatState() {
     typeof s.pendingInventoryChanges !== "object"
   )
     s.pendingInventoryChanges = {};
+  if (s.pendingInventorySplice === undefined) s.pendingInventorySplice = null;
   return s;
 }
 
@@ -220,9 +224,14 @@ export async function getRelationshipStageForCharacter(characterName) {
 
 
 // ==== 手机「背包」页：携带物品 ====
-// 状态表 Inventory 字段现在只有一个书写入口——正文AI自己的摘要输出（经 mergeFloorIntoStatusTable 合并）。
+// 状态表 Inventory 字段现在的书写入口是"状态表LLM"（见 summary/generator.js 的
+// extractInventorySetupsForLatestFloor），不再是正文AI自己的摘要输出——正文AI只管写故事，
+// 每层渲染完成后由状态表LLM单独提取本轮 Inventory/Setups 变化。
 // 背包页只读这份数据，不直接抢着写世界书：编辑（增/删/改）一律先记成"待生效改动"存在本地对话状态里，
-// 下一轮生成前提醒正文AI照着改，AI 输出后自然经由既有流程合并、变成"历史"的一部分，全量重放也不会被冲掉。
+// 下一层AI楼层渲染完成时，由 peekPendingInventoryChangeSegments 只读拼进状态表LLM本轮的提取结果里
+// （不经过任何AI转述），再经既有的 mergeFloorIntoStatusTable 合并、变成"历史"的一部分，全量重放也不会被冲掉。
+// 待生效改动本身要等这一层楼"翻篇"（后面出现了更新的楼层，确认不会再被重新生成）之后，
+// 才由 commitPendingInventoryChanges 按快照比对真正清空——避免拼装失败、或这层楼被swipe重新生成时数据无声丢失。
 // key 沿用状态表既有约定 "所有者·物品名"，{{user}} 自己的物品也走这个前缀。
 
 export const PHONE_INVENTORY_SELF_KEY = "{{user}}";
@@ -299,6 +308,58 @@ export async function deletePhoneInventoryItem(ownerName, itemName) {
 export async function cancelPendingInventoryChange(ownerName, itemName) {
   delete getPhoneChatState().pendingInventoryChanges[`${ownerName}·${itemName}`];
   await persistChatMetadata();
+}
+
+
+// 把"待生效改动"转成 Inventory 字段本身的增量片段（所有者·物品名: =N / [REMOVE]），只读不清空。
+// 原机制是提醒正文AI在自己的摘要模块里"抄"一遍这些片段，靠AI回声复述来让改动进入 mergeFloorIntoStatusTable
+// 常规合并链路、变成"历史"的一部分；现在 Inventory 已改由状态表LLM独立提取（正文AI不再输出该字段），
+// 这里直接把待生效改动拼进状态表LLM本轮的提取结果里（不经过任何AI转述，更不容易跑偏），
+// 由调用方（summary/generator.js 的状态表LLM提取流程）负责拼进正文并触发合并，效果跟原来一致。
+// ⚠️ 不在这里清空 pendingInventoryChanges：调用方可能拼装失败（没找到可插入位置）、也可能这一层楼后面
+// 还会被重新生成（swipe）——如果在这里就清空，前者会导致改动无声丢失，后者会导致改动只进了被丢弃的
+// 那个swipe、真正留下来的swipe反而没有。清空的时机交给 commitPendingInventoryChanges，由调用方在
+// 确认"这一层楼已经翻篇、不会再重新生成"时再调用。
+// 返回值里的 snapshot 是这次读到的"所有者·物品名 → 值"快照，原样传给 commitPendingInventoryChanges，
+// 用于之后精确比对"这份快照里的条目在这期间有没有被再次修改过"。
+export async function peekPendingInventoryChangeSegments() {
+  const state = getPhoneChatState();
+  const pending = state.pendingInventoryChanges || {};
+  const keys = Object.keys(pending);
+  if (keys.length === 0) return { segments: [], snapshot: {} };
+  const segments = [];
+  const snapshot = {};
+  keys.forEach((key) => {
+    const parsed = splitInventoryKey(key);
+    if (!parsed) return;
+    const change = pending[key];
+    const value = change.deleted ? "[REMOVE]" : `=${change.quantity}`;
+    segments.push(`${parsed.owner}·${parsed.item}: ${value}`);
+    snapshot[key] = change.deleted ? "deleted" : String(change.quantity);
+  });
+  return { segments, snapshot };
+}
+
+
+// 把已经确认"拼进正文成功、且这一层楼已经翻篇（不会再被重新生成）"的那部分待生效改动，
+// 从 pendingInventoryChanges 里真正摘掉——只摘掉 snapshot 里那些"从当初拼接到现在都没再被改过"的条目；
+// 期间用户又在背包页把同一条目改了新值的（当前值跟snapshot对不上），保留在pending里，留给下一层楼继续携带，
+// 不会因为这次提交就被跟着冲掉。
+export async function commitPendingInventoryChanges(snapshot) {
+  if (!snapshot || typeof snapshot !== "object") return;
+  const state = getPhoneChatState();
+  const pending = state.pendingInventoryChanges || {};
+  let changed = false;
+  Object.keys(snapshot).forEach((key) => {
+    const current = pending[key];
+    if (!current) return; // 已经不在pending里了（比如背包页那边又手动撤销了），无需处理
+    const currentValue = current.deleted ? "deleted" : String(current.quantity);
+    if (currentValue === snapshot[key]) {
+      delete pending[key];
+      changed = true;
+    }
+  });
+  if (changed) await persistChatMetadata();
 }
 
 

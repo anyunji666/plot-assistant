@@ -4,6 +4,9 @@ import { DEFAULT_PRE_EMPHASIS_CONTENT, GENERATING_OVERLAY_ID, PRE_EMPHASIS_TITLE
 import { loadPreEmphasisEntry, savePreEmphasisEntry } from "./generator.js";
 import { getSummaryProgress } from "./parser.js";
 import { getOrCreateSummaryLorebook } from "../worldinfo.js";
+import { niFetchModelIds } from "./status-llm-api.js";
+import { DEFAULT_STATUS_LLM_PROMPT } from "./status-llm-prompts.js";
+import { getStatusLlmSettings, saveStatusLlmSettings } from "./status-llm-store.js";
 
 
 // === Helper: "生成中"提示框（居中弹窗，半透明遮罩+卡片，带加载动画） ===
@@ -626,4 +629,292 @@ export function openHideFloorDialog() {
       },
     );
   });
+}
+
+
+// =====================================================================================
+// === 状态表LLM配置弹窗 ===
+// Inventory/Setups 两个字段独立于剧情LLM之外的一路可选配置：apiUrl 留空 = 跟随酒馆当前连接
+// （与"自动小总结"/"摘要提取"未配置时的行为一致），非空 = 走这里填写的自定义反代。
+// 提示词默认值 = DEFAULT_STATUS_LLM_PROMPT，可在这里自定义（遇到截断/拒绝时常见的调整点）。
+// =====================================================================================
+export async function openStatusLlmConfigDialog() {
+  const cfg = getStatusLlmSettings();
+
+  const $bodyEl = $("body");
+  const prevBodyOverflow = $bodyEl.css("overflow");
+  $bodyEl.css("overflow", "hidden");
+
+  const result = await new Promise((resolve) => {
+    const $overlay = $("<div>").css({
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: "rgba(0,0,0,0.72)",
+      zIndex: 99999,
+      boxSizing: "border-box",
+    });
+
+    const $box = $("<div>").css({
+      position: "fixed",
+      top: "12px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      background: "#252525",
+      border: "1px solid #3a3a3a",
+      borderRadius: "10px",
+      padding: "clamp(16px, 4vw, 24px)",
+      width: "min(440px, calc(100% - 24px))",
+      maxHeight: "min(85vh, calc(100dvh - 24px))",
+      display: "flex",
+      flexDirection: "column",
+      gap: "14px",
+      color: "#e8e8e8",
+      fontFamily: "inherit",
+      boxSizing: "border-box",
+      boxShadow: "0 8px 32px rgba(0,0,0,0.55)",
+      overflowY: "auto",
+      WebkitOverflowScrolling: "touch",
+    });
+
+    const $title = $("<div>").text("状态表配置").css({
+      fontSize: "1.05em",
+      fontWeight: "600",
+      color: "#f0f0f0",
+      letterSpacing: "0.01em",
+    });
+
+    const $desc = $("<div>")
+      .text(
+        "独立于剧情LLM之外，专门用于从每层正文提取 Inventory/Setups 两个字段。API地址留空则跟随酒馆当前对话连接（同自动小总结）。",
+      )
+      .css({ fontSize: "0.8em", color: "#999", lineHeight: 1.5 });
+
+    const inputCss = {
+      width: "100%",
+      boxSizing: "border-box",
+      padding: "8px 10px",
+      borderRadius: "6px",
+      border: "1px solid #3a3a3a",
+      background: "#ffffff",
+      color: "#000000",
+      fontSize: "max(0.95em, 16px)",
+      fontFamily: "inherit",
+      outline: "none",
+    };
+
+    function buildFieldRow(labelText, $input) {
+      const $wrap = $("<div>").css({
+        display: "flex",
+        flexDirection: "column",
+        gap: "4px",
+      });
+      $wrap.append(
+        $("<label>").text(labelText).css({ fontSize: "0.82em", color: "#999" }),
+      );
+      $wrap.append($input);
+      return $wrap;
+    }
+
+    const $apiUrlInput = $('<input type="text" placeholder="留空=跟随酒馆当前连接">')
+      .css(inputCss)
+      .val(cfg.apiUrl || "");
+    const $apiKeyInput = $('<input type="password" placeholder="仅自定义反代时需要">')
+      .css(inputCss)
+      .val(cfg.apiKey || "");
+
+    const $modelRow = $("<div>").css({ display: "flex", gap: "6px" });
+    const $modelInput = $('<input type="text" placeholder="模型 ID，例如 gpt-4o-mini">')
+      .css({ ...inputCss, flex: 1 })
+      .val(cfg.model || "");
+    const $modelSelect = $("<select>")
+      .css({ ...inputCss, flex: 1, display: "none" });
+    const $modelFetchBtn = $("<button>")
+      .text("获取列表")
+      .css({
+        padding: "8px 10px",
+        borderRadius: "6px",
+        border: "1px solid #3a3a3a",
+        background: "#333",
+        color: "#e8e8e8",
+        cursor: "pointer",
+        fontSize: "0.82em",
+        whiteSpace: "nowrap",
+      });
+    $modelRow.append($modelInput, $modelSelect, $modelFetchBtn);
+
+    $modelFetchBtn.on("click", async () => {
+      const url = $apiUrlInput.val().trim();
+      if (!url) {
+        notify("error", "请先填写 API 地址");
+        return;
+      }
+      $modelFetchBtn.prop("disabled", true).text("获取中…");
+      try {
+        const models = await niFetchModelIds({
+          url,
+          key: $apiKeyInput.val().trim(),
+          fetchImpl: fetch,
+        });
+        if (!models.length) {
+          notify("error", "未获取到模型列表");
+          return;
+        }
+        $modelSelect
+          .html(
+            ['<option value="" disabled selected>请选择模型</option>']
+              .concat(
+                models.map(
+                  (m) => `<option value="${m.replace(/"/g, "&quot;")}">${m}</option>`,
+                ),
+              )
+              .join(""),
+          )
+          .css("display", "")
+          .off("change")
+          .on("change", function () {
+            $modelInput.val($(this).val());
+            $modelSelect.css("display", "none");
+            $modelInput.css("display", "");
+          });
+        $modelInput.css("display", "none");
+      } catch (e) {
+        notify("error", `拉取失败: ${e.message || e}`);
+      } finally {
+        $modelFetchBtn.prop("disabled", false).text("获取列表");
+      }
+    });
+
+    const $promptHeader = $("<div>").css({
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+    });
+    $promptHeader.append(
+      $("<label>").text("提示词（Inventory/Setups 提取规则）").css({
+        fontSize: "0.82em",
+        color: "#999",
+      }),
+    );
+    const $resetBtn = $("<button>")
+      .text("恢复默认")
+      .css({
+        padding: "4px 8px",
+        borderRadius: "6px",
+        border: "1px solid #3a3a3a",
+        background: "transparent",
+        color: "#c0c0c0",
+        cursor: "pointer",
+        fontSize: "0.78em",
+      });
+    $promptHeader.append($resetBtn);
+
+    const $promptInput = $("<textarea>")
+      .attr({ rows: 10 })
+      .css({
+        ...inputCss,
+        resize: "vertical",
+        minHeight: "160px",
+        maxHeight: "min(40vh, 40dvh)",
+        fontFamily: "monospace",
+        fontSize: "0.82em",
+      })
+      .val(cfg.customPrompt?.trim() ? cfg.customPrompt : DEFAULT_STATUS_LLM_PROMPT);
+
+    $resetBtn.on("click", () => $promptInput.val(DEFAULT_STATUS_LLM_PROMPT));
+
+    const $btnRow = $("<div>").css({
+      display: "flex",
+      gap: "10px",
+      justifyContent: "flex-end",
+      marginTop: "4px",
+    });
+    const btnCss = {
+      padding: "6px 10px",
+      borderRadius: "6px",
+      boxSizing: "border-box",
+      cursor: "pointer",
+      fontSize: "0.8em",
+      touchAction: "manipulation",
+    };
+    const $cancel = $("<button>")
+      .text("取消")
+      .css({
+        ...btnCss,
+        border: "1px solid #3a3a3a",
+        background: "transparent",
+        color: "#c0c0c0",
+      });
+    const $confirm = $("<button>")
+      .text("保存")
+      .css({
+        ...btnCss,
+        border: "none",
+        background: "#5b9cf6",
+        color: "#ffffff",
+        fontWeight: "600",
+      });
+    $btnRow.append($cancel, $confirm);
+
+    $box.append(
+      $title,
+      $desc,
+      buildFieldRow("API 地址", $apiUrlInput),
+      buildFieldRow("API Key", $apiKeyInput),
+      buildFieldRow("模型", $modelRow),
+      $promptHeader,
+      $promptInput,
+      $btnRow,
+    );
+    $overlay.append($box);
+    $("body").append($overlay);
+
+    const done = (confirmed) => {
+      $(document).off("keydown.statusLlmConfigDialog");
+      $overlay.remove();
+      $bodyEl.css("overflow", prevBodyOverflow || "");
+      resolve(
+        confirmed
+          ? {
+              apiUrl: $apiUrlInput.val().trim(),
+              apiKey: $apiKeyInput.val(),
+              model: $modelInput.val().trim(),
+              customPrompt: $promptInput.val(),
+            }
+          : null,
+      );
+    };
+
+    $confirm.on("click", () => done(true));
+    $cancel.on("click", () => done(false));
+
+    let overlayPointerDownOnSelf = false;
+    $overlay.on("mousedown touchstart", (e) => {
+      overlayPointerDownOnSelf = $(e.target).is($overlay);
+    });
+    $overlay.on("mouseup touchend", (e) => {
+      if (overlayPointerDownOnSelf && $(e.target).is($overlay)) done(false);
+      overlayPointerDownOnSelf = false;
+    });
+    $(document).on("keydown.statusLlmConfigDialog", (e) => {
+      if (e.key === "Escape") done(false);
+    });
+  });
+
+  if (!result) return;
+
+  cfg.apiUrl = result.apiUrl;
+  cfg.apiKey = result.apiKey;
+  cfg.model = result.model;
+  cfg.customPrompt =
+    result.customPrompt && result.customPrompt.trim() !== DEFAULT_STATUS_LLM_PROMPT.trim()
+      ? result.customPrompt
+      : "";
+  saveStatusLlmSettings();
+  notify(
+    "success",
+    `状态表配置已保存（${cfg.apiUrl ? "使用自定义API" : "跟随酒馆当前连接"}）`,
+  );
 }

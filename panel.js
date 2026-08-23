@@ -18,7 +18,7 @@ import { HOLIDAY_SETTINGS_KEY, getHolidayEnabled, setHolidayEnabledSetting } fro
 import { openRestPresetDialog, openCustomHolidaysDialog } from "./modules/holiday/ui.js";
 import { PHONE_FAB_POS_KEY, applyPhoneFabVisibility, openPhonePresetDialog, resetPhoneFabPos } from "./modules/phone/ui.js";
 import { ensureSummaryLorebookOnLoad, runAutoLargeSummary, runAutoSmallSummary, runSetOffset } from "./modules/summary/generator.js";
-import { openHideFloorDialog, openPreEmphasisDialog } from "./modules/summary/ui.js";
+import { openHideFloorDialog, openPreEmphasisDialog, openStatusLlmConfigDialog } from "./modules/summary/ui.js";
 import { getLorebookEntriesSummaryHtml, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, mountSummaryLorebookGlobally, notifyWorldInfoUpdated } from "./modules/worldinfo.js";
 
 
@@ -191,8 +191,9 @@ export async function showSummaryPopup() {
         </div>
 
         <div style="margin-bottom: 20px;">
-          <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">输出强调</p>
+          <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">摘要配置</p>
           <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+            <button id="${POPUP_ID}-status-llm-config" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">状态表配置</button>
             <button id="${POPUP_ID}-pre-emphasis" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">对话前强调</button>
           </div>
         </div>
@@ -478,6 +479,20 @@ export async function showSummaryPopup() {
         );
       }),
     );
+
+    $(`#${POPUP_ID}-status-llm-config`)
+      .on("click", () => {
+        closePopup();
+        openStatusLlmConfigDialog();
+      })
+      .hover(
+        function () {
+          $(this).css("background", "#2c5d9e");
+        },
+        function () {
+          $(this).css("background", "#3a7bd5");
+        },
+      );
 
     $(`#${POPUP_ID}-pre-emphasis`)
       .on("click", () => {

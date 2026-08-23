@@ -75,8 +75,6 @@ export const DEFAULT_PRE_EMPHASIS_CONTENT = `### [MANDATORY] Summary Output Prot
 Time: \${本轮场景结束时刻，精确到年月日+时分；日期不明则自拟符合背景的纪年}
 Location: \${本轮场景最后所在地点}
 Relationships: \${{{user}}→角色: 关系词}
-Inventory: \${角色名·物品名: 数量}
-Setups: \${角色名·关键词: 简介}
 Busy: \${仅当<snapshot_table>标签内Busy列表角色本轮未出现或拿“通讯器”回复消息时才输出，格式见下方Busy规则}
 ExpiredChapter: \${仅当前文含有<expired_chapter_instruction>规则，且判定该章节已完整演绎/过时时才输出，无该规则或未判定过时则忽略此字段}
 Overview: \${本轮关键事件按时间顺序列出}
@@ -100,28 +98,6 @@ for 角色 in 本轮关系有变化的角色:
 # 身份词/血亲词可加括号填写表示关系变化的阶段词。阶段词只能是独立词，不能加括号补充其它内容，关系变化直接选用新的阶段词覆盖式改写
 # 格式：{{user}}→角色A: 值；
 # 值只能是 [REMOVE] /表内词，禁止自造/留空。正例："师徒(暧昧)" 反例："朋友(渐生好感中)"
-\`\`\`
-
-**Inventory**（只写本轮变化，无变化则留空，多组分号分隔，按顺序执行）
-\`\`\`
-for 道具变化 in 本轮:
-    if not 可随身携带实体物品: 跳过  # 状态/情形归Overview
-    if 全部用尽/全部送出/丢失: 值 = [REMOVE]
-    elif 首次记录/需硬修正历史值: 值 = "=N"
-    elif 得到/获得/新增: 值 = "+N"
-    elif 部分消耗/部分送出(未归零): 值 = "-N"
-# 格式：角色名·物品名: 值；
-# 值只能是[REMOVE]/=N/+N/-N，N为纯数字。正例："+2" "=3"　反例："+2瓶" "=3个(备用)"
-\`\`\`
-
-**Setups**（只写本轮变化，无变化则留空，多组分号分隔，按顺序执行）
-\`\`\`
-Step1 存量清理：旧条目已兑现/作废/不可能再被拾起 → 角色名·关键词: [REMOVE]
-Step2 新增：本轮及<private_letter name="角色名">包裹的私信中是否出现值得长线追踪的伏笔/线索/约定？
-    以下情况不记录：
-      - 单纯的意图/打算（"她想...""他计划..."）不记 → 需要记录的是已发生的事实
-      - 单纯关系状态变化(归Relationships) / 纯事件叙述(归Overview) / 本轮内已解决的伏笔(归Overview)
-Step3 格式：角色名·关键词: (日期·地点)+一句话钩子；（日期具体到年月日，整体不超30字）
 \`\`\`
 
 **Busy**（Busy条目唯一要做的是添加[REMOVE]标记，清除本轮未出现或拿起“通讯器”查看并回复消息的角色，多组分号分隔）
@@ -149,8 +125,6 @@ for 角色 in 已注入的<snapshot_table>标签内Busy列表:
 Time: 武定三年三月十五,申时
 Location: 云隐山洞穴
 Relationships: {{user}}→角色A: 恋人；{{user}}→角色B: 师徒(暧昧)；{{user}}→角色C: [REMOVE]
-Inventory: {{user}}·玉佩（块）: =1；{{user}}·金创药（瓶）: -1；{{user}}·解药: [REMOVE]；
-Setups: {{user}}·玉佩纹路之谜: (武定三年三月十五·云隐山洞穴)背面刻着一行字,含义不明；角色A·旧日承诺: [REMOVE]
 Overview: {{user}}向角色A表明心意确定恋人关系；与角色B切磋加深师徒情谊；拾得来历不明玉佩；服下最后一瓶解药；角色C战死永久离场。
 </details>
 \`\`\``;
@@ -275,10 +249,6 @@ export const PHONE_GLOBAL_BACKGROUND_KEY = "__global__";
 // 私信槽位注入正文时用的 extension prompt key，平时为空，只有"今天有新私信"时临时写入内容，
 // AI 生成完这一轮后立即清空（一次性注入，不常驻）。
 export const PHONE_SLOT_PROMPT_KEY = "plotAssistant_phoneSlot";
-
-// 背包页手动改动库存后，下一轮生成前一次性提醒正文AI"请在摘要模块Inventory字段里同步这些变化"的注入key，
-// 用法跟 PHONE_SLOT_PROMPT_KEY 一样：生成前注入、渲染完清空，不常驻。
-export const PHONE_INVENTORY_PROMPT_KEY = "plotAssistant_inventoryChangeSlot";
 
 // === 星期/节假日播报 相关常量已迁移到 modules/holiday/inject.js（独立模块，自带开关/自带 prompt key）===
 

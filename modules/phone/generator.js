@@ -1,7 +1,7 @@
 "use strict";
 
-import { PHONE_INVENTORY_PROMPT_KEY, PHONE_SLOT_PROMPT_KEY, getCtx, getLastAiFloor, notify, persistChatMetadata } from "../core.js";
-import { appendPhoneMessage, getAllPhoneMessages, getPhoneChatState, getPhoneContactCardBody, getRelationshipStageForCharacter, loadPhonePresetContent, markPhoneUpdatedToday, splitInventoryKey, splitStoryTime } from "./store.js";
+import { PHONE_SLOT_PROMPT_KEY, getCtx, getLastAiFloor, notify, persistChatMetadata } from "../core.js";
+import { appendPhoneMessage, getAllPhoneMessages, getPhoneChatState, getPhoneContactCardBody, getRelationshipStageForCharacter, loadPhonePresetContent, markPhoneUpdatedToday, splitStoryTime } from "./store.js";
 import { characterActiveInText, getCurrentStoryTime } from "./parser.js";
 import { refreshPhoneChatViewIfOpen, setPhoneTypingIndicator } from "./ui.js";
 import { generateSummaryRaw } from "../summary/generator.js";
@@ -220,24 +220,20 @@ export async function handleCharacterBecameFree(characterName) {
 
 // ==== 手机私信系统：私信槽位（一次性注入正文，AI 生成完这一轮后立即清空）====
 
-// 返回 { content, injectedNames }：content 是拼好的注入文本（可能为空字符串），
-// injectedNames 是这一轮实际有消息被塞进 content 的角色列表——只有真正注入了的角色，
-// 才允许 clearPhoneSlotPromptAfterRound 清掉它的 pending 标记，避免把没注入成功的私信悄悄标记为"已处理"而丢失。
-export async function buildPhoneSlotContent() {
-  const phoneState = getPhoneChatState();
-  const pendingNames = Object.keys(phoneState.pendingInjection || {}).filter(
-    (name) => phoneState.pendingInjection[name],
-  );
-  if (pendingNames.length === 0) return { content: "", injectedNames: [] };
+// === Helper: 给定一批角色名，拼出他们"剧情当日"私信的 <private_letter> 文本块。
+// 剧情LLM（buildPhoneSlotContent）和状态表LLM（buildPhoneLetterContentForStatusLlm）
+// 都靠这份文本判断当天私信里的关系变化/伏笔，两边内容必须一致，所以抽成同一份实现，不各写一套。===
+async function buildPhoneLetterBlocksForNames(names) {
+  if (!names || names.length === 0) return { content: "", injectedNames: [] };
 
   // 用"剧情当日"（最后一层正文摘要 Time 字段的日期部分）过滤，而不是现实日历日期——
-  // 私信该不该被这一轮正文看到，取决于它是否发生在同一个虚构日期里，跟触发注入这一刻的现实时间无关。
+  // 私信该不该被这一轮看到，取决于它是否发生在同一个虚构日期里，跟触发这一刻的现实时间无关。
   const currentStoryDate = splitStoryTime(getCurrentStoryTime()).date;
 
   const blocks = [];
   const injectedNames = [];
-  for (const name of pendingNames) {
-    // 不再按现实日期查单个分桶，而是拿该角色全部私信（跨真实自然日也没问题），
+  for (const name of names) {
+    // 不按现实日期查单个分桶，而是拿该角色全部私信（跨真实自然日也没问题），
     // 自己按 storyTime 的日期部分过滤出属于"剧情当日"的那些。
     const allGroups = await getAllPhoneMessages(name);
     const msgs = allGroups
@@ -247,7 +243,7 @@ export async function buildPhoneSlotContent() {
           (m.from === "user" || m.from === "character") &&
           splitStoryTime(m.storyTime).date === currentStoryDate,
       );
-    if (msgs.length === 0) continue; // 剧情日期暂时对不上，这轮不注入，pending 保留，等日期对上再补
+    if (msgs.length === 0) continue; // 剧情日期暂时对不上，这轮跳过
 
     // 按 storyTime 分组：只有当这条消息的 storyTime 跟上一条不一样时才插入一行"时间："，
     // 同一时间点下的连续消息共用这一行，不重复输出（同一剧情日的消息本来就同属一天，storyTime 只会是时辰在变）。
@@ -268,6 +264,28 @@ export async function buildPhoneSlotContent() {
     injectedNames.push(name);
   }
   return { content: blocks.join("\n\n"), injectedNames };
+}
+
+
+// 返回 { content, injectedNames }：content 是拼好的注入文本（可能为空字符串），
+// injectedNames 是这一轮实际有消息被塞进 content 的角色列表——只有真正注入了的角色，
+// 才允许 clearPhoneSlotPromptAfterRound 清掉它的 pending 标记，避免把没注入成功的私信悄悄标记为"已处理"而丢失。
+export async function buildPhoneSlotContent() {
+  const phoneState = getPhoneChatState();
+  const pendingNames = Object.keys(phoneState.pendingInjection || {}).filter(
+    (name) => phoneState.pendingInjection[name],
+  );
+  return buildPhoneLetterBlocksForNames(pendingNames);
+}
+
+
+// 供状态表LLM复用：拼出"这一轮实际注入给剧情LLM看过"的私信内容，供状态表LLM判断 Setups（伏笔/线索）
+// 时也能看到同一批私信——不这样做的话，私信里提到的约定/线索状态表LLM完全看不到，会漏记。
+// 故意不依赖 pendingInjection 标记：那个标记在 clearPhoneSlotPromptAfterRound 里会被清掉，
+// 而"状态表LLM提取"和"清空私信槽位"绑在同一个渲染事件上，谁先跑不可控，依赖它会有时序竞争；
+// lastInjectedPhoneNames 只是"这一轮实际注入过谁"的只读记录，不受清空动作影响，读到的永远是这一轮的真实名单。
+export async function buildPhoneLetterContentForStatusLlm() {
+  return buildPhoneLetterBlocksForNames(lastInjectedPhoneNames);
 }
 
 
@@ -338,67 +356,6 @@ export function clearPhoneSlotPromptAfterRound() {
 }
 
 
-// 背包页手动改动库存后，一次性提醒正文AI"这一轮请在摘要模块的 Inventory 字段里同步这些变化"。
-// 直接换算成 Inventory 字段本身的格式（所有者·物品名: =N / [REMOVE]）给AI抄，不用AI自己再翻译一遍自然语言，
-// 减少格式跑偏的空间。AI 输出后经由常规的 mergeFloorIntoStatusTable 合并进状态表，就变成"历史"的一部分了——
-// 后续再触发 rebuildStatusTableFromChat 全量重放时也不会把这次手动改动冲掉。
-export function applyPendingInventoryChangePrompt() {
-  try {
-    const context = getCtx();
-    if (typeof context.setExtensionPrompt !== "function") return;
-    const pending = getPhoneChatState().pendingInventoryChanges;
-    const keys = Object.keys(pending);
-    if (keys.length === 0) return;
-    const segments = keys
-      .map((key) => {
-        const parsed = splitInventoryKey(key);
-        if (!parsed) return null;
-        const change = pending[key];
-        const value = change.deleted ? "[REMOVE]" : `=${change.quantity}`;
-        return `${parsed.owner}·${parsed.item}: ${value}`;
-      })
-      .filter(Boolean);
-    if (segments.length === 0) return;
-    const content = `<inventory_calibration>\n用户对Inventory字段进行了校准，请在本轮摘要模块的Inventory字段中输出：\n${segments.join("；")}；\n</inventory_calibration>`;
-    const position = context.extension_prompt_types?.IN_CHAT ?? 1;
-    const role = context.extension_prompt_roles?.SYSTEM ?? 0;
-    context.setExtensionPrompt(
-      PHONE_INVENTORY_PROMPT_KEY,
-      content,
-      position,
-      0,
-      false,
-      role,
-    );
-  } catch (error) {
-    console.error("[剧情助手] 注入背包页库存变更提醒时出错:", error);
-  }
-}
-
-
-export function clearPendingInventoryChangePromptAfterRound() {
-  try {
-    const context = getCtx();
-    if (typeof context.setExtensionPrompt === "function") {
-      const position = context.extension_prompt_types?.IN_CHAT ?? 1;
-      const role = context.extension_prompt_roles?.SYSTEM ?? 0;
-      context.setExtensionPrompt(
-        PHONE_INVENTORY_PROMPT_KEY,
-        "",
-        position,
-        0,
-        false,
-        role,
-      );
-    }
-    getPhoneChatState().pendingInventoryChanges = {};
-    persistChatMetadata();
-  } catch (error) {
-    console.error("[剧情助手] 清空背包页库存变更提醒时出错:", error);
-  }
-}
-
-
 // 注册"生成前注入 / 生成后清空"监听。GENERATION_STARTED 在部分酒馆版本里可能不存在，
 // 找不到时只打印警告、不阻断其它功能——这一点需要你在实际环境验证一下具体的事件名是否可用。
 export function registerPhoneSlotInjection() {
@@ -416,7 +373,6 @@ export function registerPhoneSlotInjection() {
     if (startEventName) {
       context.eventSource.on(startEventName, () => {
         applyPhoneSlotPrompt();
-        applyPendingInventoryChangePrompt();
       });
     } else {
       console.warn(
@@ -429,7 +385,6 @@ export function registerPhoneSlotInjection() {
     if (renderEventName) {
       context.eventSource.on(renderEventName, () => {
         clearPhoneSlotPromptAfterRound();
-        clearPendingInventoryChangePromptAfterRound();
       });
     }
   } catch (error) {
