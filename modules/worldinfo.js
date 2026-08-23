@@ -277,7 +277,7 @@ export async function getLorebookEntriesSummaryHtml(lorebookName) {
               ? `
           <div class="entry-content" style="display: none; margin-top: 8px;">
             <div style="position: relative;">
-              <textarea class="entry-textarea" style="width: 100%; min-height: 100px; background: #000000; color: #ffffff; color-scheme: dark; border: 1px solid #444; border-radius: 4px; padding: 8px; font-size: 13px; margin-bottom: 8px;">${sanitizedContent}</textarea>
+              <textarea class="entry-textarea" style="width: 100%; min-height: 100px; background: #ffffff; color: #000000; color-scheme: light; border: 1px solid #444; border-radius: 4px; padding: 8px; font-size: 13px; margin-bottom: 8px;">${sanitizedContent}</textarea>
               <div style="display: flex; justify-content: flex-end; gap: 8px;">
                 <button class="entry-save" data-uid="${uid}" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px;">保存</button>
                 <button class="entry-delete" data-uid="${uid}" style="background: #d53a3a; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px;">删除</button>
