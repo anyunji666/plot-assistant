@@ -705,7 +705,9 @@ export function serializeStatusTableContent(state, busyMap) {
 // 角色在 Relationships 里被 [REMOVE]（死亡/永久退场）时，联动清理 Inventory/Setups 中"角色名·xxx"格式的相关条目）===
 // warnings 为可选的数组，传入时会收集本次合并中发现的所有格式问题（不合规的部分会被跳过、不写入状态表，
 // 但不会阻断其余合法字段的正常合并）。不传 warnings 时行为与之前完全一致，仅静默跳过不合规内容。
-export function mergeFloorIntoStatusTable(state, floorFields, warnings) {
+// removedOut 为可选的数组，传入时会把本层新death/离场（Relationships被标[REMOVE]）的角色名追加进去，
+// 供调用方（rebuildStatusTableFromChat）联动清理这些角色残留的手机"忙碌"标记，不传则不影响原有行为。
+export function mergeFloorIntoStatusTable(state, floorFields, warnings, removedOut) {
   const relationshipsText = normalizeSelfNameToLiteral(floorFields.relationships);
   const inventoryText = normalizeSelfNameToLiteral(floorFields.inventory);
   const setupsText = normalizeSelfNameToLiteral(floorFields.setups);
@@ -726,7 +728,10 @@ export function mergeFloorIntoStatusTable(state, floorFields, warnings) {
     if (isRemoveMarker(value)) {
       state.relationships.delete(key);
       const other = extractOtherPartyName(key);
-      if (other) removedCharacters.push(other);
+      if (other) {
+        removedCharacters.push(other);
+        if (removedOut) removedOut.push(other);
+      }
     } else if (isValidRelationshipWord(value)) {
       state.relationships.set(key, value);
     } else if (warnings) {
@@ -799,6 +804,7 @@ export async function rebuildStatusTableFromChat() {
     setups: new Map(),
   };
   const newIssues = []; // 本次重放中新出现（之前没提示过）的问题，收集齐后一次性提示
+  const everRemovedCharacters = []; // 整段重放期间，所有被 Relationships [REMOVE]（死亡/永久离场）过的角色名
 
   chat.forEach((message, idx) => {
     if (!message || message.is_user) return;
@@ -818,7 +824,7 @@ export async function rebuildStatusTableFromChat() {
     }
 
     const floorWarnings = [];
-    mergeFloorIntoStatusTable(state, floorFields, floorWarnings);
+    mergeFloorIntoStatusTable(state, floorFields, floorWarnings, everRemovedCharacters);
     floorWarnings.forEach((w) => {
       const issueKey = `${idx}::${w}`;
       if (!warnedStatusTableIssues.has(issueKey)) {
@@ -829,9 +835,25 @@ export async function rebuildStatusTableFromChat() {
   });
 
   // 手机私信插件的 Busy 状态不参与上面的全量重放（它的来源是用户在手机里主动发消息，不是从聊天记录解析出来的），
-  // 只在这里"读取当前值 → 拼进序列化结果"；REMOVE 信号只看【最新一层】AI 楼层，不回溯整段历史——
+  // 只在这里"读取当前值 → 拼进序列化结果"；常规 REMOVE 信号只看【最新一层】AI 楼层，不回溯整段历史——
   // 忙碌状态本身只在"当前"有意义，没必要像 Relationships 那样重放整个对话。
+  // 例外：角色死亡/永久离场（Relationships [REMOVE]）这种"确定不会再有下文"的情况，不受上面这条限制，
+  // 见下方 everRemovedCharacters 的联动清理。
   const phoneState = getPhoneChatState();
+
+  // 死亡/永久离场角色联动清理"忙碌"标记：这类角色已经确定不会再回复私信，
+  // 不等 AI 在某一层想起来补一句 Busy: 角色名: [REMOVE]（它未必会记得），直接用上面重放时已经拿到的
+  // "谁被 Relationships [REMOVE] 过"结论同步清掉，避免状态表里一直挂着一条不会再被清除的"角色: 忙"。
+  // 注意：这里不走 freedCharacters/handleCharacterBecameFree 那条自动补发私信回复的路径——
+  // 角色已经死亡/离场，不该再让手机弹出一条"ta的新消息"。
+  let busyCleanupChanged = false;
+  everRemovedCharacters.forEach((name) => {
+    if (phoneState.busy[name]) {
+      delete phoneState.busy[name];
+      busyCleanupChanged = true;
+    }
+  });
+
   const freedCharacters = [];
   const { idx: latestAiIdx, mes: latestAiMes } = getLastAiFloor();
   if (latestAiIdx !== -1) {
@@ -859,7 +881,7 @@ export async function rebuildStatusTableFromChat() {
     STATUS_TABLE_ENTRY_DEFAULTS,
   );
 
-  if (freedCharacters.length > 0) {
+  if (freedCharacters.length > 0 || busyCleanupChanged) {
     await persistChatMetadata();
     for (const name of freedCharacters) {
       await handleCharacterBecameFree(name);
