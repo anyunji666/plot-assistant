@@ -127,7 +127,6 @@ export async function openCreateCharacterDialog() {
       border: "1px solid #3a3a3a",
       background: "#ffffff",
       color: "#000000",
-      colorScheme: "light",
       fontSize: "max(0.95em, 16px)",
       fontFamily: "inherit",
       outline: "none",
