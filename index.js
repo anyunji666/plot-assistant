@@ -1,6 +1,6 @@
 "use strict";
 
-import { SUMMARY_BUTTON_ICON, SUMMARY_BUTTON_ID, SUMMARY_BUTTON_TEXT, SUMMARY_BUTTON_TOOLTIP, delay, notify } from "./modules/core.js";
+import { SUMMARY_BUTTON_ICON, SUMMARY_BUTTON_ID, SUMMARY_BUTTON_TEXT, SUMMARY_BUTTON_TOOLTIP, delay } from "./modules/core.js";
 import { showSummaryPopup } from "./panel.js";
 import { registerLorebookAutoCreate, registerStatusTableAutoUpdate } from "./modules/summary/generator.js";
 import { applyMobileOptSettingsOnLoad } from "./modules/mobile-opt.js";
@@ -98,6 +98,5 @@ jQuery(() => {
   // 延迟一下给酒馆本身留出初始化时间，跟世界书自动创建那边的 1500ms 错开，避免同时抢着读写世界书。
   delay(1600).then(() => syncMapInfoEntry(false));
 
-  notify("info", "初始化完成，可从扩展菜单中打开「剧情助手」。");
   console.log("[剧情助手] 初始化完成。");
 });
