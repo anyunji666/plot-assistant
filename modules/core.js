@@ -63,13 +63,12 @@ export const PRE_EMPHASIS_ENTRY_DEFAULTS = {
 // 即摘要输出协议全文，与插件本身的解析逻辑（parseSummaryLayer / applyNumericMapUpdates 等）保持一致。
 // 仅用于"首次打开编辑框时给你一个起点"，默认不启用（disable: true）；一旦你保存过一次（无论是否修改），
 // 之后 loadPreEmphasisEntry 读到的就是你保存的实际内容，不会再被这个默认值覆盖。
-export const DEFAULT_PRE_EMPHASIS_CONTENT = `### [MANDATORY] Summary Output Protocol
+export const DEFAULT_PRE_EMPHASIS_CONTENT = `## [MANDATORY] Summary Output Protocol
+
 每次回复必须以摘要块结尾（选项/备注等放在它前面），永远是回复最后一个模块。缺失=不合格。
 
----
-**输出格式：**
-\`\`\`
----
+### **输出格式：**
+
 <details><summary>摘要</summary>
 (字段标签需保持英文，内容为中文)
 Time: \${本轮场景结束时刻，精确到年月日+时分；日期不明则自拟符合背景的纪年}
@@ -79,13 +78,11 @@ Busy: \${仅当<snapshot_table>标签内Busy列表角色本轮未出现或拿“
 ExpiredChapter: \${仅当前文含有<expired_chapter_instruction>规则，且判定该章节已完整演绎/过时时才输出，无该规则或未判定过时则忽略此字段}
 Overview: \${本轮关键事件按时间顺序列出}
 </details>
-\`\`\`
 
----
-**字段判定规则（伪代码）：**
+### **字段判定规则（伪代码）：**
 
-**Relationships**（只写本轮变化，无变化则留空，多组分号分隔，按顺序执行）
-\`\`\`
+#### **Relationships**（只写本轮变化，无变化则留空，多组分号分隔，按顺序执行）
+
 for 角色 in 本轮关系有变化的角色:
     if 死亡/永久离场: 值 = [REMOVE]  # Relationships中唯一使用REMOVE的情况，其余覆盖式改写
     elif 存在身份/血亲关系:
@@ -98,36 +95,31 @@ for 角色 in 本轮关系有变化的角色:
 # 身份词/血亲词可加括号填写表示关系变化的阶段词。阶段词只能是独立词，不能加括号补充其它内容，关系变化直接选用新的阶段词覆盖式改写
 # 格式：{{user}}→角色A: 值；
 # 值只能是 [REMOVE] /表内词，禁止自造/留空。正例："师徒(暧昧)" 反例："朋友(渐生好感中)"
-\`\`\`
 
-**Busy**（Busy条目唯一要做的是添加[REMOVE]标记，清除本轮未出现或拿起“通讯器”查看并回复消息的角色，多组分号分隔）
-\`\`\`
+#### **Busy**（Busy条目唯一要做的是添加[REMOVE]标记，清除本轮未出现或拿起“通讯器”查看并回复消息的角色，多组分号分隔）
+
 for 角色 in 已注入的<snapshot_table>标签内Busy列表:
     if 角色本轮没有出现在正文场景里（不在场/未登场/未被提及活动）或角色察觉到了“通讯器”有新消息并回复了: 值 = [REMOVE]
     else: 跳过，不输出这个角色
 # 格式：角色名: [REMOVE]；
 # 值只能是[REMOVE]，这是Busy字段唯一合法的值；不要自己新增角色到Busy、不要写"忙"这类其它取值
-\`\`\`
 
-**Overview**（无实质进展留空，不超150字）
-\`\`\`
+#### **Overview**（无实质进展留空，不超150字）
+
 按时间顺序列出关键事件+其造成的实际改变(关系/处境/认知)，平铺直叙，不用比喻/形容词。
-\`\`\`
 
----
-**Snapshot Table**：<snapshot_table>标签包裹的是上文已注入的只读快照表，仅供查看当前状态、判断哪些条目需要在对应字段填[REMOVE]清除，具体判定规则见上方各字段说明。
+### **Snapshot Table**：
 
----
-**示例（仅供格式参考）：**
-\`\`\`
----
+<snapshot_table>标签包裹的是上文已注入的只读快照表，仅供查看当前状态、判断哪些条目需要在对应字段填[REMOVE]清除，具体判定规则见上方各字段说明。
+
+### **示例（仅供格式参考）：**
+
 <details><summary>摘要</summary>
 Time: 武定三年三月十五,申时
 Location: 云隐山洞穴
 Relationships: {{user}}→角色A: 恋人；{{user}}→角色B: 师徒(暧昧)；{{user}}→角色C: [REMOVE]
 Overview: {{user}}向角色A表明心意确定恋人关系；与角色B切磋加深师徒情谊；拾得来历不明玉佩；服下最后一瓶解药；角色C战死永久离场。
-</details>
-\`\`\``;
+</details>`;
 
 export const GENERATION_TIMEOUT = 300000; // 5分钟生成超时时间
 
