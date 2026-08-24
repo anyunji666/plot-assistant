@@ -46,6 +46,23 @@ export function saveNovelSummarySettings() {
   saveSettingsDebounced();
 }
 
+// 控制面板"清空数据"按钮点清空时，这几项不跟着清：API 地址/Key/模型/自定义提示词。
+// 提示词想恢复默认的话，用户自己在"摘要提示词（可自定义）"弹窗里点"恢复默认"按钮即可，
+// 不需要靠"清空数据"这种大范围操作顺带清掉。
+const NOVEL_SUMMARY_KEYS_PRESERVED_ON_CLEAR = ["apiUrl", "apiKey", "model", "customPrompt"];
+
+// === Function: "清空数据"专用——只把导航栏显隐/流式/超时/限速/分段大小这些行为类设置还原为默认值，
+// API 地址/Key/模型/自定义提示词保留不动 ===
+// 复用上面 DEFAULT_NOVEL_SUMMARY_SETTINGS 这份默认值，不在调用方另起一份，避免以后改默认值时两处不同步。
+export function resetNovelSummaryBehaviorSettings() {
+  const cfg = getNovelSummarySettings();
+  for (const key of Object.keys(DEFAULT_NOVEL_SUMMARY_SETTINGS)) {
+    if (NOVEL_SUMMARY_KEYS_PRESERVED_ON_CLEAR.includes(key)) continue;
+    cfg[key] = DEFAULT_NOVEL_SUMMARY_SETTINGS[key];
+  }
+  saveSettingsDebounced();
+}
+
 export function isNovelSummaryNavbarVisible() {
   return !!getNovelSummarySettings().navbarVisible;
 }

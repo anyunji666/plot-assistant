@@ -6,7 +6,7 @@ import { openCreateCharacterDialog } from "./modules/character.js";
 import { getNovelAutoJumpSettings } from "./modules/novel/generator.js";
 import { getActiveNovelChapterUid, listNovelChapterEntries, setActiveNovelChapter } from "./modules/novel/store.js";
 import { openNovelEntryDialog } from "./modules/novel/ui.js";
-import { NOVEL_SUMMARY_IDB_NAME, NOVEL_SUMMARY_SETTINGS_KEY } from "./modules/novel-summary/store.js";
+import { NOVEL_SUMMARY_IDB_NAME, resetNovelSummaryBehaviorSettings } from "./modules/novel-summary/store.js";
 import { closeDb as closeNovelSummaryDb } from "./modules/novel-summary/lib/storage.js";
 import { applyNovelSummaryNavbarVisibility, openNovelSummaryNavbarToggleDialog } from "./modules/novel-summary/ui.js";
 import { LOCAL_CHAT_STORE_KEY, NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY, NOVEL_AUTO_JUMP_SETTINGS_KEY, PHONE_IDB_NAME, SUMMARY_POPUP_ID, errorCatched, getCtx, notify, resetLocalChatStoreCache, resetTransientChatMetadataStore } from "./modules/core.js";
@@ -85,8 +85,10 @@ export function deleteIndexedDatabase(name) {
 // 范围：三个 IndexedDB 库（私信/头像/图片/背景 + 地图图片 + 小说摘要提取的分段原文/摘要进度）、
 // 两个悬浮球位置的 localStorage、
 // 六块插件自己的 extension_settings（通讯器/地图/移动端优化/节假日/小说自动跳转与当前章节/小说摘要提取，
-// 删掉后下次读取会自动用默认值重建，节假日这块连同你已经录入的自定义节假日一起清空，
-// 小说摘要提取这块连同你填的 API 地址/Key/模型/提示词一起清空）、
+// 删掉后下次读取会自动用默认值重建，节假日这块连同你已经录入的自定义节假日一起清空；
+// 小说摘要提取这块只重置导航栏显隐/流式/超时/限速/分段大小这些行为设置，
+// API 地址/Key/模型/自定义提示词保留不清——提示词想恢复默认，去"摘要提示词（可自定义）"
+// 弹窗里点"恢复默认"按钮即可）、
 // 以及所有对话的起始楼层记录和私信忙闲缓存（本地存储，一份 localStorage 覆盖所有对话，一次性清空）。
 // 不包含：总结功能生成的世界书条目（用户自己在世界书里删）。
 export async function clearAllPluginLocalData() {
@@ -119,7 +121,9 @@ export async function clearAllPluginLocalData() {
     delete extension_settings[NOVEL_AUTO_JUMP_SETTINGS_KEY];
     delete extension_settings[NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY];
     delete extension_settings[HOLIDAY_SETTINGS_KEY];
-    delete extension_settings[NOVEL_SUMMARY_SETTINGS_KEY];
+    // 小说摘要提取的 apiUrl/apiKey/model/customPrompt 不属于本次清空范围，
+    // 只重置导航栏显隐/流式/超时/限速/分段大小这些行为设置，跟下面状态表LLM的处理思路一致。
+    resetNovelSummaryBehaviorSettings();
     // 状态表LLM的 apiUrl/apiKey/model/customPrompt 等配置不属于本次清空范围，
     // 只还原面板"再分析开/关"这一个开关状态，避免清空数据时连带清掉用户填好的状态表 API 配置。
     getStatusLlmSettings().reanalyzeEnabled = false;
@@ -669,6 +673,33 @@ export async function showSummaryPopup() {
         },
       );
 
+    // 清空数据后，统一把弹窗里所有"读设置渲染文字+颜色"的开关按钮／下拉框重新刷一遍。
+    // 清空数据不会关闭本控制面板弹窗，这些按钮在弹窗里已经渲染过一次了，对应的 extension_settings
+    // 被清空数据流程删掉/还原后，如果不重新调用各自的 render 函数，按钮显示的开/关状态会跟被清空后的
+    // 实际设置不一致，得等用户手动刷新页面或碰巧点一下对应开关才会更新。
+    // 依赖的这些按钮变量/render 函数虽然有的在本函数更后面才声明（如移动端优化两个按钮），
+    // 但这是一个函数声明会被提升，且真正调用只会发生在用户点击"清空数据"之后——
+    // 那时弹窗已经整体渲染完毕，所有变量都已赋值，不会有 TDZ 问题。
+    function syncAllPanelTogglesAfterClear() {
+      renderPhoneFabToggleButton($phoneFabToggleBtn, getPhoneFabVisible());
+      renderFabToggleButton($fabToggleBtn, getFabVisible());
+      renderNovelAutoJumpButton(
+        $novelAutoJumpBtn,
+        getNovelAutoJumpSettings().enabled,
+      );
+      renderHolidayToggleButton($holidayToggleBtn, getHolidayEnabled());
+      const mobileOptSettingsNow = getMobileOptSettings();
+      renderMobileOptButton($mobileOptRenderBtn, mobileOptSettingsNow.renderOptimize);
+      renderMobileOptButton($mobileOptLazyBtn, mobileOptSettingsNow.lazyLoad);
+      renderStatusLlmReanalyzeButton(
+        $statusLlmReanalyzeBtn,
+        getStatusLlmSettings().reanalyzeEnabled,
+      );
+      // "当前注入章节"下拉框：清空数据不影响已录入的章节列表本身，只会把"当前激活章节"这项设置
+      // 还原为默认（不注入任何章节），所以这里不用重新拉取章节列表，直接把选中项拨回 __none__ 即可。
+      $(`#${POPUP_ID}-novel-active-chapter`).val("__none__");
+    }
+
     // 清空数据：二次确认，确认后清空本地缓存（不含世界书总结条目），成功后提示刷新手机弹窗
     $(`#${POPUP_ID}-clear-all-data`).on(
       "click",
@@ -683,12 +714,7 @@ export async function showSummaryPopup() {
         if (confirmed !== context.POPUP_RESULT.AFFIRMATIVE) return;
 
         const { allDbOk } = await clearAllPluginLocalData();
-        // 清空数据不会关闭本控制面板弹窗，"再分析开/关"按钮在弹窗里已经渲染过了，
-        // 需要手动刷新一次显示，否则会跟被清空后的实际设置（已还原为"关"）不一致。
-        renderStatusLlmReanalyzeButton(
-          $statusLlmReanalyzeBtn,
-          getStatusLlmSettings().reanalyzeEnabled,
-        );
+        syncAllPanelTogglesAfterClear();
         if (allDbOk) {
           notify(
             "success",
