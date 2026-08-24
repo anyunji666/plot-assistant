@@ -52,11 +52,25 @@ export function spliceExtractedFieldsIntoMes(mesText, inventoryText, setupsText)
 
 
 // === Helper: 读取"状态表"世界书条目当前内容（供拼装状态表LLM的上下文用）===
+// Busy 数据行（手机私信插件维护，仅剧情LLM需要据此输出 [REMOVE]）以及两条固定的
+// "（提醒：...）"说明/提示行（分别针对 Setups 说明和 Busy 清理提示，仅剧情LLM需要），
+// 均与状态表LLM只负责的 Inventory/Setups 提取无关，过滤掉以减少无关上下文。
+function stripBusyAndReminderLines(text) {
+  return text
+    .split("\n")
+    .filter((line) => {
+      const t = line.trimStart();
+      return !t.startsWith("Busy:") && !t.startsWith("（提醒：");
+    })
+    .join("\n");
+}
+
 async function getStatusTableSnapshotText(lorebookName) {
   try {
     const entries = await getLorebookEntriesArray(lorebookName);
     const entry = entries.find((e) => e.comment === STATUS_TABLE_TITLE);
-    return entry ? entry.content || "" : "";
+    const raw = entry ? entry.content || "" : "";
+    return stripBusyAndReminderLines(raw);
   } catch (error) {
     console.error("[剧情助手] 读取状态表快照失败:", error);
     return "";

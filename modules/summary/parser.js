@@ -684,11 +684,12 @@ export function serializeStatusTableContent(state, busyMap) {
     : [];
   lines.push(`Busy: ${busyNames.map((name) => `${name}: 忙`).join("; ")}`);
   // 固定提醒行：每次序列化都重新生成，不写进任何 Map、不参与解析（不匹配任何字段标签的正则），
-  // 纯粹是"贴在状态表末尾、每轮都会被 AI 看到"的复核提示，防止旧 Setups 条目（伏笔/未解线索）被长上下文遗忘。
+  // 纯粹是"贴在状态表末尾、每轮都会被 AI 看到"的说明性提示，告知 Setups 条目的性质（伏笔/线索/约定），
+  // 便于剧情LLM理解上下文；Setups 的存量清理（[REMOVE]）已由状态表LLM独立负责，见 status-llm-prompts.js。
   // 只在 Setups 非空时附加，避免空列表时提醒显得多余。
   if (state.setups && state.setups.size > 0) {
     lines.push(
-      "（提醒：以上 Setups 每轮需逐条复核——已回收/已兑现/已废弃的，或因场景/时间线推进已不再可能被回收的，本轮请用 [REMOVE] 清除）",
+      "（提醒：以上 Setups 为故事发展过程中的伏笔/线索/约定）",
     );
   }
   if (busyNames.length > 0) {
