@@ -19,6 +19,7 @@ import { openRestPresetDialog, openCustomHolidaysDialog } from "./modules/holida
 import { PHONE_FAB_POS_KEY, applyPhoneFabVisibility, openPhonePresetDialog, resetPhoneFabPos } from "./modules/phone/ui.js";
 import { ensureSummaryLorebookOnLoad, runAutoLargeSummary, runAutoSmallSummary, runSetOffset } from "./modules/summary/generator.js";
 import { openHideFloorDialog, openPreEmphasisDialog, openStatusLlmConfigDialog } from "./modules/summary/ui.js";
+import { getStatusLlmSettings } from "./modules/summary/status-llm-store.js";
 import { getLorebookEntriesSummaryHtml, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, mountSummaryLorebookGlobally, notifyWorldInfoUpdated } from "./modules/worldinfo.js";
 
 
@@ -119,6 +120,9 @@ export async function clearAllPluginLocalData() {
     delete extension_settings[NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY];
     delete extension_settings[HOLIDAY_SETTINGS_KEY];
     delete extension_settings[NOVEL_SUMMARY_SETTINGS_KEY];
+    // 状态表LLM的 apiUrl/apiKey/model/customPrompt 等配置不属于本次清空范围，
+    // 只还原面板"再分析开/关"这一个开关状态，避免清空数据时连带清掉用户填好的状态表 API 配置。
+    getStatusLlmSettings().reanalyzeEnabled = false;
     saveSettingsDebounced();
   } catch (error) {
     console.error("[剧情助手] 重置插件配置失败:", error);
@@ -192,9 +196,12 @@ export async function showSummaryPopup() {
 
         <div style="margin-bottom: 20px;">
           <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">摘要配置</p>
-          <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-            <button id="${POPUP_ID}-status-llm-config" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">状态表配置</button>
-            <button id="${POPUP_ID}-pre-emphasis" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">对话前强调</button>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button id="${POPUP_ID}-status-llm-config" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">状态表配置</button>
+              <button id="${POPUP_ID}-pre-emphasis" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">对话前强调</button>
+            </div>
+            <button id="${POPUP_ID}-status-llm-reanalyze" title="开启后，每层AI消息渲染完会自动调用状态表LLM提取Inventory/Setups；关闭（默认）则不发送任何信息给状态表LLM" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
           </div>
         </div>
 
@@ -494,6 +501,25 @@ export async function showSummaryPopup() {
         },
       );
 
+    // 状态表LLM·再分析开关：点击只切换开关状态，不关闭弹窗，跟"自跳转开/关"同一套视觉模式。
+    // 关闭（默认）时 extractInventorySetupsForLatestFloor 不会调用状态表LLM，即不发送任何信息给它。
+    const $statusLlmReanalyzeBtn = $(`#${POPUP_ID}-status-llm-reanalyze`);
+    function renderStatusLlmReanalyzeButton($btn, isOn) {
+      $btn
+        .text(isOn ? "再分析开" : "再分析关")
+        .css(isOn ? NOVEL_AUTOJUMP_ON_STYLE : NOVEL_AUTOJUMP_OFF_STYLE);
+    }
+    renderStatusLlmReanalyzeButton(
+      $statusLlmReanalyzeBtn,
+      getStatusLlmSettings().reanalyzeEnabled,
+    );
+    $statusLlmReanalyzeBtn.on("click", () => {
+      const s = getStatusLlmSettings();
+      s.reanalyzeEnabled = !s.reanalyzeEnabled;
+      saveSettingsDebounced();
+      renderStatusLlmReanalyzeButton($statusLlmReanalyzeBtn, s.reanalyzeEnabled);
+    });
+
     $(`#${POPUP_ID}-pre-emphasis`)
       .on("click", () => {
         closePopup();
@@ -657,6 +683,12 @@ export async function showSummaryPopup() {
         if (confirmed !== context.POPUP_RESULT.AFFIRMATIVE) return;
 
         const { allDbOk } = await clearAllPluginLocalData();
+        // 清空数据不会关闭本控制面板弹窗，"再分析开/关"按钮在弹窗里已经渲染过了，
+        // 需要手动刷新一次显示，否则会跟被清空后的实际设置（已还原为"关"）不一致。
+        renderStatusLlmReanalyzeButton(
+          $statusLlmReanalyzeBtn,
+          getStatusLlmSettings().reanalyzeEnabled,
+        );
         if (allDbOk) {
           notify(
             "success",

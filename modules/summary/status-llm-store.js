@@ -20,6 +20,7 @@ const DEFAULT_STATUS_LLM_SETTINGS = {
   stream: true,
   apiTimeoutMin: 15,
   customPrompt: "", // 空 = 使用 DEFAULT_STATUS_LLM_PROMPT
+  reanalyzeEnabled: false, // 面板"再分析"开关：默认关闭，关闭时每层AI消息渲染完不会自动调用状态表LLM
 };
 
 export function getStatusLlmSettings() {

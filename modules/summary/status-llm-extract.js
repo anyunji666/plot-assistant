@@ -163,35 +163,40 @@ export async function extractInventorySetupsForLatestFloor() {
     // 不影响下面背包页手动改动的合并——两者来源独立，不该互相拖累。
     let inventoryText = "";
     let setupsText = "";
-    try {
-      const lorebookName = await getOrCreateSummaryLorebook();
-      const snapshotText = await getStatusTableSnapshotText(lorebookName);
-      const settings = getStatusLlmSettings();
-      const systemPrompt =
-        settings.customPrompt?.trim() || DEFAULT_STATUS_LLM_PROMPT;
-
-      let letterContent = "";
+    // 面板"再分析"开关默认关闭：关闭时完全不调用状态表LLM（不发请求、不产生token消耗），
+    // Inventory/Setups 的AI提取部分保持为空，跟下面调用失败时的兜底行为一致，
+    // 不影响背包页手动改动的合并——两者走的是独立分支。
+    if (getStatusLlmSettings().reanalyzeEnabled) {
       try {
-        const letterResult = await buildPhoneLetterContentForStatusLlm();
-        letterContent = letterResult.content || "";
+        const lorebookName = await getOrCreateSummaryLorebook();
+        const snapshotText = await getStatusTableSnapshotText(lorebookName);
+        const settings = getStatusLlmSettings();
+        const systemPrompt =
+          settings.customPrompt?.trim() || DEFAULT_STATUS_LLM_PROMPT;
+
+        let letterContent = "";
+        try {
+          const letterResult = await buildPhoneLetterContentForStatusLlm();
+          letterContent = letterResult.content || "";
+        } catch (error) {
+          console.error("[剧情助手] 读取本轮私信内容失败（Setups判断可能漏看私信）:", error);
+        }
+
+        const userContent = `${snapshotText ? `${snapshotText}\n\n` : ""}${letterContent ? `${letterContent}\n\n` : ""}<latest_floor>\n${mes}\n</latest_floor>`;
+
+        const rawResult = await callStatusLlm([
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent },
+        ]);
+
+        inventoryText = extractLabelLine(rawResult, "Inventory");
+        setupsText = extractLabelLine(rawResult, "Setups");
       } catch (error) {
-        console.error("[剧情助手] 读取本轮私信内容失败（Setups判断可能漏看私信）:", error);
+        console.error(
+          "[剧情助手] 状态表LLM调用失败，本层Inventory/Setups的AI提取部分已跳过（很多情况是模型截断，可在「状态表配置」弹窗调整提示词后重试）:",
+          error,
+        );
       }
-
-      const userContent = `${snapshotText ? `${snapshotText}\n\n` : ""}${letterContent ? `${letterContent}\n\n` : ""}<latest_floor>\n${mes}\n</latest_floor>`;
-
-      const rawResult = await callStatusLlm([
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userContent },
-      ]);
-
-      inventoryText = extractLabelLine(rawResult, "Inventory");
-      setupsText = extractLabelLine(rawResult, "Setups");
-    } catch (error) {
-      console.error(
-        "[剧情助手] 状态表LLM调用失败，本层Inventory/Setups的AI提取部分已跳过（很多情况是模型截断，可在「状态表配置」弹窗调整提示词后重试）:",
-        error,
-      );
     }
 
     // 背包页手动改库存的"待生效改动"：不管上面AI调用成不成功都要合并进来，
