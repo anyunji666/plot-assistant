@@ -2,7 +2,8 @@
 
 import { SUMMARY_BUTTON_ICON, SUMMARY_BUTTON_ID, SUMMARY_BUTTON_TEXT, SUMMARY_BUTTON_TOOLTIP, delay } from "./modules/core.js";
 import { showSummaryPopup } from "./panel.js";
-import { registerLorebookAutoCreate, registerStatusTableAutoUpdate } from "./modules/summary/generator.js";
+import { registerLorebookAutoCreate } from "./modules/summary/generator.js";
+import { registerStatusTableAutoUpdate } from "./modules/summary/status-llm-extract.js";
 import { applyMobileOptSettingsOnLoad } from "./modules/mobile-opt.js";
 import { injectPhoneFloatingButton } from "./modules/phone/ui.js";
 import { registerPhoneSlotInjection } from "./modules/phone/generator.js";
