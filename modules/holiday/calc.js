@@ -69,12 +69,14 @@ function sameMonthDay(date, month, day) {
 }
 
 // === Helper: 判断某个 date（当年）是否落在 [startMonth/startDay, endMonth/endDay] 区间内。
-// 只按"月日"比较（MM*100+DD），不处理跨年区间（比如 12/28~1/3 不支持，调用方在解析阶段就应拦掉）。===
+// 只按"月日"比较（MM*100+DD）；支持跨年区间（比如 12/25~1/7）——此时 startKey > endKey，
+// 命中"起始日期到年末"或"年初到结束日期"任一段即可，不要求 date 落在同一个自然年里。===
 function isWithinMonthDayRange(date, startMonth, startDay, endMonth, endDay) {
   const key = (date.getMonth() + 1) * 100 + date.getDate();
   const startKey = startMonth * 100 + startDay;
   const endKey = endMonth * 100 + endDay;
-  return key >= startKey && key <= endKey;
+  if (startKey <= endKey) return key >= startKey && key <= endKey; // 同年内区间，逻辑不变
+  return key >= startKey || key <= endKey; // 跨年区间：落在"起始~年末"或"年初~结束"任一段即算命中
 }
 
 // === Helper: お盆命中判断——
@@ -257,8 +259,9 @@ export function buildHolidayTagContent(timeText, options = {}) {
 //                             解析为 { type: "day", month, day, name, region }。
 //   起始日期~截止日期 名称  —— 区间，比如 8/13~8/16、8.13~8.16、8月13日~8月16日，起止用同一种写法，
 //                             解析为 { type: "range", startMonth, startDay, endMonth, endDay, name, region }。
-//                             仅支持"起始日期<=截止日期"（按月日比较）的同年内区间，不支持跨年区间
-//                             （比如 12/28~1/3），跨年写法会被跳过、计入 skipped。
+//                             支持跨年区间（比如 12/25~1/7 小学寒假），起始日期按月日比较大于截止日期时
+//                             即视为跨年，命中判断见 isWithinMonthDayRange()；跨年区间同样支持临近提前
+//                             1/2 天预告（在起始日期前）。
 //   名称                   —— 都是日期之后的剩余部分（原样保留，可以带空格）。
 // 每行先尝试按区间格式匹配，不匹配再按单日格式匹配，这样即使区间用的是跟单日相同的分隔符（比如 "-"），
 // 也不会被单日的正则提前"半匹配"截胡。
@@ -299,9 +302,11 @@ export function parseCustomHolidaysText(text) {
     }
 
     // 先按区间格式尝试。注意：只要正则语法上匹配到了"起始~截止"这个形状，就不再回退去尝试单日格式——
-    // 否则像 "12/28~1/3 跨年活动"（语法是区间、但跨年不合法）会被单日正则的 "(.+)" 兜底吞掉
-    // 前半段 "12/28" 当日期、"~1/3 跨年活动" 当名称存下来，变成一条错误数据。
-    // 语法匹配但校验不通过（跨年/月日超范围/名称为空）的情况，直接计入 skipped，不再尝试其它格式。
+    // 否则像 "13/1~1/3 活动"（语法是区间、但月份超范围不合法）会被单日正则的 "(.+)" 兜底吞掉
+    // 前半段当日期、后半段当名称存下来，变成一条错误数据。
+    // 语法匹配但校验不通过（月日超范围/名称为空）的情况，直接计入 skipped，不再尝试其它格式。
+    // 支持跨年区间（比如 12/25~1/7）：不要求 startKey <= endKey，起始 > 截止时视为跨年，
+    // 命中判断交给 isWithinMonthDayRange()（区间型）/下面 offset!==0 的分支（提前预告）处理。
     for (const pattern of rangePatterns) {
       const match = trimmed.match(pattern);
       if (!match) continue;
@@ -313,8 +318,7 @@ export function parseCustomHolidaysText(text) {
       const isValidRange =
         isValidMonthDay(startMonth, startDay) &&
         isValidMonthDay(endMonth, endDay) &&
-        !!name &&
-        startMonth * 100 + startDay <= endMonth * 100 + endDay; // 只支持同年内、起始<=截止的区间
+        !!name;
 
       if (isValidRange) {
         items.push({ type: "range", startMonth, startDay, endMonth, endDay, name, region: currentRegion });
