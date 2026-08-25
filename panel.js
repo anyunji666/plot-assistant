@@ -269,11 +269,11 @@ export async function showSummaryPopup() {
         <div style="margin-bottom: 20px;">
           <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">移动端优化</p>
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0;">
-            <span style="font-size: 12px; color: #999; flex: 1;">折叠预设滑块 · 优化输入法弹窗 · 优化长聊渲染</span>
+            <span style="font-size: 12px; color: #999; flex: 1;">折叠预设滑块 · 优化长聊渲染</span>
             <button id="${POPUP_ID}-mobile-opt-render" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
           </div>
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid #3a3a3a;">
-            <span style="font-size: 12px; color: #999; flex: 1;">懒加载头像与角色列表 · 不预载最近聊天页对话</span>
+            <span style="font-size: 12px; color: #999; flex: 1;">懒加载头像与角色列表</span>
             <button id="${POPUP_ID}-mobile-opt-lazyload" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
           </div>
         </div>

@@ -6,7 +6,7 @@ import { delay, getCtx, notify } from "./core.js";
 
 // =====================================================================================
 // 移动端优化模块：默认关闭，可在控制面板里随时开关的两组功能：
-//   开关①「渲染/输入优化」= 折叠预设滑块 + 优化输入法弹窗 + 优化长聊渲染
+//   开关①「渲染/输入优化」= 折叠预设滑块 + 优化长聊渲染
 //   开关②「懒加载优化」  = 懒加载头像与角色列表 + 不预载最近聊天页对话
 // 开关状态存进 extension_settings（全局设置，随酒馆账号走，不跟随单个角色卡/对话）。
 // =====================================================================================
@@ -123,94 +123,6 @@ export function disableLongChatOptimization() {
 
 
 // ------------------------------------------------------------
-// 子功能 A2：输入框响应优化（节流 resize）
-// ------------------------------------------------------------
-export let mobileOptInputResponsivenessHandler = null;
-
-
-export function enableInputResponsiveness() {
-  if (mobileOptInputResponsivenessHandler) return;
-  let lastRun = 0;
-  const THROTTLE_MS = 200;
-  mobileOptInputResponsivenessHandler = (evt) => {
-    const now = Date.now();
-    if (now - lastRun < THROTTLE_MS) {
-      evt.stopImmediatePropagation();
-      evt.stopPropagation();
-    } else {
-      lastRun = now;
-    }
-  };
-  window.addEventListener("resize", mobileOptInputResponsivenessHandler, true);
-}
-
-
-export function disableInputResponsiveness() {
-  if (!mobileOptInputResponsivenessHandler) return;
-  window.removeEventListener(
-    "resize",
-    mobileOptInputResponsivenessHandler,
-    true,
-  );
-  mobileOptInputResponsivenessHandler = null;
-}
-
-
-// ------------------------------------------------------------
-// 子功能 A3：禁止输入法自动弹出（仅放行真实用户手势触发的 focus）
-// ------------------------------------------------------------
-export const MOBILE_OPT_AUTO_FOCUS_TARGET_SELECTOR =
-  "#send_textarea, .mes .edit_textarea, #dialogue_popup textarea";
-
-export const MOBILE_OPT_USER_GESTURE_WINDOW_MS = 400;
-
-export let mobileOptUserGestureUntil = 0;
-
-export let mobileOptOriginalFocus = null;
-
-export let mobileOptGestureListenersAttached = false;
-
-
-export function mobileOptMarkUserGesture() {
-  mobileOptUserGestureUntil = Date.now() + MOBILE_OPT_USER_GESTURE_WINDOW_MS;
-}
-
-
-export function enableBlockAutoFocus() {
-  if (!mobileOptGestureListenersAttached) {
-    document.addEventListener("pointerdown", mobileOptMarkUserGesture, true);
-    document.addEventListener("touchstart", mobileOptMarkUserGesture, true);
-    mobileOptGestureListenersAttached = true;
-  }
-  if (mobileOptOriginalFocus) return;
-
-  mobileOptOriginalFocus = HTMLElement.prototype.focus;
-  HTMLElement.prototype.focus = function (...args) {
-    try {
-      if (
-        this.matches &&
-        this.matches(MOBILE_OPT_AUTO_FOCUS_TARGET_SELECTOR) &&
-        Date.now() > mobileOptUserGestureUntil
-      ) {
-        return;
-      }
-    } catch (e) {
-      // matches() 极少数节点上可能抛错，出错时不拦截，走原生逻辑保证不破坏功能
-    }
-    return mobileOptOriginalFocus.apply(this, args);
-  };
-}
-
-
-export function disableBlockAutoFocus() {
-  if (mobileOptOriginalFocus) {
-    HTMLElement.prototype.focus = mobileOptOriginalFocus;
-    mobileOptOriginalFocus = null;
-  }
-}
-
-
-// ------------------------------------------------------------
 // 子功能 A4：预设界面折叠（一次性 DOM 改造，不做实时还原）
 // 关闭开关时只提示"刷新页面后生效"，不做复杂的 DOM 复原逻辑。
 // ------------------------------------------------------------
@@ -281,16 +193,12 @@ export function disablePresetCollapse() {
 // ------------------------------------------------------------
 export function enableRenderOptimizeGroup() {
   initPresetCollapse();
-  enableInputResponsiveness();
-  enableBlockAutoFocus();
   initLongChatOptimization();
 }
 
 
 export function disableRenderOptimizeGroup() {
   disablePresetCollapse();
-  disableInputResponsiveness();
-  disableBlockAutoFocus();
   disableLongChatOptimization();
 }
 
