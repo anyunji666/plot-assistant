@@ -1,9 +1,9 @@
 "use strict";
 
 import { AUTO_BATCH_SIZE, GENERATION_TIMEOUT, LARGE_SUMMARY_TITLE, PRE_EMPHASIS_ENTRY_DEFAULTS, PRE_EMPHASIS_TITLE, SMALL_SUMMARY_ENTRY_DEFAULTS, SMALL_SUMMARY_TITLE_PREFIX, STATUS_TABLE_ENTRY_DEFAULTS, STATUS_TABLE_TITLE, STEP_DELAY, SummaryStopRequestedError, confirmAction, delay, errorCatched, getCtx, getOffsetRecord, notify, persistChatMetadata, setOffsetRecord } from "../core.js";
-import { buildArchiveOverviewInstruction, buildArchiveOverviewUserContent, buildArchiveTimeLabel, buildFloorRestoreInstruction, buildFloorRestoreUserContent, buildMessagesText, convertInventorySnapshotToHardset, extractLabelLine, extractYearMonthKeyword, findNearestAnchorFloor, getLastMessageId, getMaxSummaryEnd, getSortedSmallSummaryEntries, getSummaryProgress, parseFloorSummaryFields, parseRestoredFloorFields, parseSummaryContent, serializeStatusTableContent } from "./parser.js";
+import { buildArchiveOverviewInstruction, buildArchiveOverviewUserContent, buildArchiveTimeLabel, buildFloorRestoreInstruction, buildFloorRestoreUserContent, buildMessagesText, convertInventorySnapshotToHardset, extractLabelLine, findNearestAnchorFloor, getLastMessageId, getMaxSummaryEnd, getSortedSmallSummaryEntries, getSummaryProgress, parseFloorSummaryFields, parseRestoredFloorFields, parseSummaryContent, serializeStatusTableContent } from "./parser.js";
 import { closeGeneratingOverlay, showGeneratingOverlay } from "./ui.js";
-import { getCurrentCharacterName, getFreeUid, getLorebookEntriesArray, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, notifyWorldInfoUpdated, saveOrOverwriteLorebookEntry } from "../worldinfo.js";
+import { disableLorebookEntriesByTitle, getCurrentCharacterName, getFreeUid, getLorebookEntriesArray, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, notifyWorldInfoUpdated, saveOrOverwriteLorebookEntry } from "../worldinfo.js";
 
 
 export async function buildRangeSummaryContent(batchStart, batchEnd, offset = 0, overlayOptions) {
@@ -119,13 +119,7 @@ export async function buildRangeSummaryContent(batchStart, batchEnd, offset = 0,
   // 且作为世界书条目被注入进上下文后反而可能跟正文实际所在场景不一致，造成干扰，故不写入正文。
   const content = `时间：${timeLabel}\n关键事件：\n${bullets.length ? bullets.join("\n") : "（本段无实质推进）"}`;
 
-  // 关键词取整个batch内第一个带 Time 的楼层，只取"年月"粒度；整批都没有可用 Time 时关键词留空。
-  const firstTimedFloor = unifiedFloors.find((f) => f.time);
-  const rangeKeyword = firstTimedFloor
-    ? extractYearMonthKeyword(firstTimedFloor.time)
-    : "";
-
-  return { content, keyword: rangeKeyword };
+  return { content };
 }
 
 
@@ -241,13 +235,17 @@ export const runAutoSmallSummary = errorCatched(async () => {
     );
 
     try {
-      const { content: summaryContent, keyword: rangeKeyword } =
-        await buildRangeSummaryContent(batchStart, batchEnd, offset, {
+      const { content: summaryContent } = await buildRangeSummaryContent(
+        batchStart,
+        batchEnd,
+        offset,
+        {
           showStopButton: true,
           onStop: requestStop,
           statusText: `正在处理第${rangeLabel}楼，请稍候...`,
           isStopRequested: () => stopRequested,
-        });
+        },
+      );
 
       if (!summaryContent) {
         throw new Error("该范围没有可用内容。");
@@ -264,7 +262,6 @@ export const runAutoSmallSummary = errorCatched(async () => {
         summaryContent,
         true,
         { ...SMALL_SUMMARY_ENTRY_DEFAULTS, order: summaryEntryOrder },
-        rangeKeyword ? [rangeKeyword] : [],
       );
 
       // 小总结联动隐藏楼层：这一批已经被小总结覆盖存档，原始楼层不再需要留给AI看，
@@ -404,7 +401,7 @@ export const runAutoLargeSummary = errorCatched(async () => {
 
   const proceed = await confirmAction(
     "状态存档",
-    "状态存档会读取当前状态表（人物关系/物品/伏笔）和已有的小总结（时间线/剧情总览），生成可粘贴到新对话第0层的存档内容，用于新对话接续时恢复进度。<br><br>是否继续？",
+    "状态存档会读取当前状态表（人物关系/物品/伏笔）和已有的小总结（时间线/剧情总览），生成可粘贴到新对话第0层的存档内容，用于新对话接续时恢复进度。<br><br>存档成功后会自动关闭本次读取到的小总结条目（若 Overview 生成失败则不关闭）。<br><br>是否继续？",
   );
   if (!proceed) {
     notify("info", "已取消。");
@@ -487,6 +484,24 @@ export const runAutoLargeSummary = errorCatched(async () => {
     notify("error", `状态存档保存失败：${saveError.message}`);
     return;
   }
+
+  // Overview 生成成功（非空）才关闭本次读取到的小总结条目——生成失败时 Overview 为空，
+  // 这些小总结的叙事内容没有被存档吸收，关闭会造成信息丢失，所以保留不动。
+  if (overview) {
+    try {
+      await disableLorebookEntriesByTitle(
+        summaryLorebookName,
+        sortedSmallSummaries.map((entry) => entry.comment),
+      );
+    } catch (disableError) {
+      console.error("[剧情助手] 关闭已存档小总结条目失败:", disableError);
+      notify(
+        "warning",
+        `状态存档已保存，但关闭已存档的小总结条目时出错：${disableError.message}`,
+      );
+    }
+  }
+
   notify("success", `状态存档已生成并保存 (${LARGE_SUMMARY_TITLE})。`);
 });
 

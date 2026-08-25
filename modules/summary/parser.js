@@ -912,17 +912,6 @@ export const handleMessageForStatusTable = async () => {
 // === Helper: 生成一段楼层范围的"小总结"内容——连续有摘要模块的楼层直接读取并保留 Time/Location/Overview 拼接，
 // 连续没有摘要模块的楼层区间才调用 AI 重新总结（方案A：分段回退）。不再提取/生成关系字段——
 // 关系状态统一由状态表世界书条目实时持久化（见 mergeFloorIntoStatusTable），小总结只做叙事性回顾，状态存档只做状态快照。===
-// === Helper: 从摘要模块的 Time 原始文本里截取"年月"粒度的关键词——按字面"年"/"月"两个字切分，
-// 不解析语义（纪年法/数字格式怎么变都不影响），取字符串开头到"月"字（含）为止；
-// 找不到"年"或"月"就返回空字符串，交由调用方决定兜底策略。===
-export function extractYearMonthKeyword(timeText) {
-  if (!timeText || typeof timeText !== "string") return "";
-  const yearIdx = timeText.indexOf("年");
-  if (yearIdx === -1) return "";
-  const monthIdx = timeText.indexOf("月", yearIdx);
-  if (monthIdx === -1) return "";
-  return timeText.slice(0, monthIdx + 1);
-}
 
 
 // =====================================================================================
@@ -939,7 +928,11 @@ export async function getSortedSmallSummaryEntries(lorebookName) {
   entries.forEach((entry) => {
     const range = extractSmallSummaryRange(entry.comment);
     if (range) {
-      smallSummaries.push({ ...range, content: entry.content || "" });
+      smallSummaries.push({
+        ...range,
+        comment: entry.comment,
+        content: entry.content || "",
+      });
     }
   });
   smallSummaries.sort((a, b) => a.start - b.start);

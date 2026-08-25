@@ -120,6 +120,31 @@ export async function saveOrOverwriteLorebookEntry(
 }
 
 
+// === Helper: 按标题批量关闭（disable: true）世界书条目，其余字段不动 ===
+// 用于"状态存档"生成成功后关闭已经被存档吸收的小总结条目，避免旧内容和存档重复注入。
+// 标题在 titles 里找不到对应条目时静默跳过（不报错），不影响其余条目的关闭。
+export async function disableLorebookEntriesByTitle(lorebookName, titles) {
+  if (!titles || titles.length === 0) return;
+  const context = getCtx();
+  const data = await context.loadWorldInfo(lorebookName);
+  if (!data || !data.entries)
+    throw new Error(`无法加载世界书: ${lorebookName}`);
+
+  const titleSet = new Set(titles);
+  let changed = false;
+  Object.values(data.entries).forEach((entry) => {
+    if (titleSet.has(entry.comment) && !entry.disable) {
+      entry.disable = true;
+      changed = true;
+    }
+  });
+
+  if (!changed) return;
+  await context.saveWorldInfo(lorebookName, data, true);
+  notifyWorldInfoUpdated(lorebookName);
+}
+
+
 // === Helper: 获取当前角色名 ===
 export function getCurrentCharacterName() {
   const context = getCtx();
