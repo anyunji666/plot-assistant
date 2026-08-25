@@ -654,8 +654,7 @@ export async function showSummaryPopup() {
 
     $holidayToggleBtn.on("click", () => {
       const nowEnabled = !getHolidayEnabled();
-      setHolidayEnabledSetting(nowEnabled);
-      saveSettingsDebounced();
+      setHolidayEnabledSetting(nowEnabled); // 内部已调用 saveSettingsDebounced()，这里不用再调一次
       renderHolidayToggleButton($holidayToggleBtn, nowEnabled);
     });
 
