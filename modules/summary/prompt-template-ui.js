@@ -59,7 +59,7 @@ export async function openPromptTemplateFormatDialog() {
 
     const stageWordsLine = RELATIONSHIP_STAGE_WORDS.join(" / ");
     const bodyText =
-      "1. 插件使用需要把\u201c阶段词开/关\u201d打开。\n" +
+      "1. 功能依赖 ST-Prompt-Template 扩展插件，使用需要把\u201c阶段词开/关\u201d打开。\n" +
       "2. 动态提示词写在角色卡绑定的世界书条目里即可。不随阶段变化的基础设定（年龄/职业/性格底色等）" +
       "直接写成普通文本，放在 <% %> 标签外面，永远生效。\n" +
       "3. 开头要写 <% const 阶段_角色名 = getvar('阶段_角色名', { defaults: '' }); %> 。" +
