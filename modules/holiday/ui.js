@@ -7,6 +7,7 @@ import {
   setRestPresetText,
   getCustomHolidaysRawText,
   setCustomHolidaysRawText,
+  getHolidayCharacterLabel,
 } from "./settings.js";
 
 // === Helper: 通用"标题+提示+多行 textarea+取消/保存"弹窗，样式对齐 phone/ui.js 的
@@ -156,7 +157,7 @@ export async function openRestPresetDialog() {
   if (result === null) return;
 
   setRestPresetText(result);
-  notify("success", "「假期预设」已保存");
+  notify("success", `「假期预设」已保存（角色卡：${getHolidayCharacterLabel()}）`);
 }
 
 // 没保存过内容时预填的默认示例，直接写进输入框里给你改，不用另外在提示文字里罗列示例
@@ -198,9 +199,10 @@ export async function openCustomHolidaysDialog() {
   const { items, skipped } = parseCustomHolidaysText(result);
   setCustomHolidaysRawText(result);
 
+  const characterLabel = getHolidayCharacterLabel();
   const message =
     skipped > 0
-      ? `已保存，识别到 ${items.length} 条节假日，跳过 ${skipped} 行无法识别的内容`
-      : `已保存，识别到 ${items.length} 条节假日`;
+      ? `已保存（角色卡：${characterLabel}），识别到 ${items.length} 条节假日，跳过 ${skipped} 行无法识别的内容`
+      : `已保存（角色卡：${characterLabel}），识别到 ${items.length} 条节假日`;
   notify("success", message);
 }

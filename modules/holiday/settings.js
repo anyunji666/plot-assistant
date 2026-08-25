@@ -57,6 +57,12 @@ function getHolidayExtRoot() {
   return root;
 }
 
+// 供 UI 提示文案使用：当前角色名，未选中角色卡/群聊时给个占位文案而不是 null，
+// 方便直接拼进 notify 的提示语里，不需要调用方再判空。
+export function getHolidayCharacterLabel() {
+  return getHolidayCurrentCharacterName() || "（未选中角色卡）";
+}
+
 // 取当前角色对应的节假日设置（自动创建默认结构）；未选中角色卡/群聊时退回内存临时数据。
 export function getHolidaySettings() {
   const name = getHolidayCurrentCharacterName();
