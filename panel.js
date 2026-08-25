@@ -16,6 +16,8 @@ import { MOBILE_OPT_SETTINGS_KEY, disableLazyLoadGroup, disableRenderOptimizeGro
 import { PHONE_MODULE_NAME, getPhoneFabVisible, setPhoneFabVisibleSetting } from "./modules/phone/store.js";
 import { HOLIDAY_SETTINGS_KEY, getHolidayEnabled, setHolidayEnabledSetting } from "./modules/holiday/settings.js";
 import { openRestPresetDialog, openCustomHolidaysDialog } from "./modules/holiday/ui.js";
+import { PROMPT_TEMPLATE_SETTINGS_KEY, getPromptTemplateStageSyncEnabled, setPromptTemplateStageSyncEnabledSetting } from "./modules/summary/prompt-template-settings.js";
+import { openPromptTemplateFormatDialog } from "./modules/summary/prompt-template-ui.js";
 import { PHONE_FAB_POS_KEY, applyPhoneFabVisibility, openPhonePresetDialog, resetPhoneFabPos } from "./modules/phone/ui.js";
 import { ensureSummaryLorebookOnLoad, runAutoLargeSummary, runAutoSmallSummary, runSetOffset } from "./modules/summary/generator.js";
 import { openHideFloorDialog, openPreEmphasisDialog, openStatusLlmConfigDialog } from "./modules/summary/ui.js";
@@ -84,8 +86,9 @@ export function deleteIndexedDatabase(name) {
 // === Function: 清空本插件的全部本地缓存数据（控制面板"清空数据"按钮）===
 // 范围：三个 IndexedDB 库（私信/头像/图片/背景 + 地图图片 + 小说摘要提取的分段原文/摘要进度）、
 // 两个悬浮球位置的 localStorage、
-// 六块插件自己的 extension_settings（通讯器/地图/移动端优化/节假日/小说自动跳转与当前章节/小说摘要提取，
-// 删掉后下次读取会自动用默认值重建，节假日这块连同你已经录入的自定义节假日一起清空；
+// 七块插件自己的 extension_settings（通讯器/地图/移动端优化/节假日/小说自动跳转与当前章节/小说摘要提取/
+// 提示词模板联动，删掉后下次读取会自动用默认值重建，节假日这块连同你已经录入的自定义节假日一起清空；
+// 提示词模板联动这块只有"阶段词开/关"一个布尔值，清空后还原为默认关闭；
 // 小说摘要提取这块只重置导航栏显隐/流式/超时/限速/分段大小这些行为设置，
 // API 地址/Key/模型/自定义提示词保留不清——提示词想恢复默认，去"摘要提示词（可自定义）"
 // 弹窗里点"恢复默认"按钮即可）、
@@ -121,6 +124,7 @@ export async function clearAllPluginLocalData() {
     delete extension_settings[NOVEL_AUTO_JUMP_SETTINGS_KEY];
     delete extension_settings[NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY];
     delete extension_settings[HOLIDAY_SETTINGS_KEY];
+    delete extension_settings[PROMPT_TEMPLATE_SETTINGS_KEY];
     // 小说摘要提取的 apiUrl/apiKey/model/customPrompt 不属于本次清空范围，
     // 只重置导航栏显隐/流式/超时/限速/分段大小这些行为设置，跟下面状态表LLM的处理思路一致。
     resetNovelSummaryBehaviorSettings();
@@ -233,6 +237,16 @@ export async function showSummaryPopup() {
           </div>
           <div id="${POPUP_ID}-lorebook" style="background: #333; border-radius: 6px; padding: 10px; font-size: 13px;">
             ${lorebookEntriesHTML}
+          </div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">提示词模板联动</p>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button id="${POPUP_ID}-prompt-template-info" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">动态提示词</button>
+            </div>
+            <button id="${POPUP_ID}-prompt-template-stage-toggle" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
           </div>
         </div>
 
@@ -645,6 +659,47 @@ export async function showSummaryPopup() {
       renderHolidayToggleButton($holidayToggleBtn, nowEnabled);
     });
 
+    // 提示词模板联动：
+    // "动态提示词"按钮打开只读的 EJS 格式说明浮层，关闭后重新打开控制面板（对齐用户对"退回面板"的预期，
+    // 跟节假日两个弹窗"点击后直接 closePopup，不主动帮用户重新打开面板"的写法不同，是本栏的特例）；
+    // "阶段词开/关"逻辑跟节假日播报开关完全一样，点击只切换状态、不关闭弹窗。
+    const PROMPT_TEMPLATE_TOGGLE_ON_STYLE = { background: "#3a9d5a" };
+    const PROMPT_TEMPLATE_TOGGLE_OFF_STYLE = { background: "#555" };
+
+    function renderPromptTemplateToggleButton($btn, enabled) {
+      $btn
+        .text(enabled ? "阶段词开" : "阶段词关")
+        .css(enabled ? PROMPT_TEMPLATE_TOGGLE_ON_STYLE : PROMPT_TEMPLATE_TOGGLE_OFF_STYLE);
+    }
+
+    const $promptTemplateToggleBtn = $(`#${POPUP_ID}-prompt-template-stage-toggle`);
+    renderPromptTemplateToggleButton(
+      $promptTemplateToggleBtn,
+      getPromptTemplateStageSyncEnabled(),
+    );
+
+    $promptTemplateToggleBtn.on("click", () => {
+      const nowEnabled = !getPromptTemplateStageSyncEnabled();
+      setPromptTemplateStageSyncEnabledSetting(nowEnabled);
+      saveSettingsDebounced();
+      renderPromptTemplateToggleButton($promptTemplateToggleBtn, nowEnabled);
+    });
+
+    $(`#${POPUP_ID}-prompt-template-info`)
+      .on("click", async () => {
+        closePopup();
+        await openPromptTemplateFormatDialog();
+        showSummaryPopup();
+      })
+      .hover(
+        function () {
+          $(this).css("background", "#2c5d9e");
+        },
+        function () {
+          $(this).css("background", "#3a7bd5");
+        },
+      );
+
     $(`#${POPUP_ID}-holiday-rest-preset`)
       .on("click", () => {
         closePopup();
@@ -688,6 +743,10 @@ export async function showSummaryPopup() {
         getNovelAutoJumpSettings().enabled,
       );
       renderHolidayToggleButton($holidayToggleBtn, getHolidayEnabled());
+      renderPromptTemplateToggleButton(
+        $promptTemplateToggleBtn,
+        getPromptTemplateStageSyncEnabled(),
+      );
       const mobileOptSettingsNow = getMobileOptSettings();
       renderMobileOptButton($mobileOptRenderBtn, mobileOptSettingsNow.renderOptimize);
       renderMobileOptButton($mobileOptLazyBtn, mobileOptSettingsNow.lazyLoad);

@@ -3,6 +3,7 @@
 import { SMALL_SUMMARY_TITLE_PREFIX, STATUS_TABLE_ENTRY_DEFAULTS, STATUS_TABLE_TITLE, getCtx, getLastAiFloor, notify, persistChatMetadata } from "../core.js";
 import { handleCharacterBecameFree } from "../phone/generator.js";
 import { getPhoneChatState } from "../phone/store.js";
+import { getPromptTemplateStageSyncEnabled } from "./prompt-template-settings.js";
 import { getLorebookEntriesArray, getOrCreateSummaryLorebook, saveOrOverwriteLorebookEntry } from "../worldinfo.js";
 
 
@@ -509,6 +510,22 @@ export function isValidRelationshipWord(value) {
 }
 
 
+// === Helper: 从合法的 Relationships 值里提取"阶段词"——纯阶段词原样返回；
+// "身份/血亲词(阶段词)"形式取括号里的阶段词；纯身份/血亲词（没有带括号阶段）返回空字符串。
+// 用于把关系值归一成"阶段人设"功能能直接拿去做条件判断的一个词，不合法/取不到的值统一返回空字符串。===
+export function extractRelationshipStageWord(value) {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (RELATIONSHIP_STAGE_WORDS_SET.has(trimmed)) return trimmed;
+  const bracketMatch = trimmed.match(/^(.+?)[（(]([^（()）]+)[）)]$/);
+  if (bracketMatch) {
+    const stageWord = bracketMatch[2].trim();
+    if (RELATIONSHIP_STAGE_WORDS_SET.has(stageWord)) return stageWord;
+  }
+  return "";
+}
+
+
 // === Helper: 把 Map 视为"当前状态"，用一批更新做增删改（value 为 [REMOVE] 时删除该 key）===
 // warnings/fieldLabel 可选：传入时，遇到"疑似删除标记但格式不对"的 value 会跳过写入并记录一条提示，而不是当普通文字存进去。
 export function applyMapUpdates(baseMap, updatesMap, warnings, fieldLabel) {
@@ -657,6 +674,32 @@ export function normalizeSelfNameToLiteral(text) {
   const escaped = personaName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(`(^|[；;])\\s*${escaped}(?=\\s*[·→])`, "g");
   return text.replace(pattern, (_match, prefix) => `${prefix}{{user}}`);
+}
+
+
+// === Helper: 把当前 Relationships 里每个角色的"阶段词"同步进酒馆原生聊天变量（/setvar），
+// 变量名固定为 `阶段_角色名`，值是 extractRelationshipStageWord 提取出的阶段词（可能是空字符串）。
+// 供世界书条目里用 EJS（如 ST-Prompt-Template 扩展的 getvar()）按阶段做条件判断，
+// 不用在 EJS 里重复解析状态表原始文本。同步失败只打日志，不影响状态表本身已经保存成功的结果，
+// 也不中断循环——某一个角色同步失败不影响其余角色继续同步。
+// 是否执行这个同步由控制面板"提示词模板联动"栏的"阶段词开/关"按钮控制，开关值存在
+// prompt-template-settings.js 里，默认关闭；关闭时函数开头直接跳过，不影响状态表本身的落盘。===
+async function syncRelationshipStagesToVariables(relationships) {
+  if (!getPromptTemplateStageSyncEnabled()) return;
+  const context = getCtx();
+  if (typeof context.executeSlashCommandsWithOptions !== "function") return;
+  for (const [key, value] of relationships.entries()) {
+    const name = extractOtherPartyName(key);
+    if (!name) continue;
+    const stageWord = extractRelationshipStageWord(value);
+    try {
+      await context.executeSlashCommandsWithOptions(
+        `/setvar key="阶段_${name}" ${stageWord}`,
+      );
+    } catch (error) {
+      console.error(`[剧情助手] 同步"${name}"关系阶段到变量失败:`, error);
+    }
+  }
 }
 
 
@@ -881,6 +924,8 @@ export async function rebuildStatusTableFromChat() {
     true,
     STATUS_TABLE_ENTRY_DEFAULTS,
   );
+
+  await syncRelationshipStagesToVariables(state.relationships);
 
   if (freedCharacters.length > 0 || busyCleanupChanged) {
     await persistChatMetadata();
