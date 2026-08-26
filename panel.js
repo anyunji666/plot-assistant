@@ -129,8 +129,8 @@ export async function clearAllPluginLocalData() {
     // 只重置导航栏显隐/流式/超时/限速/分段大小这些行为设置，跟下面状态表LLM的处理思路一致。
     resetNovelSummaryBehaviorSettings();
     // 状态表LLM的 apiUrl/apiKey/model/customPrompt 等配置不属于本次清空范围，
-    // 只还原面板"再分析开/关"这一个开关状态，避免清空数据时连带清掉用户填好的状态表 API 配置。
-    getStatusLlmSettings().reanalyzeEnabled = false;
+    // 只还原面板"再分析开/关"这一个开关状态（还原成当前默认值 true），避免清空数据时连带清掉用户填好的状态表 API 配置。
+    getStatusLlmSettings().reanalyzeEnabled = true;
     saveSettingsDebounced();
   } catch (error) {
     console.error("[剧情助手] 重置插件配置失败:", error);
