@@ -23,6 +23,10 @@ import { classifyRelationshipValue } from "./badges.js";
 // - 普通楼层摘要（Time/Location/Relationships/Busy/ExpiredChapter/Overview）和
 //   状态存档消息（Time/Relationships/Inventory/Setups/Overview）复用同一套模板，
 //   缺字段的行直接不渲染。
+// - Relationships/Inventory/Setups/Busy 这四项在"最新一层AI楼层"的卡片上，展示的都是世界书
+//   「状态表」条目里合并后的当前完整状态，而不是这一层楼原文自己写的增量变化——语义对齐 Busy
+//   一贯的做法。其余历史楼层的卡片，这几项仍然按各自楼层原文解析展示（当层增量），
+//   保留"逐层回看变化"的历史价值，两者互不影响。
 // - 全部楼层都处理，不做"只处理最近N层"的限制（一次性字符串正则解析，性能开销很小）。
 // - 通过 MutationObserver 监听 #chat 的 DOM 变化实现：新消息生成完成、编辑、滑动切换、
 //   切换对话之后都会被自动扫描到；流式输出过程中原文还没写完整的 </details> 闭合标签，
@@ -133,23 +137,31 @@ function buildRelationshipsRowsHtml(relationshipsText) {
   </div>`;
 }
 
-// === Helper: 从"状态表"世界书条目里读取当前忙碌名单（手机私信模块判定并写入，正文AI只负责用
-// [REMOVE] 清除，不负责标记"忙"），只反映"当前"这一个全局状态，不属于任何具体某一层楼的历史信息。
-// 拿不到（未选中角色卡/世界书还没创建/条目还不存在）时静默返回空数组，不报错、不阻断卡片渲染。===
-async function fetchCurrentBusyNames() {
+// === Helper: 一次性读取"状态表"世界书条目里的当前完整状态快照——Relationships/Inventory/Setups
+// 三项合并后的原始行文本，以及 Busy 忙碌名单（手机私信模块判定并写入，正文AI只负责用 [REMOVE] 清除，
+// 不负责标记"忙"）。四项都只反映"当前"这一个全局状态，不属于任何具体某一层楼的历史信息，
+// 只应用在最新一层AI楼层的卡片上（见 scanAndBeautifyAll / beautifyOneMessageEl）。
+// 拿不到（未选中角色卡/世界书还没创建/条目还不存在）时返回 null，由调用方回退到该层原文的
+// 逐层解析结果，不报错、不阻断卡片渲染。===
+async function fetchStatusTableSnapshot() {
   try {
     const lorebookName = await getOrCreateSummaryLorebook();
     const entries = await getLorebookEntriesArray(lorebookName);
     const statusTableEntry = entries.find((entry) => entry.comment === STATUS_TABLE_TITLE);
-    if (!statusTableEntry) return [];
-    const busyLine = extractLabelLine(statusTableEntry.content, "Busy");
-    if (!busyLine) return [];
-    // 格式固定是 "角色A: 忙; 角色B: 忙"（见 parser.js serializeStatusTableContent），只取角色名，值恒为"忙"不用管
-    return splitKeyValuePairs(busyLine)
-      .map((p) => p.key)
-      .filter(Boolean);
+    if (!statusTableEntry) return null;
+    const content = statusTableEntry.content;
+    const busyLine = extractLabelLine(content, "Busy");
+    return {
+      relationships: extractLabelLine(content, "Relationships"),
+      inventory: extractLabelLine(content, "Inventory"),
+      setups: extractLabelLine(content, "Setups"),
+      // 格式固定是 "角色A: 忙; 角色B: 忙"（见 parser.js serializeStatusTableContent），只取角色名，值恒为"忙"不用管
+      busyNames: busyLine
+        ? splitKeyValuePairs(busyLine).map((p) => p.key).filter(Boolean)
+        : [],
+    };
   } catch (error) {
-    return [];
+    return null;
   }
 }
 
@@ -192,6 +204,8 @@ function buildOverviewBlockHtml(overviewText) {
 }
 
 // === 主函数：字段对象 → 完整卡片 HTML 字符串。
+// fields.relationships/inventory/setups：调用方按需传入——最新一层楼传状态表当前完整状态，
+// 其余楼层传该层原文自己的增量变化，本函数不关心来源，只负责渲染。
 // busyNames 是可选的"当前忙碌名单"（只有最新一层楼的卡片会传入非空值，见 beautifyOneMessageEl），
 // 不来自 fields.busy——楼层原文里的 Busy 字段只会是正文AI写的 [REMOVE] 清除信号，没有展示价值。===
 export function buildSummaryCardHtml(fields, busyNames = []) {
@@ -237,8 +251,10 @@ function findSummaryDetailsEl(mesTextEl) {
 }
 
 // === 处理单条消息：原文能解析出摘要字段 且 DOM 里还存在原生 <details> 时，替换成卡片。
-// lastAiIdx：当前聊天里最新一层AI楼层的下标，只有这一层的卡片会带上"当前忙碌名单"。===
-function beautifyOneMessageEl(mesEl, lastAiIdx, busyNames) {
+// lastAiIdx：当前聊天里最新一层AI楼层的下标。只有这一层的卡片，Relationships/Inventory/Setups/Busy
+// 四项才会换成 snapshot（状态表当前完整状态），其余历史楼层这几项仍展示该层原文自己的增量变化。
+// snapshot 为 null（世界书还没创建/条目不存在）时，最新层也照常回退到该层原文的解析结果。===
+function beautifyOneMessageEl(mesEl, lastAiIdx, snapshot) {
   const mesTextEl = mesEl.querySelector(".mes_text");
   if (!mesTextEl) return;
 
@@ -259,23 +275,35 @@ function beautifyOneMessageEl(mesEl, lastAiIdx, busyNames) {
   const fields = parseFloorSummaryFields(sourceText);
   if (!fields) return; // 原文里的摘要块还没写完整（流式输出中）或解析失败，跳过，等下一次变化再试
 
+  const isLatest = mesId === lastAiIdx;
+  const displayFields =
+    isLatest && snapshot
+      ? {
+          ...fields,
+          relationships: snapshot.relationships,
+          inventory: snapshot.inventory,
+          setups: snapshot.setups,
+        }
+      : fields;
+  const busyNames = isLatest && snapshot ? snapshot.busyNames : [];
+
   const wrapper = document.createElement("div");
-  wrapper.innerHTML = buildSummaryCardHtml(fields, mesId === lastAiIdx ? busyNames : []);
+  wrapper.innerHTML = buildSummaryCardHtml(displayFields, busyNames);
   detailsEl.replaceWith(wrapper.firstElementChild);
 }
 
-// === 全量扫描当前聊天里所有消息。忙碌名单只读取一次（世界书条目是全局状态，跟具体哪层楼无关），
-// 读取失败/为空时不影响卡片其余部分的正常渲染。===
+// === 全量扫描当前聊天里所有消息。状态表快照只读取一次（世界书条目是全局状态，跟具体哪层楼无关），
+// 读取失败/为空时不影响卡片其余部分的正常渲染（回退到各层原文解析结果）。===
 async function scanAndBeautifyAll() {
   const chatEl = document.getElementById("chat");
   if (!chatEl) return;
 
   const lastAiIdx = getLastAiFloor().idx;
-  const busyNames = lastAiIdx >= 0 ? await fetchCurrentBusyNames() : [];
+  const snapshot = lastAiIdx >= 0 ? await fetchStatusTableSnapshot() : null;
 
   chatEl.querySelectorAll(".mes").forEach((mesEl) => {
     try {
-      beautifyOneMessageEl(mesEl, lastAiIdx, busyNames);
+      beautifyOneMessageEl(mesEl, lastAiIdx, snapshot);
     } catch (error) {
       console.error("[剧情助手] 摘要卡片美化单条消息时出错:", error);
     }
