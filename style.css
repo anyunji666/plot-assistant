@@ -2139,3 +2139,167 @@
 .ns-result-item.expanded .ns-result-item-body {
     display: block;
 }
+
+/* =====================================================================================
+   摘要卡片美化模块（modules/beautify/render.js）
+   把楼层摘要 / 状态存档消息里的原生 <details><summary>摘要</summary></details>
+   替换显示成统一风格的卡片。固定粉色配色，不跟随酒馆主题。
+   ===================================================================================== */
+.pa-summary-card {
+  margin: 8px 0;
+  background: #FFF0F5;
+  border: 1px solid #FFCDE0;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #4A3A42;
+  box-shadow: 0 2px 8px rgba(200, 100, 140, 0.08);
+}
+
+.pa-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, #FFC8DD 0%, #FFDDE9 100%);
+  color: #7A2E4A;
+  font-weight: 700;
+  font-size: 14px;
+  border-bottom: 1px solid #FFCDE0;
+}
+
+.pa-field-icon {
+  flex-shrink: 0;
+}
+
+.pa-field-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #FFE0EB;
+}
+
+.pa-field-row:last-child {
+  border-bottom: none;
+}
+
+.pa-field-value {
+  color: #4A3A42;
+}
+
+.pa-time-row .pa-field-value {
+  font-weight: 600;
+}
+
+.pa-weekday-tag {
+  font-size: 11px;
+  color: #8A6A7A;
+  background: #FFE5F0;
+  border: 1px solid #FFD6E6;
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+
+.pa-holiday-tag {
+  font-size: 11px;
+  color: #A8385C;
+  background: #FFE0EA;
+  border: 1px solid #FFC3D5;
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+
+.pa-field-block {
+  padding: 8px 14px;
+  border-bottom: 1px solid #FFE0EB;
+}
+
+.pa-field-block:last-child {
+  border-bottom: none;
+}
+
+.pa-field-block-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 12px;
+  color: #8A5A6A;
+  margin-bottom: 6px;
+}
+
+.pa-relationship-list,
+.pa-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pa-relationship-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pa-relationship-key {
+  color: #6A5058;
+  font-size: 12px;
+}
+
+.pa-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.pa-plain-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #FFE0EB;
+  color: #4A3A42;
+  font-size: 12px;
+}
+
+.pa-plain-row:last-child {
+  border-bottom: none;
+}
+
+.pa-kv-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.pa-kv-key {
+  font-weight: 600;
+  color: #4A3A42;
+}
+
+.pa-kv-value {
+  color: #8A6A7A;
+}
+
+.pa-overview-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #4A3A42;
+  font-size: 12px;
+}
+
+.pa-overview-list li {
+  margin-bottom: 4px;
+}
+
+.pa-overview-list li:last-child {
+  margin-bottom: 0;
+}

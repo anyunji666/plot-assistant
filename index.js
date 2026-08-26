@@ -13,6 +13,7 @@ import { injectFloatingButton, registerMapGlobalEvents } from "./modules/map/ui.
 import { syncMapInfoEntry } from "./modules/map/generator.js";
 import { registerNovelAutoJump } from "./modules/novel/generator.js";
 import { initNovelSummaryModule } from "./modules/novel-summary/ui.js";
+import { initSummaryBeautify } from "./modules/beautify/render.js";
 
 
 // === Function: 在扩展菜单里插入「剧情助手」入口 ===
@@ -81,6 +82,9 @@ jQuery(() => {
 
   // --- 节假日模块（完全独立模块，默认关闭，面板"节假日开/节假日关"按钮控制） ---
   registerHolidayInjection(); // 生成前若开关开启，从最后一层摘要 Time 字段现算星期/附近节假日并注入，生成后立即清空
+
+  // --- 摘要卡片美化（默认开启，纯前端显示层，不改楼层原文，不需要开关） ---
+  initSummaryBeautify();
 
   // --- 剧情录入模块：自动跳转章节（默认关闭，面板"自跳转开/自跳转关"按钮控制） ---
   registerNovelAutoJump();
