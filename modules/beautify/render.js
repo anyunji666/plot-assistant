@@ -169,7 +169,7 @@ async function fetchStatusTableSnapshot() {
 function buildBusyRowsHtml(busyNames) {
   if (!Array.isArray(busyNames) || busyNames.length === 0) return "";
   const lines = busyNames.map(
-    (name) => `<div class="pa-plain-row"><span class="pa-field-icon">⏳</span>${escapeHtml(name)} 忙碌中</div>`,
+    (name) => `<div class="pa-plain-row"><span class="pa-field-icon">📱</span>${escapeHtml(name)} 忙碌中</div>`,
   );
   return lines.join("");
 }
