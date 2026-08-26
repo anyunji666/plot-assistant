@@ -2160,6 +2160,7 @@
 .pa-card-header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 8px 14px;
   background: linear-gradient(135deg, #FFC8DD 0%, #FFDDE9 100%);
@@ -2167,6 +2168,26 @@
   font-weight: 700;
   font-size: 14px;
   border-bottom: 1px solid #FFCDE0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.pa-card-toggle {
+  margin-left: auto;
+  font-size: 12px;
+  transition: transform 0.2s ease;
+}
+
+.pa-summary-card.pa-collapsed .pa-card-header {
+  border-bottom: none;
+}
+
+.pa-summary-card.pa-collapsed .pa-card-toggle {
+  transform: rotate(-90deg);
+}
+
+.pa-summary-card.pa-collapsed .pa-card-body {
+  display: none;
 }
 
 .pa-field-icon {
@@ -2190,12 +2211,9 @@
   color: #4A3A42;
 }
 
-.pa-time-row .pa-field-value {
-  font-weight: 600;
-}
-
 .pa-weekday-tag {
   font-size: 11px;
+  font-weight: 400;
   color: #8A6A7A;
   background: #FFE5F0;
   border: 1px solid #FFD6E6;
@@ -2205,6 +2223,7 @@
 
 .pa-holiday-tag {
   font-size: 11px;
+  font-weight: 400;
   color: #A8385C;
   background: #FFE0EA;
   border: 1px solid #FFC3D5;

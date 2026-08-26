@@ -1,5 +1,8 @@
 "use strict";
 
+import { saveSettingsDebounced } from "../../../../../../script.js";
+import { extension_settings } from "../../../../../extensions.js";
+
 import { STATUS_TABLE_TITLE, escapeHtml, getCtx, getLastAiFloor } from "../core.js";
 import { extractLabelLine, parseFloorSummaryFields } from "../summary/parser.js";
 import {
@@ -38,6 +41,27 @@ import { classifyRelationshipValue } from "./badges.js";
 // =====================================================================================
 
 const CARD_CLASS = "pa-summary-card";
+
+// === 摘要卡片展开/收拢：全局偏好设置，不区分角色卡/对话——跟酒馆账号本身持久化，
+// 换设备登录同一酒馆账号也能同步（用的是酒馆自带的 extension_settings + saveSettingsDebounced，
+// 跟 status-llm-store.js 同一套存储方式）。
+// 点击任意一张卡片的顶栏时，会把新状态同步应用到"当前聊天里所有已渲染的卡片"（见 initSummaryBeautify
+// 的委托点击事件），后续新生成/重新扫描出的卡片（包括历史楼层）在构建时也会读取这份偏好决定初始状态，
+// 不需要逐层单独记忆，天然保持全局一致。===
+const SUMMARY_CARD_UI_SETTINGS_KEY = "plot_assistant_summary_card_ui";
+
+function getSummaryCardCollapsed() {
+  const cfg = extension_settings[SUMMARY_CARD_UI_SETTINGS_KEY];
+  return !!(cfg && cfg.collapsed);
+}
+
+function setSummaryCardCollapsed(collapsed) {
+  if (!extension_settings[SUMMARY_CARD_UI_SETTINGS_KEY]) {
+    extension_settings[SUMMARY_CARD_UI_SETTINGS_KEY] = {};
+  }
+  extension_settings[SUMMARY_CARD_UI_SETTINGS_KEY].collapsed = collapsed;
+  saveSettingsDebounced();
+}
 
 // === Helper: 字段列表内相邻条目之间的分隔符——同一行内横向流式排列时用来隔开条目，
 // Relationships/Inventory/Setups 这类"逐条列出"的字段统一复用，保持视觉风格一致 ===
@@ -86,36 +110,43 @@ function splitOverviewItems(text) {
   return items;
 }
 
-// === Helper: 构造 Time 行——主日期文本 + 星期/本月天数 + 附近节假日提示（现算，不依赖 AI 输出）===
-function buildTimeRowHtml(timeText) {
-  const escapedTime = escapeHtml(timeText);
-  const parsed = parseStoryDate(timeText);
-  if (!parsed) {
-    // 解析不出严格公历格式（虚构纪年/农历写法等）：只显示原文，不附星期/节日信息
-    return `<div class="pa-field-row pa-time-row">
-      <span class="pa-field-icon">📅</span>
-      <span class="pa-field-value">${escapedTime}</span>
-    </div>`;
+// === Helper: 构造卡片顶栏——直接把原来"Time 行"的内容（日期 + 星期/本月天数 + 附近节假日提示，
+// 现算，不依赖 AI 输出）当顶栏正文用，不再单独占一行、也不再显示"剧情摘要"这个标题文字；
+// 顶栏本身可点击展开/收拢（见 initSummaryBeautify 的委托点击事件），末尾固定带一个箭头图标。
+// 没有 Time 字段时（理论上不该发生，Time 是摘要模块的必填项）兜底显示回原来的"剧情摘要"文字，
+// 保证顶栏任何情况下都不会空着。===
+function buildCardHeaderHtml(timeText) {
+  let bodyHtml;
+  if (!timeText) {
+    bodyHtml = `<span class="pa-field-icon">📖</span>剧情摘要`;
+  } else {
+    const escapedTime = escapeHtml(timeText);
+    const parsed = parseStoryDate(timeText);
+    if (!parsed) {
+      // 解析不出严格公历格式（虚构纪年/农历写法等）：只显示原文，不附星期/节日信息
+      bodyHtml = `<span class="pa-field-icon">📅</span>${escapedTime}`;
+    } else {
+      const date0 = new Date(parsed.year, parsed.month - 1, parsed.day);
+      const weekdayLabel = WEEKDAY_LABELS[date0.getDay()];
+      const monthDays = daysInMonth(parsed.year, parsed.month);
+      let customHolidays = [];
+      try {
+        customHolidays = parseCustomHolidaysText(getCustomHolidaysRawText()).items;
+      } catch (error) {
+        // 面板没配置过自定义节假日、或读取失败时静默忽略，不影响星期/本月天数的正常显示
+      }
+      const holidaySuffixRaw = buildHolidaySuffix(date0, customHolidays);
+      const holidayText = holidaySuffixRaw
+        ? holidaySuffixRaw.replace(/^（|）$/g, "")
+        : "";
+      bodyHtml = `<span class="pa-field-icon">📅</span>${escapedTime}
+        <span class="pa-weekday-tag">星期${weekdayLabel}・本月共${monthDays}天</span>
+        ${holidayText ? `<span class="pa-holiday-tag">🎉 ${escapeHtml(holidayText)}</span>` : ""}`;
+    }
   }
-  const date0 = new Date(parsed.year, parsed.month - 1, parsed.day);
-  const weekdayLabel = WEEKDAY_LABELS[date0.getDay()];
-  const monthDays = daysInMonth(parsed.year, parsed.month);
-  let customHolidays = [];
-  try {
-    customHolidays = parseCustomHolidaysText(getCustomHolidaysRawText()).items;
-  } catch (error) {
-    // 面板没配置过自定义节假日、或读取失败时静默忽略，不影响星期/本月天数的正常显示
-  }
-  const holidaySuffixRaw = buildHolidaySuffix(date0, customHolidays);
-  const holidayText = holidaySuffixRaw
-    ? holidaySuffixRaw.replace(/^（|）$/g, "")
-    : "";
-
-  return `<div class="pa-field-row pa-time-row">
-    <span class="pa-field-icon">📅</span>
-    <span class="pa-field-value">${escapedTime}</span>
-    <span class="pa-weekday-tag">星期${weekdayLabel}・本月共${monthDays}天</span>
-    ${holidayText ? `<span class="pa-holiday-tag">🎉 ${escapeHtml(holidayText)}</span>` : ""}
+  return `<div class="pa-card-header">
+    ${bodyHtml}
+    <span class="pa-card-toggle">▾</span>
   </div>`;
 }
 
@@ -218,10 +249,6 @@ function buildOverviewBlockHtml(overviewText) {
 export function buildSummaryCardHtml(fields, busyNames = []) {
   const parts = [];
 
-  parts.push(`<div class="pa-card-header"><span class="pa-field-icon">📖</span>剧情摘要</div>`);
-
-  if (fields.time) parts.push(buildTimeRowHtml(fields.time));
-
   if (fields.location) {
     parts.push(`<div class="pa-field-row">
       <span class="pa-field-icon">📍</span>
@@ -244,7 +271,13 @@ export function buildSummaryCardHtml(fields, busyNames = []) {
 
   if (fields.overview) parts.push(buildOverviewBlockHtml(fields.overview));
 
-  return `<div class="${CARD_CLASS}">${parts.join("")}</div>`;
+  // pa-collapsed 初始类由全局偏好决定，保证历史楼层重新扫描/新楼层生成时天然跟上次的
+  // 展开/收拢选择一致；点击后的即时同步另见 initSummaryBeautify 里的委托点击事件。
+  const collapsedClass = getSummaryCardCollapsed() ? " pa-collapsed" : "";
+  return `<div class="${CARD_CLASS}${collapsedClass}">
+    ${buildCardHeaderHtml(fields.time)}
+    <div class="pa-card-body">${parts.join("")}</div>
+  </div>`;
 }
 
 // === Helper: 在单条消息 DOM 里查找"摘要"这个 <details>（可能存在也可能不存在）===
@@ -330,6 +363,25 @@ export function initSummaryBeautify() {
 
   observer = new MutationObserver(() => debouncedScan());
   observer.observe(chatEl, { childList: true, subtree: true, characterData: true });
+
+  // 顶栏点击展开/收拢：用事件委托挂在 #chat 上一次性注册，而不是每张卡片单独挂监听——
+  // 卡片是随聊天记录变化不断重新生成/替换的（见 beautifyOneMessageEl），委托到常驻的 #chat
+  // 容器上可以让新卡片天然可用，不用在每次生成卡片后额外补一次 addEventListener。
+  // 点击后：(1) 立即同步应用到"当前聊天里所有已渲染的卡片"（包括历史楼层，不止点的那一张）；
+  // (2) 把新状态存进全局偏好（见 setSummaryCardCollapsed），下次生成/重新扫描出的卡片
+  // （含切换对话、刷新页面后重新渲染的历史楼层）会在 buildSummaryCardHtml 里读到这份偏好，
+  // 天然保持一致，不需要逐层单独记忆。
+  chatEl.addEventListener("click", (event) => {
+    const header = event.target.closest(".pa-card-header");
+    if (!header) return;
+    const card = header.closest(`.${CARD_CLASS}`);
+    if (!card) return;
+    const collapsed = !card.classList.contains("pa-collapsed");
+    chatEl.querySelectorAll(`.${CARD_CLASS}`).forEach((el) => {
+      el.classList.toggle("pa-collapsed", collapsed);
+    });
+    setSummaryCardCollapsed(collapsed);
+  });
 
   // 插件加载/切换到已有聊天时，先手动跑一次，不用等下一次 DOM 变化才触发
   scanAndBeautifyAll();
