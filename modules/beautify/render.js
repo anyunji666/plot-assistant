@@ -201,27 +201,35 @@ async function fetchStatusTableSnapshot() {
   }
 }
 
-// === Helper: 构造 Busy 行——只在有人正忙碌时才渲染，展示的是"当前"忙碌名单 ===
+// === Helper: 构造 Busy 字段——只在有人正忙碌时才渲染，展示的是"当前"忙碌名单。
+// 跟 Inventory/Relationships 一样同行展示、自动换行，不再逐人单独占一行 ===
 function buildBusyRowsHtml(busyNames) {
   if (!Array.isArray(busyNames) || busyNames.length === 0) return "";
-  const lines = busyNames.map(
-    (name) => `<div class="pa-plain-row"><span class="pa-field-icon">📱</span>${escapeHtml(name)} 忙碌中</div>`,
-  );
-  return lines.join("");
+  const items = busyNames
+    .map((name) => `<span class="pa-busy-item">${escapeHtml(name)}</span>`)
+    .join(ITEM_SEPARATOR_HTML);
+  return `<div class="pa-field-block">
+    <div class="pa-field-block-title"><span class="pa-field-icon">📱</span>忙碌中</div>
+    <div class="pa-kv-list">${items}</div>
+  </div>`;
 }
 
 // === Helper: 字段列表内相邻条目之间的分隔符——同一行内横向流式排列时用来隔开条目，
 // Relationships/Inventory/Setups 这类"逐条列出"的字段统一复用，保持视觉风格一致 ===
 
-// === Helper: 构造 Inventory / Setups 这类 key:value 列表字段的通用渲染（图标+标题+逐条列出）===
-function buildKeyValueBlockHtml(icon, title, text) {
+// === Helper: 构造 Inventory / Setups 这类 key:value 列表字段的通用渲染（图标+标题+逐条列出）
+// emphasizeValue：true 时 value 用强调样式（加粗徽标，视觉呼应人物关系的 badge），key 转为淡色——
+// 目前只有 Inventory（物品名淡、数量显眼）传 true；Setups 的 value 是自由描述文本，不适合套徽标，维持原样。===
+function buildKeyValueBlockHtml(icon, title, text, emphasizeValue = false) {
   const pairs = splitKeyValuePairs(text);
   if (pairs.length === 0) return "";
+  const keyClass = emphasizeValue ? "pa-kv-key pa-kv-key--muted" : "pa-kv-key";
+  const valueClass = emphasizeValue ? "pa-kv-value pa-kv-value--emphasis" : "pa-kv-value";
   const items = pairs
     .map(
       (p) =>
-        `<div class="pa-kv-item"><span class="pa-kv-key">${escapeHtml(p.key)}</span>${
-          p.value ? `<span class="pa-kv-value">${escapeHtml(p.value)}</span>` : ""
+        `<div class="pa-kv-item"><span class="${keyClass}">${escapeHtml(p.key)}</span>${
+          p.value ? `<span class="${valueClass}">${escapeHtml(p.value)}</span>` : ""
         }</div>`,
     )
     .join(ITEM_SEPARATOR_HTML);
@@ -258,7 +266,7 @@ export function buildSummaryCardHtml(fields, busyNames = []) {
   }
 
   if (fields.relationships) parts.push(buildRelationshipsRowsHtml(fields.relationships));
-  if (fields.inventory) parts.push(buildKeyValueBlockHtml("🎒", "物品", fields.inventory));
+  if (fields.inventory) parts.push(buildKeyValueBlockHtml("🎒", "物品", fields.inventory, true));
   if (fields.setups) parts.push(buildKeyValueBlockHtml("🧩", "伏笔", fields.setups));
 
   const busyHtml = buildBusyRowsHtml(busyNames);

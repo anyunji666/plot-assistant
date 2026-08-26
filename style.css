@@ -2299,6 +2299,18 @@
   border-bottom: none;
 }
 
+/* Busy 字段：跟人物关系一样同行展示、自动换行，用中性色胶囊标出忙碌中的角色名。 */
+.pa-busy-item {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: #F0EDEB;
+  color: #6A6058;
+  border: 1px solid #E2DCD7;
+}
+
 .pa-kv-item {
   display: inline-flex;
   align-items: center;
@@ -2313,6 +2325,24 @@
 
 .pa-kv-value {
   color: #8A6A7A;
+}
+
+/* 物品数量强调样式：key 转淡（呼应人物关系人名的淡色），value 用胶囊徽标强调
+   （呼应人物关系状态的 badge），配色取暖橙色系，跟人物关系的粉色系区分开，避免混淆。 */
+.pa-kv-key--muted {
+  font-weight: 400;
+  color: #A88A98;
+}
+
+.pa-kv-value--emphasis {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #FFE5C2;
+  color: #9A6A2A;
+  border: 1px solid #FFD8A8;
 }
 
 .pa-overview-list {
