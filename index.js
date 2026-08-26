@@ -3,12 +3,12 @@
 import { SUMMARY_BUTTON_ICON, SUMMARY_BUTTON_ID, SUMMARY_BUTTON_TEXT, SUMMARY_BUTTON_TOOLTIP, delay } from "./modules/core.js";
 import { showSummaryPopup } from "./panel.js";
 import { registerLorebookAutoCreate } from "./modules/summary/generator.js";
-import { registerStatusTableAutoUpdate } from "./modules/summary/status-llm-extract.js";
+import { registerStatusTableAutoUpdate } from "./modules/summary/status-llm/extract.js";
 import { applyMobileOptSettingsOnLoad } from "./modules/mobile-opt.js";
 import { injectPhoneFloatingButton } from "./modules/phone/ui.js";
 import { registerPhoneSlotInjection } from "./modules/phone/generator.js";
 import { registerHolidayInjection } from "./modules/holiday/inject.js";
-import { getSettings } from "./modules/map/data.js";
+import { getSettings } from "./modules/map/store.js";
 import { injectFloatingButton, registerMapGlobalEvents } from "./modules/map/ui.js";
 import { syncMapInfoEntry } from "./modules/map/generator.js";
 import { registerNovelAutoJump } from "./modules/novel/generator.js";

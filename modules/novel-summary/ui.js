@@ -15,7 +15,7 @@ import {
   niIsSupportedNovelFile,
   niExtractNovelText,
 } from "./lib/parser.js";
-import { saveNovelState, loadNovelState, clearNovelState } from "./lib/storage.js";
+import { saveNovelState, loadNovelState, clearNovelState } from "./lib/novel-idb.js";
 import { DEFAULT_SUMMARY_PROMPT } from "./lib/prompts.js";
 import { getNovelSummarySettings, isNovelSummaryNavbarVisible, saveNovelSummarySettings, setNovelSummaryNavbarVisible } from "./store.js";
 

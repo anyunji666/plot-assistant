@@ -5,7 +5,7 @@ import { appendPhoneMessage, getAllPhoneMessages, getPhoneChatState, getPhoneCon
 import { characterActiveInText, getCurrentStoryTime } from "./parser.js";
 import { refreshPhoneChatViewIfOpen, setPhoneTypingIndicator } from "./ui.js";
 import { generateSummaryRaw } from "../summary/generator.js";
-import { rebuildStatusTableFromChat } from "../summary/parser.js";
+import { rebuildStatusTableFromChat } from "../summary/status-table.js";
 
 
 // ==== 手机私信系统：调用 AI 生成角色回复 ====

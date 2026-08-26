@@ -282,7 +282,7 @@ export function getLastAiFloor() {
 
 // === Helper: HTML 转义（各模块拼接 innerHTML 时统一用这个，避免各写各的）===
 // 用 ?? "" 兜底 null/undefined，同时转义单引号，兼容"值可能为空"以及"属性用单引号包裹"两种场景，
-// 是原先 map/data.js 版本（不转义单引号）和 phone/ui.js 版本（不兜底 null）两者的合并/加强版。
+// 是原先 map/store.js 版本（不转义单引号）和 phone/ui.js 版本（不兜底 null）两者的合并/加强版。
 export function escapeHtml(str) {
   return String(str ?? "").replace(
     /[&<>"']/g,

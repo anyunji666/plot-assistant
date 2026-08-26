@@ -2,7 +2,8 @@
 
 import { extractCharacterKeywords } from "../character.js";
 import { getCtx, getLastAiFloor } from "../core.js";
-import { extractLabelLine, parseFloorSummaryFields } from "../summary/parser.js";
+import { extractLabelLine } from "../summary/floor-restore.js";
+import { parseFloorSummaryFields } from "../summary/status-table.js";
 
 
 // === Helper: 角色名（含去姓简称，复用"创建角色"功能已有的 extractCharacterKeywords）是否出现在给定文本里 ===

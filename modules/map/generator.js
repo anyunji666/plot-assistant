@@ -6,7 +6,7 @@ import {
   lorebookEntryExists,
   saveOrOverwriteLorebookEntry,
 } from "../worldinfo.js";
-import { getMapCurrentCharacterName, getSettings } from "./data.js";
+import { getMapCurrentCharacterName, getSettings } from "./store.js";
 
 // ============================================================
 // AI 上下文注入

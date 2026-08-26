@@ -13,7 +13,7 @@ import { extension_settings } from "../../../../../extensions.js";
 
 export const NOVEL_SUMMARY_SETTINGS_KEY = "plot_assistant_novel_summary";
 
-// 分段原文/摘要进度的 IndexedDB 库名，需跟 lib/storage.js 里 DB_NAME 保持一致，
+// 分段原文/摘要进度的 IndexedDB 库名，需跟 lib/novel-idb.js 里 DB_NAME 保持一致，
 // 仅供控制面板"清空数据"按钮统一删库使用。
 export const NOVEL_SUMMARY_IDB_NAME = "novel-summary-db";
 

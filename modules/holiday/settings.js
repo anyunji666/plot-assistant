@@ -6,7 +6,7 @@ import { getCtx } from "../core.js";
 
 // =====================================================================================
 // 节假日模块 - 设置读写：开关状态 + 假期预设原文 + 自定义节假日原文，存进 extension_settings。
-// 跟随"角色卡"分别存储，不同角色卡可以设置不同的节假日；绑定方式照抄 modules/map/data.js
+// 跟随"角色卡"分别存储，不同角色卡可以设置不同的节假日；绑定方式照抄 modules/map/store.js
 // 的 byCharacter 写法（而不是 worldinfo.js 里会抛错的 getCurrentCharacterName()）：
 // 未选中角色卡/群聊场景不报错，退回一份仅当次会话有效的内存兜底对象，不落盘、不污染
 // extension_settings，等真正进入某个角色卡的对话后再正常读写该角色名下的数据。
@@ -32,7 +32,7 @@ function makeDefaultHolidaySettings() {
 }
 
 // 当前角色名；群聊或未选中角色卡时返回 null（不抛错，方便各处直接判空），
-// 逻辑照抄 modules/map/data.js 的 getMapCurrentCharacterName()。
+// 逻辑照抄 modules/map/store.js 的 getMapCurrentCharacterName()。
 function getHolidayCurrentCharacterName() {
   try {
     const context = getCtx();

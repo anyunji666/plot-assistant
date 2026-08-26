@@ -4,7 +4,8 @@ import { saveSettingsDebounced } from "../../../../../../script.js";
 import { extension_settings } from "../../../../../extensions.js";
 import { CHARACTER_ENTRY_DEFAULTS, CHARACTER_ENTRY_TITLE_PREFIX, DEFAULT_PHONE_PRESET_CONTENT, PHONE_AVATAR_STORE, PHONE_BACKGROUND_STORE, PHONE_CHAT_META_KEY, PHONE_GLOBAL_BACKGROUND_KEY, PHONE_IDB_NAME, PHONE_IDB_STORE, PHONE_PRESET_TITLE, PHONE_STICKER_LIST_KEY, PHONE_STICKER_STORE, STATUS_TABLE_TITLE, getChatMetadataStore, getCtx, notify, persistChatMetadata } from "../core.js";
 import { extractCharacterInfoBody } from "./parser.js";
-import { BARE_NUMBER_PATTERN, extractLabelLine, extractOtherPartyName, parseKeyValueListWithSkipped } from "../summary/parser.js";
+import { extractLabelLine } from "../summary/floor-restore.js";
+import { BARE_NUMBER_PATTERN, extractOtherPartyName, parseKeyValueListWithSkipped } from "../summary/status-table.js";
 import { getCurrentCharacterName, getFreeUid, getLorebookEntriesArray, getOrCreateSummaryLorebook, notifyWorldInfoUpdated } from "../worldinfo.js";
 
 

@@ -9,7 +9,7 @@ import {
   getLastAiFloor,
   notify,
 } from "../core.js";
-import { parseFloorSummaryFields } from "../summary/parser.js";
+import { parseFloorSummaryFields } from "../summary/status-table.js";
 import { getOrCreateSummaryLorebook } from "../worldinfo.js";
 import { getActiveNovelChapter, getActiveNovelChapterUid, listNovelChapterEntries, setActiveNovelChapter } from "./store.js";
 

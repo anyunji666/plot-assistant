@@ -1,12 +1,12 @@
 "use strict";
 
 import { DEFAULT_PRE_EMPHASIS_CONTENT, GENERATING_OVERLAY_ID, PRE_EMPHASIS_TITLE, confirmAction, errorCatched, getCtx, getOffsetRecord, notify } from "../core.js";
-import { loadPreEmphasisEntry, savePreEmphasisEntry } from "./generator.js";
-import { getSummaryProgress } from "./parser.js";
+import { loadPreEmphasisEntry, savePreEmphasisEntry } from "./pre-emphasis.js";
+import { getSummaryProgress } from "./floor-restore.js";
 import { getOrCreateSummaryLorebook } from "../worldinfo.js";
-import { niFetchModelIds } from "./status-llm-api.js";
-import { DEFAULT_STATUS_LLM_PROMPT } from "./status-llm-prompts.js";
-import { getStatusLlmSettings, saveStatusLlmSettings } from "./status-llm-store.js";
+import { niFetchModelIds } from "./status-llm/api.js";
+import { DEFAULT_STATUS_LLM_PROMPT } from "./status-llm/prompts.js";
+import { getStatusLlmSettings, saveStatusLlmSettings } from "./status-llm/store.js";
 
 
 // === Helper: "生成中"提示框（居中弹窗，半透明遮罩+卡片，带加载动画） ===

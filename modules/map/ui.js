@@ -1,7 +1,7 @@
 "use strict";
 
 import { escapeHtml, getCtx, notify } from "../core.js";
-import { BIG_MAP_ID, BIG_MAP_SUMMARY_PLACEHOLDER, PALETTE, SMALL_MAP_NOTE_PLACEHOLDER, clearCurrentCharacterImages, deleteImage, exportMarkersJson, getActiveMap, getActiveMapId, getFabVisible, getMapCurrentCharacterName, getMapExtRoot, getSettings, importMarkersJson, isBigMapActive, loadImage, loadLeaflet, makeCharacterMapData, makeSmallMap, mapState, saveImage, saveSettings } from "./data.js";
+import { BIG_MAP_ID, BIG_MAP_SUMMARY_PLACEHOLDER, PALETTE, SMALL_MAP_NOTE_PLACEHOLDER, clearCurrentCharacterImages, deleteImage, exportMarkersJson, getActiveMap, getActiveMapId, getFabVisible, getMapCurrentCharacterName, getMapExtRoot, getSettings, importMarkersJson, isBigMapActive, loadImage, loadLeaflet, makeCharacterMapData, makeSmallMap, mapState, saveImage, saveSettings } from "./store.js";
 import { buildRouteSummaryList, scheduleMapInfoSync, syncMapInfoEntry } from "./generator.js";
 import { bindPopupFormEvents, openMarkerForm, renderAllMarkers, renderMarkerList } from "./markers.js";
 import { cancelRouteMode, renderAllRoutes, renderRouteList, startRouteMode } from "./routes.js";

@@ -4,7 +4,8 @@ import { saveSettingsDebounced } from "../../../../../../script.js";
 import { extension_settings } from "../../../../../extensions.js";
 
 import { STATUS_TABLE_TITLE, escapeHtml, getCtx, getLastAiFloor } from "../core.js";
-import { extractLabelLine, parseFloorSummaryFields } from "../summary/parser.js";
+import { extractLabelLine } from "../summary/floor-restore.js";
+import { parseFloorSummaryFields } from "../summary/status-table.js";
 import {
   WEEKDAY_LABELS,
   buildHolidaySuffix,
@@ -22,7 +23,7 @@ import { classifyRelationshipValue } from "./badges.js";
 //
 // 原则：
 // - 只改"显示"，不改楼层原文。所有解析都直接读 context.chat[idx].mes（原文），
-//   不依赖也不修改 DOM 里已渲染的文本，保证 parser.js 那一整套正则解析逻辑完全不受影响。
+//   不依赖也不修改 DOM 里已渲染的文本，保证 status-table.js 那一整套正则解析逻辑完全不受影响。
 // - 普通楼层摘要（Time/Location/Relationships/Busy/ExpiredChapter/Overview）和
 //   状态存档消息（Time/Relationships/Inventory/Setups/Overview）复用同一套模板，
 //   缺字段的行直接不渲染。
@@ -44,7 +45,7 @@ const CARD_CLASS = "pa-summary-card";
 
 // === 摘要卡片展开/收拢：全局偏好设置，不区分角色卡/对话——跟酒馆账号本身持久化，
 // 换设备登录同一酒馆账号也能同步（用的是酒馆自带的 extension_settings + saveSettingsDebounced，
-// 跟 status-llm-store.js 同一套存储方式）。
+// 跟 status-llm/store.js 同一套存储方式）。
 // 点击任意一张卡片的顶栏时，会把新状态同步应用到"当前聊天里所有已渲染的卡片"（见 initSummaryBeautify
 // 的委托点击事件），后续新生成/重新扫描出的卡片（包括历史楼层）在构建时也会读取这份偏好决定初始状态，
 // 不需要逐层单独记忆，天然保持全局一致。===
@@ -79,7 +80,7 @@ function debounce(fn, wait) {
 }
 
 // === Helper: 把 "key: value" 或 "key：value" 形式的一段文本，按分号拆成多组 [key, value] ===
-// 冒号只切第一个（value 里允许再出现冒号），跟 parser.js 里 key:value 的解析口径保持一致。
+// 冒号只切第一个（value 里允许再出现冒号），跟 status-table.js 里 key:value 的解析口径保持一致。
 function splitKeyValuePairs(text) {
   if (!text || typeof text !== "string") return [];
   return text
@@ -190,7 +191,7 @@ async function fetchStatusTableSnapshot() {
       relationships: extractLabelLine(content, "Relationships"),
       inventory: extractLabelLine(content, "Inventory"),
       setups: extractLabelLine(content, "Setups"),
-      // 格式固定是 "角色A: 忙; 角色B: 忙"（见 parser.js serializeStatusTableContent），只取角色名，值恒为"忙"不用管
+      // 格式固定是 "角色A: 忙; 角色B: 忙"（见 status-table.js serializeStatusTableContent），只取角色名，值恒为"忙"不用管
       busyNames: busyLine
         ? splitKeyValuePairs(busyLine).map((p) => p.key).filter(Boolean)
         : [],

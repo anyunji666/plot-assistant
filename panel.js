@@ -7,21 +7,21 @@ import { getNovelAutoJumpSettings } from "./modules/novel/generator.js";
 import { getActiveNovelChapterUid, listNovelChapterEntries, setActiveNovelChapter } from "./modules/novel/store.js";
 import { openNovelEntryDialog } from "./modules/novel/ui.js";
 import { NOVEL_SUMMARY_IDB_NAME, resetNovelSummaryBehaviorSettings } from "./modules/novel-summary/store.js";
-import { closeDb as closeNovelSummaryDb } from "./modules/novel-summary/lib/storage.js";
+import { closeDb as closeNovelSummaryDb } from "./modules/novel-summary/lib/novel-idb.js";
 import { applyNovelSummaryNavbarVisibility, openNovelSummaryNavbarToggleDialog } from "./modules/novel-summary/ui.js";
 import { LOCAL_CHAT_STORE_KEY, NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY, NOVEL_AUTO_JUMP_SETTINGS_KEY, PHONE_IDB_NAME, SUMMARY_POPUP_ID, errorCatched, getCtx, notify, resetLocalChatStoreCache, resetTransientChatMetadataStore } from "./modules/core.js";
-import { IDB_NAME, MAP_MODULE_NAME, getFabVisible, setFabVisibleSetting } from "./modules/map/data.js";
+import { IDB_NAME, MAP_MODULE_NAME, getFabVisible, setFabVisibleSetting } from "./modules/map/store.js";
 import { FAB_POS_KEY, applyFabVisibility, openModal, resetFabPos } from "./modules/map/ui.js";
 import { MOBILE_OPT_SETTINGS_KEY, disableLazyLoadGroup, disableRenderOptimizeGroup, enableLazyLoadGroup, enableRenderOptimizeGroup, getMobileOptSettings } from "./modules/mobile-opt.js";
 import { PHONE_MODULE_NAME, getPhoneFabVisible, setPhoneFabVisibleSetting } from "./modules/phone/store.js";
 import { HOLIDAY_SETTINGS_KEY, getHolidayEnabled, setHolidayEnabledSetting } from "./modules/holiday/settings.js";
 import { openRestPresetDialog, openCustomHolidaysDialog } from "./modules/holiday/ui.js";
-import { PROMPT_TEMPLATE_SETTINGS_KEY, getPromptTemplateStageSyncEnabled, setPromptTemplateStageSyncEnabledSetting } from "./modules/summary/prompt-template-settings.js";
-import { openPromptTemplateFormatDialog } from "./modules/summary/prompt-template-ui.js";
+import { PROMPT_TEMPLATE_SETTINGS_KEY, getPromptTemplateStageSyncEnabled, setPromptTemplateStageSyncEnabledSetting } from "./modules/summary/prompt-template/settings.js";
+import { openPromptTemplateFormatDialog } from "./modules/summary/prompt-template/ui.js";
 import { PHONE_FAB_POS_KEY, applyPhoneFabVisibility, openPhonePresetDialog, resetPhoneFabPos } from "./modules/phone/ui.js";
 import { ensureSummaryLorebookOnLoad, runAutoLargeSummary, runAutoSmallSummary, runSetOffset } from "./modules/summary/generator.js";
 import { openHideFloorDialog, openPreEmphasisDialog, openStatusLlmConfigDialog } from "./modules/summary/ui.js";
-import { getStatusLlmSettings } from "./modules/summary/status-llm-store.js";
+import { getStatusLlmSettings } from "./modules/summary/status-llm/store.js";
 import { getLorebookEntriesSummaryHtml, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, mountSummaryLorebookGlobally, notifyWorldInfoUpdated } from "./modules/worldinfo.js";
 
 

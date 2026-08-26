@@ -1,7 +1,7 @@
 "use strict";
 
 import { getCtx, getLastAiFloor } from "../core.js";
-import { parseFloorSummaryFields } from "../summary/parser.js";
+import { parseFloorSummaryFields } from "../summary/status-table.js";
 import { buildHolidayTagContent, parseCustomHolidaysText } from "./calc.js";
 import { getHolidayEnabled, getRestPresetText, getCustomHolidaysRawText } from "./settings.js";
 
