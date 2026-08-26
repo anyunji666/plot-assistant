@@ -2234,14 +2234,21 @@
 .pa-relationship-list,
 .pa-kv-list {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 6px;
+}
+
+.pa-item-sep {
+  color: #E8B8C8;
+  margin: 0 10px;
+  font-size: 11px;
 }
 
 .pa-relationship-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -2274,7 +2281,7 @@
 }
 
 .pa-kv-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
   font-size: 12px;

@@ -39,6 +39,10 @@ import { classifyRelationshipValue } from "./badges.js";
 
 const CARD_CLASS = "pa-summary-card";
 
+// === Helper: 字段列表内相邻条目之间的分隔符——同一行内横向流式排列时用来隔开条目，
+// Relationships/Inventory/Setups 这类"逐条列出"的字段统一复用，保持视觉风格一致 ===
+const ITEM_SEPARATOR_HTML = `<span class="pa-item-sep">|</span>`;
+
 let debounceTimer = null;
 let observer = null;
 
@@ -133,7 +137,7 @@ function buildRelationshipsRowsHtml(relationshipsText) {
   if (badges.length === 0) return "";
   return `<div class="pa-field-block">
     <div class="pa-field-block-title"><span class="pa-field-icon">🤝</span>人物关系</div>
-    <div class="pa-relationship-list">${badges.join("")}</div>
+    <div class="pa-relationship-list">${badges.join(ITEM_SEPARATOR_HTML)}</div>
   </div>`;
 }
 
@@ -174,6 +178,9 @@ function buildBusyRowsHtml(busyNames) {
   return lines.join("");
 }
 
+// === Helper: 字段列表内相邻条目之间的分隔符——同一行内横向流式排列时用来隔开条目，
+// Relationships/Inventory/Setups 这类"逐条列出"的字段统一复用，保持视觉风格一致 ===
+
 // === Helper: 构造 Inventory / Setups 这类 key:value 列表字段的通用渲染（图标+标题+逐条列出）===
 function buildKeyValueBlockHtml(icon, title, text) {
   const pairs = splitKeyValuePairs(text);
@@ -185,7 +192,7 @@ function buildKeyValueBlockHtml(icon, title, text) {
           p.value ? `<span class="pa-kv-value">${escapeHtml(p.value)}</span>` : ""
         }</div>`,
     )
-    .join("");
+    .join(ITEM_SEPARATOR_HTML);
   return `<div class="pa-field-block">
     <div class="pa-field-block-title"><span class="pa-field-icon">${icon}</span>${title}</div>
     <div class="pa-kv-list">${items}</div>
