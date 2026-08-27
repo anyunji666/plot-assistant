@@ -113,16 +113,27 @@ export function findNearestAnchorFloor(chat, fromIdx, direction) {
 // 用同一套逻辑合并整个batch（合并时间跨度、取末尾地点、逐层列关键事件）和提取关键词（按"年/月"字面切分）。
 // Overview 的写法、字数上限（150字）直接对齐"对话前强调"里 Overview 字段的规则，不单独维护一套压缩规则。
 export function buildFloorRestoreInstruction() {
-  return `对话原文每层楼开头标注楼层号和说话者（如"[第12楼] AI："或"[第12楼] 用户："）。
-现在请你对归属于AI的楼层逐层还原缺失的摘要字段（Time/Location/Overview），不要续写故事，不要输出 <summary> 标签之外的任何文字。
+  return `对话原文每层楼开头标注楼层号和说话者（如"[第10楼] AI："或"[第11楼] 用户："）。
+现在请你分析归属于AI层的每楼正文原文，逐层提取摘要字段（Time/Location/Overview），不要续写故事，不要输出 <summary> 标签之外的任何文字。
 还原规则：
 - 目标楼层逐层单独输出，不合并多层、不跳过任何一层、不把一层拆成多组
 - Time: 该层故事场景结束时的时刻；精确到年月日+时分
 - Location: 该层场景最后所在地点
 - Overview: 按时间顺序列出关键事件+实际改变(关系/处境/认知)，平铺直叙不用比喻/形容词，写成一段话不换行；无实质进展留空，不超150字
-请严格按照下面的格式输出，每层楼一个区块，区块之间空一行：
+请严格按照下面的格式输出：所有目标楼层共用同一对 <summary></summary> 标签包裹，标签内每层楼一个区块，区块之间空一行，不要为每一层楼各自输出一对 <summary></summary>。
+例如目标楼层是第0、2、4楼时，应该输出（仅此一对标签，包裹全部三层）：
 <summary>
-[第{楼层号}楼]
+[第0楼]
+Time: {...}
+Location: {...}
+Overview: {...}
+
+[第2楼]
+Time: {...}
+Location: {...}
+Overview: {...}
+
+[第4楼]
 Time: {...}
 Location: {...}
 Overview: {...}
@@ -206,11 +217,17 @@ export function parseRestoredFloorFields(text) {
 
 
 // === Helper: 解析 <summary> 标签内容（供逐层还原调用方使用，输出的是裸 <summary>[第N楼]...</summary>，
-// 不带 <details> 外壳）===
+// 不带 <details> 外壳）。
+// 提示词已要求所有目标楼层共用同一对标签，但模型偶尔仍可能按层各自输出多对 <summary></summary>——
+// 这里用全局匹配把所有标签内容都提取出来并拼接，做兜底，避免只取到第一对标签导致后面楼层的还原结果被静默丢弃。===
 export function parseSummaryContent(text) {
   if (!text || typeof text !== "string") return null;
-  const match = text.match(/<summary>([\s\S]*?)<\/summary>/);
-  return match ? match[1].trim() : null;
+  const matches = [...text.matchAll(/<summary>([\s\S]*?)<\/summary>/g)];
+  if (matches.length === 0) return null;
+  return matches
+    .map((m) => m[1].trim())
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 
