@@ -48,7 +48,7 @@ const CARD_CLASS = "pa-summary-card";
 // 图标来源 freeicon.com（个人及商业用途免费使用）。===
 const PA_ICON_CALENDAR =
   '<svg class="pa-icon-calendar" viewBox="49 98.5 414 414" width="1em" height="1em" ' +
-  'style="vertical-align:-3px" aria-hidden="true" focusable="false">' +
+  'style="vertical-align:-2px" aria-hidden="true" focusable="false">' +
   '<path fill="#E4EBF8" d="M256,163.5c0,0-241.69,25-250,25c0,31.203,0,247.691,0,280c112.634,0,378.955,0,500,0' +
   'c0-17.657,0-268.197,0-280C495.261,188.5,256,163.5,256,163.5z"/>' +
   '<path fill="#FF3445" d="M6,98.5v90c23.067,0,476.97,0,500,0v-90C20.772,98.5,478.56,98.5,6,98.5z"/>' +
