@@ -71,8 +71,8 @@ export const DEFAULT_PRE_EMPHASIS_CONTENT = `## [MANDATORY] Summary Output Proto
 
 <details><summary>摘要</summary>
 (字段标签需保持英文，内容为中文)
-Time: \${本轮场景结束时刻，精确到年月日+时分；日期不明则自拟符合背景的纪年}
-Location: \${本轮场景最后所在地点}
+Time: \${本轮场景结束时{{user}}所在地点时刻，精确到年月日+时分；日期不明则自拟符合背景的纪年}
+Location: \${本轮场景{{user}}最后的所在地点}
 Relationships: \${{{user}}→角色: 关系词}
 Busy: \${仅当<snapshot_table>标签内Busy列表角色本轮未出现或拿“通讯器”回复消息时才输出，格式见下方Busy规则}
 ExpiredChapter: \${仅当前文含有<expired_chapter_instruction>规则，且判定该章节已完整演绎/过时时才输出，无该规则或未判定过时则忽略此字段}
@@ -110,7 +110,7 @@ for 角色 in 已注入的<snapshot_table>标签内Busy列表:
 
 ### **Snapshot Table**：
 
-<snapshot_table>标签包裹的是上文已注入的只读快照表，仅供查看当前状态、判断哪些条目需要在对应字段填[REMOVE]清除，具体判定规则见上方各字段说明。
+若上文有注入<snapshot_table>标签包裹的只读状态快照表，则需要判断哪些条目需要在摘要中的对应字段输出[REMOVE]清除过期条目，具体判定规则见上方各字段说明。
 
 ### **示例（仅供格式参考）：**
 
