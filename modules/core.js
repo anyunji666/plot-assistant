@@ -110,7 +110,7 @@ for 角色 in 已注入的<snapshot_table>标签内Busy列表:
 
 ### **Snapshot Table**：
 
-若上文有注入<snapshot_table>标签包裹的只读状态快照表，则需要判断哪些条目需要在摘要中的对应字段输出[REMOVE]清除过期条目，具体判定规则见上方各字段说明。
+若上文有注入<snapshot_table>标签包裹的只读状态快照表，则需要判断Relationships/Busy字段的哪些过期条目需要在摘要中输出[REMOVE]清除，具体判定规则见上方各字段说明。
 
 ### **示例（仅供格式参考）：**
 
