@@ -47,15 +47,11 @@ const CARD_CLASS = "pa-summary-card";
 // 画法不一致（尤其安卓 Noto Emoji 固定带数字"17"）的问题，保证任何平台都渲染同一张图。
 // 图标来源 freeicon.com（个人及商业用途免费使用）。===
 const PA_ICON_CALENDAR =
-  '<svg class="pa-icon-calendar" viewBox="0 98.5 512 413.5" width="1em" height="1em" ' +
-  'style="vertical-align:-2px" aria-hidden="true" focusable="false">' +
+  '<svg class="pa-icon-calendar" viewBox="49 98.5 414 414" width="1em" height="1em" ' +
+  'style="vertical-align:-3px" aria-hidden="true" focusable="false">' +
   '<path fill="#E4EBF8" d="M256,163.5c0,0-241.69,25-250,25c0,31.203,0,247.691,0,280c112.634,0,378.955,0,500,0' +
   'c0-17.657,0-268.197,0-280C495.261,188.5,256,163.5,256,163.5z"/>' +
   '<path fill="#FF3445" d="M6,98.5v90c23.067,0,476.97,0,500,0v-90C20.772,98.5,478.56,98.5,6,98.5z"/>' +
-  '<path fill="#C7D9FF" d="M56,343.5c2.761,0,5-2.238,5-5s-2.239-5-5-5H6v10H56z"/>' +
-  '<path fill="#C7D9FF" d="M86,373.5H6v10h80c2.761,0,5-2.238,5-5S88.761,373.5,86,373.5z"/>' +
-  '<path fill="#C7D9FF" d="M446,383.5c-2.761,0-5,2.238-5,5s2.239,5,5,5h60v-10H446z"/>' +
-  '<path fill="#C7D9FF" d="M476,423.5c-2.761,0-5,2.238-5,5s2.239,5,5,5h30v-10H476z"/>' +
   '<polygon fill="#B5E237" points="354.99,281.22 256,380.22 227.71,408.5 199.43,380.22 157,337.79 185.29,309.51 ' +
   '227.71,351.93 326.71,252.94"/>' +
   "</svg>";
