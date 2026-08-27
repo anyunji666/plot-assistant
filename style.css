@@ -2314,7 +2314,7 @@
 .pa-kv-item {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 3px;
   font-size: 12px;
 }
 
