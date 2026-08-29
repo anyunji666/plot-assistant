@@ -6,7 +6,7 @@ import { getSummaryProgress } from "./floor-restore.js";
 import { getOrCreateSummaryLorebook } from "../worldinfo.js";
 import { niFetchModelIds } from "./status-llm/api.js";
 import { DEFAULT_STATUS_LLM_PROMPT } from "./status-llm/prompts.js";
-import { RESERVED_FIELD_NAMES, deleteCustomField, getCustomFields, getCustomFieldsCharacterLabel, getStatusLlmSettings, saveCustomField, saveStatusLlmSettings } from "./status-llm/store.js";
+import { CUSTOM_FIELD_SCOPE_LABEL, CUSTOM_FIELD_VALUE_TYPE_LABEL, RESERVED_FIELD_NAMES, deleteCustomField, exportCustomFieldsText, getCustomFields, getCustomFieldsCharacterLabel, getStatusLlmSettings, importCustomFieldsText, saveCustomField, saveStatusLlmSettings } from "./status-llm/store.js";
 import { rebuildStatusTableFromChat } from "./status-table.js";
 
 
@@ -641,9 +641,6 @@ export function openHideFloorDialog() {
 // 弹窗只负责维护字段定义，不在这里发起AI调用。
 // =====================================================================================
 
-const CUSTOM_FIELD_VALUE_TYPE_LABEL = { numeric: "数值", text: "文本" };
-const CUSTOM_FIELD_SCOPE_LABEL = { character: "角色", global: "全局" };
-
 // === Function: 打开"附加字段"管理弹窗——常驻式（跟"隐藏楼层"同一套骨架），
 // 列表 + 增/改表单在同一弹窗内，操作后不关闭，方便连续维护多个字段 ===
 export function openCustomFieldsDialog() {
@@ -880,8 +877,28 @@ export function openCustomFieldsDialog() {
   const $addBtn = $("<button>").text("+ 新增字段").css({
     ...btnCss,
     background: "#3a9d5a",
-    alignSelf: "flex-start",
   });
+
+  // === 导入/导出 TXT（跟"+ 新增字段"同一行，紧挨在旁边）===
+  // 导出：当前角色卡下全部字段打包成一份 TXT；导入：解析同样格式的 TXT，同名字段覆盖更新。
+  const secondaryBtnCss = {
+    ...btnCss,
+    border: "1px solid #3a3a3a",
+    background: "transparent",
+    color: "#9db8e0",
+    fontWeight: "500",
+  };
+  const $exportBtn = $("<button>").text("导出").css(secondaryBtnCss);
+  const $importBtn = $("<button>").text("导入").css(secondaryBtnCss);
+  const $importFileInput = $('<input type="file" accept=".txt,text/plain">').css({
+    display: "none",
+  });
+  const $addBtnRow = $("<div>").css({
+    display: "flex",
+    gap: "8px",
+    flexWrap: "wrap",
+  });
+  $addBtnRow.append($addBtn, $exportBtn, $importBtn, $importFileInput);
 
   let editingFieldId = null; // null = 新增；否则是正在编辑的字段 id
 
@@ -981,7 +998,7 @@ export function openCustomFieldsDialog() {
   }
   renderList();
 
-  $box.append($titleRow, $desc, $charLabel, $listWrap, $addBtn, $formWrap);
+  $box.append($titleRow, $desc, $charLabel, $listWrap, $addBtnRow, $formWrap);
   $overlay.append($box);
   $("body").append($overlay);
 
@@ -1017,6 +1034,58 @@ export function openCustomFieldsDialog() {
   $addBtn.on("click", () => openForm(null));
   $formCancelBtn.on("click", () => closeForm());
 
+  $exportBtn.on(
+    "click",
+    errorCatched(() => {
+      const text = exportCustomFieldsText();
+      if (!text) {
+        notify("error", "当前还没有附加字段，无需导出。");
+        return;
+      }
+      const characterLabelForFile = getCustomFieldsCharacterLabel();
+      const safeName =
+        characterLabelForFile === "（未选中角色卡）" ? "未命名" : characterLabelForFile;
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `附加字段-${safeName}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+      notify("success", "附加字段已导出为文本文件。");
+    }),
+  );
+
+  $importBtn.on("click", () => $importFileInput.trigger("click"));
+
+  $importFileInput.on("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = errorCatched(async (ev) => {
+      const result = importCustomFieldsText(ev.target.result);
+      closeForm();
+      renderList();
+      await rebuildStatusTableFromChat();
+      const skippedNote =
+        result.skipped.length > 0
+          ? `，跳过 ${result.skipped.length} 个（${result.skipped
+              .map((s) => `${s.name}：${s.reason}`)
+              .join("；")}）`
+          : "";
+      notify(
+        "success",
+        `导入完成：新增 ${result.created} 个，覆盖 ${result.overwritten} 个${skippedNote}，状态表已同步更新`,
+      );
+    });
+    reader.onerror = () => {
+      notify("error", "读取文件失败，请重试。");
+    };
+    reader.readAsText(file, "utf-8");
+    // 清空 value，允许连续两次选同一个文件都能触发 change
+    $importFileInput.val("");
+  });
+
   $formSaveBtn.on(
     "click",
     errorCatched(async () => {
@@ -1049,7 +1118,7 @@ export function openCustomFieldsDialog() {
     }),
   );
 
-  [$addBtn, $formSaveBtn, $formCancelBtn].forEach(($btn) => {
+  [$addBtn, $exportBtn, $importBtn, $formSaveBtn, $formCancelBtn].forEach(($btn) => {
     $btn.hover(
       function () {
         $(this).css("opacity", 0.85);

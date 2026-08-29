@@ -69,6 +69,13 @@ export const RESERVED_FIELD_NAMES = new Set([
   "Overview",
 ]);
 
+// 取值方式/维度的中文标签，UI 展示和 TXT 导入导出共用同一份映射，避免两处各写一份互相漂移。
+export const CUSTOM_FIELD_VALUE_TYPE_LABEL = { numeric: "数值", text: "文本" };
+export const CUSTOM_FIELD_SCOPE_LABEL = { character: "角色", global: "全局" };
+// 上面两份的反向映射（中文标签 -> 内部值），导入解析时用。
+const CUSTOM_FIELD_VALUE_TYPE_BY_LABEL = { 数值: "numeric", 文本: "text" };
+const CUSTOM_FIELD_SCOPE_BY_LABEL = { 角色: "character", 全局: "global" };
+
 // 未选中角色卡/群聊时的内存兜底数据，仅当次会话有效，不写入 extension_settings。
 let transientCustomFields = null;
 
@@ -168,4 +175,110 @@ export function clearAllCustomFieldsAcrossCharacters() {
   settings.byCharacter = {};
   transientCustomFields = null;
   saveSettingsDebounced();
+}
+
+// =====================================================================================
+// === 附加字段 TXT 导入/导出（面板"附加字段"弹窗新增按钮） ===
+// 导出：当前角色卡下全部字段 -> 纯文本，每字段一块，块间空一行：
+//   [字段名]
+//   取值方式：数值/文本
+//   维度：角色/全局
+//   提取依据：单行说明
+// 导入：同名字段覆盖更新（保留原 id），新名字段新增；不合法的块（字段名为空/内置字段名/
+// 取值方式或维度不认识）直接跳过、不中断整体导入，最终把跳过明细一并返回给调用方展示。
+// =====================================================================================
+
+// === Function: 把当前角色卡下的全部附加字段序列化成导入导出用的纯文本 ===
+export function exportCustomFieldsText() {
+  const fields = getCustomFields();
+  return fields
+    .map((field) => {
+      const valueTypeLabel = CUSTOM_FIELD_VALUE_TYPE_LABEL[field.valueType] || field.valueType;
+      const scopeLabel = CUSTOM_FIELD_SCOPE_LABEL[field.scope] || field.scope;
+      return `[${field.name}]\n取值方式：${valueTypeLabel}\n维度：${scopeLabel}\n提取依据：${field.rule || ""}`;
+    })
+    .join("\n\n");
+}
+
+// === Helper: 解析导出格式的文本，按 "[字段名]" 起头切块 ===
+// 提取依据允许跨行书写（比如用户手动编辑文件时加了换行），解析时会折成"；"，
+// 跟面板手动保存时对 rule 的清洗规则保持一致，不会因为导入导出一趟就产生格式差异。
+function parseCustomFieldsExportText(text) {
+  const blockRe = /\[(.+?)\]\s*\r?\n取值方式[：:]\s*(.*?)\s*\r?\n维度[：:]\s*(.*?)\s*\r?\n提取依据[：:]\s*([\s\S]*?)(?=\r?\n\s*\r?\n\[|\r?\n\[|$)/g;
+  const blocks = [];
+  let match;
+  while ((match = blockRe.exec(text || "")) !== null) {
+    const [, rawName, rawValueType, rawScope, rawRule] = match;
+    blocks.push({
+      name: rawName.trim(),
+      valueTypeLabel: rawValueType.trim(),
+      scopeLabel: rawScope.trim(),
+      rule: rawRule.replace(/\s*\r?\n+\s*/g, "；").replace(/`/g, "'").trim(),
+    });
+  }
+  return blocks;
+}
+
+// === Function: 从导出格式的文本批量导入附加字段（写入当前角色卡） ===
+// 同名覆盖更新（沿用原 id，不改变已有引用），不同名新增；文件内部若有重复字段名，
+// 以后出现的为准。非法块（字段名空/内置字段名/取值方式或维度不认识）跳过并计入 skipped，
+// 不中断其余块的导入。全部处理完只调用一次 saveSettingsDebounced。
+export function importCustomFieldsText(text) {
+  const blocks = parseCustomFieldsExportText(text);
+  if (blocks.length === 0) {
+    throw new Error(
+      "未解析到任何字段，请检查格式：每个字段需以「[字段名]」另起一行开头。",
+    );
+  }
+
+  // 文件内部同名去重，后出现的覆盖先出现的（Map 保序，最后 values() 顺序=最后一次出现的位置）。
+  const dedupedByName = new Map();
+  const skipped = [];
+  for (const block of blocks) {
+    if (!block.name) {
+      skipped.push({ name: "(空)", reason: "字段名不能为空" });
+      continue;
+    }
+    if (RESERVED_FIELD_NAMES.has(block.name)) {
+      skipped.push({ name: block.name, reason: "是内置字段名" });
+      continue;
+    }
+    const valueType = CUSTOM_FIELD_VALUE_TYPE_BY_LABEL[block.valueTypeLabel];
+    if (!valueType) {
+      skipped.push({ name: block.name, reason: `取值方式"${block.valueTypeLabel}"无法识别` });
+      continue;
+    }
+    const scope = CUSTOM_FIELD_SCOPE_BY_LABEL[block.scopeLabel];
+    if (!scope) {
+      skipped.push({ name: block.name, reason: `维度"${block.scopeLabel}"无法识别` });
+      continue;
+    }
+    dedupedByName.set(block.name, { name: block.name, valueType, scope, rule: block.rule });
+  }
+
+  const list = getCustomFieldsListRef();
+  let created = 0;
+  let overwritten = 0;
+
+  for (const field of dedupedByName.values()) {
+    const existing = list.find((f) => f.name === field.name);
+    if (existing) {
+      existing.valueType = field.valueType;
+      existing.scope = field.scope;
+      existing.rule = field.rule;
+      overwritten++;
+    } else {
+      list.push({
+        id: `cf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        name: field.name,
+        valueType: field.valueType,
+        scope: field.scope,
+        rule: field.rule,
+      });
+      created++;
+    }
+  }
+
+  saveSettingsDebounced();
+  return { created, overwritten, skipped, total: blocks.length };
 }
