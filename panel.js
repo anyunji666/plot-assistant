@@ -208,14 +208,14 @@ export async function showSummaryPopup() {
         </div>
 
         <div style="margin-bottom: 20px;">
-          <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">摘要配置</p>
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button id="${POPUP_ID}-status-llm-config" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">API配置</button>
-              <button id="${POPUP_ID}-custom-fields" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">附加字段</button>
-              <button id="${POPUP_ID}-pre-emphasis" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">对话前强调</button>
-            </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;">
+            <p style="color: #72b1e8; font-weight: 500; margin: 0;">摘要配置</p>
             <button id="${POPUP_ID}-status-llm-reanalyze" title="开启后，每层AI消息渲染完会自动调用状态表LLM提取Inventory/Setups；关闭（默认）则不发送任何信息给状态表LLM" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button id="${POPUP_ID}-status-llm-config" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">API配置</button>
+            <button id="${POPUP_ID}-custom-fields" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">附加字段</button>
+            <button id="${POPUP_ID}-pre-emphasis" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">对话前强调</button>
           </div>
         </div>
 
