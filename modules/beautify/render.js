@@ -15,6 +15,7 @@ import {
 } from "../holiday/calc.js";
 import { getCustomHolidaysRawText } from "../holiday/settings.js";
 import { getLorebookEntriesArray, getOrCreateSummaryLorebook } from "../worldinfo.js";
+import { getCustomFields } from "../summary/status-llm/store.js";
 import { classifyRelationshipValue } from "./badges.js";
 
 // =====================================================================================
@@ -200,10 +201,15 @@ async function fetchStatusTableSnapshot() {
     if (!statusTableEntry) return null;
     const content = statusTableEntry.content;
     const busyLine = extractLabelLine(content, "Busy");
+    const custom = {};
+    getCustomFields().forEach((field) => {
+      custom[field.name] = extractLabelLine(content, field.name);
+    });
     return {
       relationships: extractLabelLine(content, "Relationships"),
       inventory: extractLabelLine(content, "Inventory"),
       setups: extractLabelLine(content, "Setups"),
+      custom, // { 附加字段名: 状态表当前值（角色维度是"角色A: 值；角色B: 值"，全局维度是单个值） }
       // 格式固定是 "角色A: 忙; 角色B: 忙"（见 status-table.js serializeStatusTableContent），只取角色名，值恒为"忙"不用管
       busyNames: busyLine
         ? splitKeyValuePairs(busyLine).map((p) => p.key).filter(Boolean)
@@ -263,6 +269,32 @@ function buildOverviewBlockHtml(overviewText) {
   </div>`;
 }
 
+// === Helper: 附加字段·全局维度——单值展示，样式对齐 Location 单行（图标+值），不带"角色名:"前缀 ===
+function buildCustomGlobalFieldHtml(icon, title, value) {
+  if (!value) return "";
+  return `<div class="pa-field-row">
+    <span class="pa-field-icon">${icon}</span>
+    <span class="pa-field-value">${escapeHtml(title)}：${escapeHtml(value)}</span>
+  </div>`;
+}
+
+// === Helper: 附加字段整体渲染——遍历已配置字段，按维度分流到对应样式，某个字段本轮/当前无值时该字段跳过不渲染。
+// icon 固定用⭐（附加字段是用户自定义的通用变量，不像 Inventory/Setups 有明确语义，不单独为每个字段做图标选择）。===
+function buildCustomFieldsHtml(customFields, customValues, scope) {
+  const CUSTOM_FIELD_ICON = "⭐";
+  return customFields
+    .filter((f) => f.scope === scope)
+    .map((f) => {
+      const value = customValues ? customValues[f.name] : "";
+      if (!value) return "";
+      return scope === "global"
+        ? buildCustomGlobalFieldHtml(CUSTOM_FIELD_ICON, f.name, value)
+        : buildKeyValueBlockHtml(CUSTOM_FIELD_ICON, f.name, value);
+    })
+    .filter(Boolean)
+    .join("");
+}
+
 // === 主函数：字段对象 → 完整卡片 HTML 字符串。
 // fields.relationships/inventory/setups：调用方按需传入——最新一层楼传状态表当前完整状态，
 // 其余楼层传该层原文自己的增量变化，本函数不关心来源，只负责渲染。
@@ -270,6 +302,7 @@ function buildOverviewBlockHtml(overviewText) {
 // 不来自 fields.busy——楼层原文里的 Busy 字段只会是正文AI写的 [REMOVE] 清除信号，没有展示价值。===
 export function buildSummaryCardHtml(fields, busyNames = []) {
   const parts = [];
+  const customFields = getCustomFields();
 
   if (fields.location) {
     parts.push(`<div class="pa-field-row">
@@ -278,8 +311,11 @@ export function buildSummaryCardHtml(fields, busyNames = []) {
     </div>`);
   }
 
+  parts.push(buildCustomFieldsHtml(customFields, fields.custom, "global"));
+
   if (fields.relationships) parts.push(buildRelationshipsRowsHtml(fields.relationships));
   if (fields.inventory) parts.push(buildKeyValueBlockHtml("🎒", "物品", fields.inventory, true));
+  parts.push(buildCustomFieldsHtml(customFields, fields.custom, "character"));
   if (fields.setups) parts.push(buildKeyValueBlockHtml("🧩", "伏笔", fields.setups));
 
   const busyHtml = buildBusyRowsHtml(busyNames);
@@ -345,6 +381,7 @@ function beautifyOneMessageEl(mesEl, lastAiIdx, snapshot) {
           relationships: snapshot.relationships,
           inventory: snapshot.inventory,
           setups: snapshot.setups,
+          custom: snapshot.custom,
         }
       : fields;
   const busyNames = isLatest && snapshot ? snapshot.busyNames : [];

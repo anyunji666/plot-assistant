@@ -20,7 +20,7 @@ import { PROMPT_TEMPLATE_SETTINGS_KEY, getPromptTemplateStageSyncEnabled, setPro
 import { openPromptTemplateFormatDialog } from "./modules/summary/prompt-template/ui.js";
 import { PHONE_FAB_POS_KEY, applyPhoneFabVisibility, openPhonePresetDialog, resetPhoneFabPos } from "./modules/phone/ui.js";
 import { ensureSummaryLorebookOnLoad, runAutoLargeSummary, runAutoSmallSummary, runSetOffset } from "./modules/summary/generator.js";
-import { openHideFloorDialog, openPreEmphasisDialog, openStatusLlmConfigDialog } from "./modules/summary/ui.js";
+import { openCustomFieldsDialog, openHideFloorDialog, openPreEmphasisDialog, openStatusLlmConfigDialog } from "./modules/summary/ui.js";
 import { getStatusLlmSettings } from "./modules/summary/status-llm/store.js";
 import { getLorebookEntriesSummaryHtml, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, mountSummaryLorebookGlobally, notifyWorldInfoUpdated } from "./modules/worldinfo.js";
 
@@ -207,6 +207,7 @@ export async function showSummaryPopup() {
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
               <button id="${POPUP_ID}-status-llm-config" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">API配置</button>
+              <button id="${POPUP_ID}-custom-fields" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">附加字段</button>
               <button id="${POPUP_ID}-pre-emphasis" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">对话前强调</button>
             </div>
             <button id="${POPUP_ID}-status-llm-reanalyze" title="开启后，每层AI消息渲染完会自动调用状态表LLM提取Inventory/Setups；关闭（默认）则不发送任何信息给状态表LLM" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
@@ -509,6 +510,20 @@ export async function showSummaryPopup() {
       .on("click", () => {
         closePopup();
         openStatusLlmConfigDialog();
+      })
+      .hover(
+        function () {
+          $(this).css("background", "#2c5d9e");
+        },
+        function () {
+          $(this).css("background", "#3a7bd5");
+        },
+      );
+
+    $(`#${POPUP_ID}-custom-fields`)
+      .on("click", () => {
+        closePopup();
+        openCustomFieldsDialog();
       })
       .hover(
         function () {

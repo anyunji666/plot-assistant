@@ -6,7 +6,8 @@ import { getSummaryProgress } from "./floor-restore.js";
 import { getOrCreateSummaryLorebook } from "../worldinfo.js";
 import { niFetchModelIds } from "./status-llm/api.js";
 import { DEFAULT_STATUS_LLM_PROMPT } from "./status-llm/prompts.js";
-import { getStatusLlmSettings, saveStatusLlmSettings } from "./status-llm/store.js";
+import { RESERVED_FIELD_NAMES, deleteCustomField, getCustomFields, getCustomFieldsCharacterLabel, getStatusLlmSettings, saveCustomField, saveStatusLlmSettings } from "./status-llm/store.js";
+import { rebuildStatusTableFromChat } from "./status-table.js";
 
 
 // === Helper: "生成中"提示框（居中弹窗，半透明遮罩+卡片，带加载动画） ===
@@ -620,6 +621,435 @@ export function openHideFloorDialog() {
   );
 
   [$hideBtn, $unhideBtn].forEach(($btn) => {
+    $btn.hover(
+      function () {
+        $(this).css("opacity", 0.85);
+      },
+      function () {
+        $(this).css("opacity", 1);
+      },
+    );
+  });
+}
+
+
+// =====================================================================================
+// === 附加字段管理弹窗（面板"附加字段"按钮） ===
+// 让使用者自己起字段名+写提取规则，新增/编辑/删除后立即触发一次状态表全量重放
+// （rebuildStatusTableFromChat），把最新的字段结构写回世界书"状态表"条目，不用等下一层楼才生效。
+// 提取本身仍走状态表LLM那一路 API 调用（跟 Inventory/Setups 共用同一次请求），
+// 弹窗只负责维护字段定义，不在这里发起AI调用。
+// =====================================================================================
+
+const CUSTOM_FIELD_VALUE_TYPE_LABEL = { numeric: "数值", text: "文本" };
+const CUSTOM_FIELD_SCOPE_LABEL = { character: "角色", global: "全局" };
+
+// === Function: 打开"附加字段"管理弹窗——常驻式（跟"隐藏楼层"同一套骨架），
+// 列表 + 增/改表单在同一弹窗内，操作后不关闭，方便连续维护多个字段 ===
+export function openCustomFieldsDialog() {
+  const $bodyEl = $("body");
+  const prevBodyOverflow = $bodyEl.css("overflow");
+  $bodyEl.css("overflow", "hidden");
+
+  const $overlay = $("<div>").css({
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: "rgba(0,0,0,0.72)",
+    zIndex: 99999,
+    boxSizing: "border-box",
+  });
+
+  const $box = $("<div>").css({
+    position: "fixed",
+    top: "12px",
+    left: "50%",
+    transform: "translateX(-50%)",
+    background: "#252525",
+    border: "1px solid #3a3a3a",
+    borderRadius: "10px",
+    padding: "clamp(16px, 4vw, 24px)",
+    width: "min(440px, calc(100% - 24px))",
+    maxHeight: "min(85vh, calc(100dvh - 24px))",
+    display: "flex",
+    flexDirection: "column",
+    gap: "14px",
+    color: "#e8e8e8",
+    fontFamily: "inherit",
+    boxSizing: "border-box",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.55)",
+    overflowY: "auto",
+    WebkitOverflowScrolling: "touch",
+  });
+
+  const $titleRow = $("<div>").css({
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  });
+  const $title = $("<div>").text("附加字段").css({
+    fontSize: "1.05em",
+    fontWeight: "600",
+    color: "#f0f0f0",
+    letterSpacing: "0.01em",
+  });
+  const $closeBtn = $("<button>").html("&times;").css({
+    background: "transparent",
+    border: "none",
+    color: "#aaa",
+    cursor: "pointer",
+    fontSize: "20px",
+    padding: "0",
+    margin: "0",
+    lineHeight: "1",
+    transition: "color 0.2s",
+  });
+  $titleRow.append($title, $closeBtn);
+
+  const $desc = $("<div>")
+    .text(
+      "自定义状态表LLM需要额外维护的变量，保存后会立即写入世界书「状态表」条目。数值型支持 +N/-N/=N 增减，文本型整条覆盖；角色维度按角色各存一份，全局维度不分角色只有一个值。",
+    )
+    .css({ fontSize: "0.8em", color: "#999", lineHeight: 1.5 });
+
+  const characterLabel = getCustomFieldsCharacterLabel();
+  const $charLabel = $("<div>")
+    .text(
+      characterLabel === "（未选中角色卡）"
+        ? "未选中角色卡：这里的改动不会保存，仅本次会话临时生效"
+        : "附加字段跟随角色卡存储，规则会自动拼接进状态表提示词末尾",
+    )
+    .css({
+      fontSize: "0.78em",
+      color: characterLabel === "（未选中角色卡）" ? "#d5a03a" : "#6a9dd0",
+      lineHeight: 1.4,
+    });
+
+  const inputCss = {
+    width: "100%",
+    boxSizing: "border-box",
+    padding: "8px 10px",
+    borderRadius: "6px",
+    border: "1px solid #3a3a3a",
+    background: "#ffffff",
+    color: "#000000",
+    fontSize: "max(0.95em, 16px)",
+    fontFamily: "inherit",
+    outline: "none",
+  };
+  const btnCss = {
+    padding: "6px 12px",
+    borderRadius: "6px",
+    boxSizing: "border-box",
+    border: "none",
+    cursor: "pointer",
+    fontSize: "0.82em",
+    fontWeight: "600",
+    color: "#fff",
+    touchAction: "manipulation",
+    whiteSpace: "nowrap",
+  };
+
+  // === 字段列表区 ===
+  const $listWrap = $("<div>").css({
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  });
+
+  // === 增/改 表单区（默认隐藏，点"新增字段"或某行"编辑"时展开） ===
+  const $formWrap = $("<div>").css({
+    display: "none",
+    flexDirection: "column",
+    gap: "10px",
+    borderTop: "1px solid #3a3a3a",
+    paddingTop: "12px",
+  });
+
+  const $formTitle = $("<div>").text("新增字段").css({
+    fontSize: "0.92em",
+    fontWeight: "600",
+    color: "#e0e0e0",
+  });
+
+  function buildFieldRow(labelText, $input) {
+    const $wrap = $("<div>").css({ display: "flex", flexDirection: "column", gap: "4px" });
+    $wrap.append($("<label>").text(labelText).css({ fontSize: "0.82em", color: "#999" }));
+    $wrap.append($input);
+    return $wrap;
+  }
+
+  function buildRadioGroup(name, options, defaultValue) {
+    const $group = $("<div>").css({ display: "flex", gap: "14px" });
+    options.forEach(([value, label]) => {
+      const $label = $("<label>").css({
+        display: "flex",
+        alignItems: "center",
+        gap: "5px",
+        fontSize: "0.88em",
+        color: "#c0c0c0",
+        cursor: "pointer",
+        userSelect: "none",
+      });
+      const $radio = $("<input>")
+        .attr({ type: "radio", name })
+        .prop("checked", value === defaultValue)
+        .val(value)
+        .css({ cursor: "pointer" });
+      $label.append($radio, $("<span>").text(label));
+      $group.append($label);
+    });
+    return $group;
+  }
+
+  const $nameInput = $('<input type="text" placeholder="如：好感度、天气">').css(inputCss);
+
+  const valueTypeGroupName = "custom-field-value-type";
+  const $valueTypeGroup = buildRadioGroup(
+    valueTypeGroupName,
+    [
+      ["numeric", "数值增减（+N/-N/=N）"],
+      ["text", "文本覆盖（整条替换）"],
+    ],
+    "numeric",
+  );
+
+  const scopeGroupName = "custom-field-scope";
+  const $scopeGroup = buildRadioGroup(
+    scopeGroupName,
+    [
+      ["character", "按角色（各角色各一份）"],
+      ["global", "全局（不分角色，只一份）"],
+    ],
+    "character",
+  );
+
+  // 提取依据说明的示例文案，按"取值方式×维度"四种组合各写一条，随单选切换动态展示——
+  // 因为四种组合下游拼出来的伪代码结构完全不同（数值型是+N/-N/=N增减，文本型是整条覆盖；
+  // 角色维度要分角色写，全局维度不用带角色名前缀），通用示例不够贴切，示例必须跟着当前选择走。
+  const RULE_EXAMPLES = {
+    "numeric|character": "根据本轮剧情描写的角色经历，调整角色的武力值，如境界突破/身负重伤算大幅变化(±200)，精神极佳/身体疲劳算小幅变化(±20)",
+    "numeric|global": "剧情中出现明显提升或损害团队名声的事件才记，如帮派铲除恶霸算+15，成员当众失礼算-10，日常互动不记",
+    "text|character": "本轮非{{user}}的角色心理想法是怎样的？代入角色视角用第一人称书写，不超过30字",
+    "text|global": "场景当前的天气是什么样的，如晴朗、多云、小雨、暴雨、台风天等，不超过6个字",
+  };
+
+  const $ruleExample = $("<div>").css({
+    fontSize: "0.76em",
+    color: "#888",
+    lineHeight: 1.4,
+  });
+
+  function updateRuleExample() {
+    const valueType = $valueTypeGroup.find("input:checked").val();
+    const scope = $scopeGroup.find("input:checked").val();
+    const example = RULE_EXAMPLES[`${valueType}|${scope}`] || "";
+    $ruleExample.text(
+      `格式要求：写成一句话，只说明触发条件和取值逻辑，不要换行、不要用反引号。参考：${example}`,
+    );
+  }
+  $valueTypeGroup.find("input").on("change", updateRuleExample);
+  $scopeGroup.find("input").on("change", updateRuleExample);
+  updateRuleExample();
+
+  const $ruleInput = $("<textarea>")
+    .attr({ rows: 3, placeholder: "提取依据说明，会拼进状态表LLM的提示词，指导AI怎么判断本轮该怎么变" })
+    .css({ ...inputCss, resize: "vertical", minHeight: "60px" });
+
+  const $formBtnRow = $("<div>").css({ display: "flex", gap: "10px", justifyContent: "flex-end" });
+  const $formCancelBtn = $("<button>").text("取消").css({
+    ...btnCss,
+    border: "1px solid #3a3a3a",
+    background: "transparent",
+    color: "#c0c0c0",
+  });
+  const $formSaveBtn = $("<button>").text("保存").css({ ...btnCss, background: "#5b9cf6" });
+  $formBtnRow.append($formCancelBtn, $formSaveBtn);
+
+  $formWrap.append(
+    $formTitle,
+    buildFieldRow("字段名", $nameInput),
+    buildFieldRow("取值方式", $valueTypeGroup),
+    buildFieldRow("维度", $scopeGroup),
+    buildFieldRow("提取依据说明", $("<div>").css({ display: "flex", flexDirection: "column", gap: "4px" }).append($ruleInput, $ruleExample)),
+    $formBtnRow,
+  );
+
+  const $addBtn = $("<button>").text("+ 新增字段").css({
+    ...btnCss,
+    background: "#3a9d5a",
+    alignSelf: "flex-start",
+  });
+
+  let editingFieldId = null; // null = 新增；否则是正在编辑的字段 id
+
+  function openForm(field) {
+    editingFieldId = field ? field.id : null;
+    $formTitle.text(field ? "编辑字段" : "新增字段");
+    $nameInput.val(field ? field.name : "");
+    $valueTypeGroup
+      .find("input")
+      .each(function () {
+        $(this).prop("checked", $(this).val() === (field ? field.valueType : "numeric"));
+      });
+    $scopeGroup
+      .find("input")
+      .each(function () {
+        $(this).prop("checked", $(this).val() === (field ? field.scope : "character"));
+      });
+    $ruleInput.val(field ? field.rule || "" : "");
+    updateRuleExample();
+    $formWrap.css("display", "flex");
+    setTimeout(() => $nameInput.trigger("focus"), 50);
+  }
+
+  function closeForm() {
+    editingFieldId = null;
+    $formWrap.css("display", "none");
+  }
+
+  // === 渲染字段列表 ===
+  function renderList() {
+    $listWrap.empty();
+    const fields = getCustomFields();
+    if (fields.length === 0) {
+      $listWrap.append(
+        $("<div>").text("暂无附加字段").css({ fontSize: "0.85em", color: "#777" }),
+      );
+      return;
+    }
+    fields.forEach((field) => {
+      const $row = $("<div>").css({
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "8px",
+        background: "#2f2f2f",
+        borderRadius: "6px",
+        padding: "8px 10px",
+      });
+      const $info = $("<div>").css({ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 });
+      $info.append(
+        $("<div>").text(field.name).css({
+          fontSize: "0.92em",
+          color: "#f0f0f0",
+          fontWeight: "600",
+          wordBreak: "break-all",
+        }),
+      );
+      $info.append(
+        $("<div>")
+          .text(
+            `${CUSTOM_FIELD_VALUE_TYPE_LABEL[field.valueType] || field.valueType} · ${CUSTOM_FIELD_SCOPE_LABEL[field.scope] || field.scope}`,
+          )
+          .css({ fontSize: "0.76em", color: "#999" }),
+      );
+      const $actions = $("<div>").css({ display: "flex", gap: "6px", flexShrink: 0 });
+      const $editBtn = $("<button>").text("编辑").css({
+        ...btnCss,
+        padding: "4px 10px",
+        fontSize: "0.78em",
+        background: "#3a3a3a",
+      });
+      const $delBtn = $("<button>").text("删除").css({
+        ...btnCss,
+        padding: "4px 10px",
+        fontSize: "0.78em",
+        background: "#8a3a3a",
+      });
+      $editBtn.on("click", () => openForm(field));
+      $delBtn.on(
+        "click",
+        errorCatched(async () => {
+          const proceed = await confirmAction(
+            "删除附加字段",
+            `确定删除字段「${field.name}」吗？状态表里该字段的已有数据会在下次重新计算时被移除。`,
+          );
+          if (!proceed) return;
+          deleteCustomField(field.id);
+          renderList();
+          await rebuildStatusTableFromChat();
+          notify("success", `已删除字段「${field.name}」，状态表已同步更新`);
+        }),
+      );
+      $actions.append($editBtn, $delBtn);
+      $row.append($info, $actions);
+      $listWrap.append($row);
+    });
+  }
+  renderList();
+
+  $box.append($titleRow, $desc, $charLabel, $listWrap, $addBtn, $formWrap);
+  $overlay.append($box);
+  $("body").append($overlay);
+
+  const close = () => {
+    $(document).off("keydown.customFieldsDialog");
+    $overlay.remove();
+    $bodyEl.css("overflow", prevBodyOverflow || "");
+  };
+
+  $closeBtn
+    .on("click", () => close())
+    .hover(
+      function () {
+        $(this).css("color", "#fff");
+      },
+      function () {
+        $(this).css("color", "#aaa");
+      },
+    );
+
+  let overlayPointerDownOnSelf = false;
+  $overlay.on("mousedown touchstart", (e) => {
+    overlayPointerDownOnSelf = $(e.target).is($overlay);
+  });
+  $overlay.on("mouseup touchend", (e) => {
+    if (overlayPointerDownOnSelf && $(e.target).is($overlay)) close();
+    overlayPointerDownOnSelf = false;
+  });
+  $(document).on("keydown.customFieldsDialog", (e) => {
+    if (e.key === "Escape") close();
+  });
+
+  $addBtn.on("click", () => openForm(null));
+  $formCancelBtn.on("click", () => closeForm());
+
+  $formSaveBtn.on(
+    "click",
+    errorCatched(async () => {
+      const name = $nameInput.val().trim();
+      if (!name) {
+        notify("error", "字段名不能为空");
+        return;
+      }
+      if (RESERVED_FIELD_NAMES.has(name)) {
+        notify("error", `"${name}" 是内置字段名，不能使用`);
+        return;
+      }
+      const valueType = $valueTypeGroup.find("input:checked").val();
+      const scope = $scopeGroup.find("input:checked").val();
+      // 防呆：提取依据最终会拼成代码块里的单行注释（# 提取依据：xxx），
+      // 换行会让后半截内容跑出注释范围、混进代码块里；反引号会跟包裹代码块的 ``` 冲突。
+      // 这里静默清理，不用为了这种排版问题单独弹窗打断用户保存。
+      const rule = $ruleInput.val().replace(/\s*\n+\s*/g, "；").replace(/`/g, "'").trim();
+
+      try {
+        saveCustomField({ id: editingFieldId, name, valueType, scope, rule });
+      } catch (error) {
+        notify("error", error.message || String(error));
+        return;
+      }
+      closeForm();
+      renderList();
+      await rebuildStatusTableFromChat();
+      notify("success", `字段「${name}」已保存，状态表已同步更新`);
+    }),
+  );
+
+  [$addBtn, $formSaveBtn, $formCancelBtn].forEach(($btn) => {
     $btn.hover(
       function () {
         $(this).css("opacity", 0.85);

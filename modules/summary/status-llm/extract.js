@@ -13,8 +13,8 @@ import { getLorebookEntriesArray, getOrCreateSummaryLorebook } from "../../world
 import { commitPendingInventoryChanges, getPhoneChatState, peekPendingInventoryChangeSegments } from "../../phone/store.js";
 import { buildPhoneLetterContentForStatusLlm } from "../../phone/generator.js";
 import { callStatusLlm } from "./api.js";
-import { DEFAULT_STATUS_LLM_PROMPT } from "./prompts.js";
-import { getStatusLlmSettings } from "./store.js";
+import { buildStatusLlmSystemPrompt } from "./prompts.js";
+import { getCustomFields, getStatusLlmSettings } from "./store.js";
 import { extractLabelLine } from "../floor-restore.js";
 
 // =====================================================================================
@@ -33,10 +33,19 @@ function hasInventoryLabel(mesText) {
 }
 
 
-// === Helper: 把状态表LLM返回的 Inventory/Setups 两行结果拼进这一层摘要块正文里
+// === Helper: 把状态表LLM返回的 Inventory/Setups（以及已配置的附加字段）结果拼进这一层摘要块正文里
 // （插在 Relationships 行之后——必须早于 Overview 行，否则会被 Overview 的贪婪正则一起吞掉）===
-export function spliceExtractedFieldsIntoMes(mesText, inventoryText, setupsText) {
-  const insertion = `Inventory: ${inventoryText || ""}\nSetups: ${setupsText || ""}\n`;
+// customFieldTexts: { 字段名: 提取到的本轮变化文本 }，来自面板"附加字段"里配置的定义，可为空对象。
+export function spliceExtractedFieldsIntoMes(
+  mesText,
+  inventoryText,
+  setupsText,
+  customFieldTexts = {},
+) {
+  const customLines = Object.entries(customFieldTexts)
+    .map(([name, value]) => `${name}: ${value || ""}\n`)
+    .join("");
+  const insertion = `Inventory: ${inventoryText || ""}\nSetups: ${setupsText || ""}\n${customLines}`;
   const relRe = /(Relationships\s*[:：][^\n]*\n)/;
   if (relRe.test(mesText)) {
     return mesText.replace(relRe, (m) => `${m}${insertion}`);
@@ -163,16 +172,20 @@ export async function extractInventorySetupsForLatestFloor() {
     // 不影响下面背包页手动改动的合并——两者来源独立，不该互相拖累。
     let inventoryText = "";
     let setupsText = "";
+    let customFieldTexts = {};
     // 面板"再分析"开关默认关闭：关闭时完全不调用状态表LLM（不发请求、不产生token消耗），
-    // Inventory/Setups 的AI提取部分保持为空，跟下面调用失败时的兜底行为一致，
+    // Inventory/Setups/附加字段的AI提取部分保持为空，跟下面调用失败时的兜底行为一致，
     // 不影响背包页手动改动的合并——两者走的是独立分支。
     if (getStatusLlmSettings().reanalyzeEnabled) {
       try {
         const lorebookName = await getOrCreateSummaryLorebook();
         const snapshotText = await getStatusTableSnapshotText(lorebookName);
         const settings = getStatusLlmSettings();
-        const systemPrompt =
-          settings.customPrompt?.trim() || DEFAULT_STATUS_LLM_PROMPT;
+        const customFields = getCustomFields();
+        const systemPrompt = buildStatusLlmSystemPrompt(
+          settings.customPrompt,
+          customFields,
+        );
 
         let letterContent = "";
         try {
@@ -191,9 +204,12 @@ export async function extractInventorySetupsForLatestFloor() {
 
         inventoryText = extractLabelLine(rawResult, "Inventory");
         setupsText = extractLabelLine(rawResult, "Setups");
+        customFields.forEach((field) => {
+          customFieldTexts[field.name] = extractLabelLine(rawResult, field.name);
+        });
       } catch (error) {
         console.error(
-          "[剧情助手] 状态表LLM调用失败，本层Inventory/Setups的AI提取部分已跳过（很多情况是模型截断，可在「状态表配置」弹窗调整提示词后重试）:",
+          "[剧情助手] 状态表LLM调用失败，本层Inventory/Setups/附加字段的AI提取部分已跳过（很多情况是模型截断，可在「状态表配置」弹窗调整提示词后重试）:",
           error,
         );
       }
@@ -216,12 +232,16 @@ export async function extractInventorySetupsForLatestFloor() {
       .filter(Boolean)
       .join("；");
 
-    if (!combinedInventoryText && !setupsText) return; // 两项都没有变化，不用改这一层正文
+    const hasAnyCustomFieldValue = Object.values(customFieldTexts).some(
+      (v) => v && v.trim(),
+    );
+    if (!combinedInventoryText && !setupsText && !hasAnyCustomFieldValue) return; // 都没有变化，不用改这一层正文
 
     const newMes = spliceExtractedFieldsIntoMes(
       mes,
       combinedInventoryText,
       setupsText,
+      customFieldTexts,
     );
     if (newMes === mes) return; // 拼装失败（没找到可插入的位置），跳过——pending未被清空，下次还有机会重试
 

@@ -6,6 +6,7 @@ import { getPhoneChatState } from "../phone/store.js";
 import { getPromptTemplateStageSyncEnabled } from "./prompt-template/settings.js";
 import { getOrCreateSummaryLorebook, saveOrOverwriteLorebookEntry } from "../worldinfo.js";
 import { extractLabelLine } from "./floor-restore.js";
+import { getCustomFields } from "./status-llm/store.js";
 
 // =====================================================================================
 // === 摘要模块解析 & 结构化数据表（状态表）===
@@ -32,6 +33,13 @@ export function parseFloorSummaryFields(mesText) {
 
   const overviewMatch = inner.match(/Overview\s*[:：]\s*([\s\S]*)$/);
 
+  // 附加字段（面板"附加字段"里配置的自定义变量）：按当前已配置的字段名逐个提取，
+  // 未配置任何附加字段时 custom 为空对象，不影响原有解析结果。
+  const custom = {};
+  getCustomFields().forEach((field) => {
+    custom[field.name] = extractLabelLine(inner, field.name);
+  });
+
   return {
     time: extractLabelLine(inner, "Time"),
     location: extractLabelLine(inner, "Location"),
@@ -41,6 +49,7 @@ export function parseFloorSummaryFields(mesText) {
     busy: extractLabelLine(inner, "Busy"), // 仅供手机私信插件读取"角色: [REMOVE]"信号，不参与状态表 Relationships/Inventory/Setups 的常规合并
     expiredChapter: extractLabelLine(inner, "ExpiredChapter"), // 仅供剧情录入模块读取"章节名已演绎完"信号，同样不参与状态表合并
     overview: overviewMatch ? overviewMatch[1].trim() : "",
+    custom, // { 附加字段名: 本轮变化文本 }
   };
 }
 
@@ -509,6 +518,57 @@ export function extractOtherPartyName(relationshipKey) {
 }
 
 
+// === Helper: 全局标量型附加字段（scope=global）的合并——不像 Inventory/Setups 那样是 key:value 列表，
+// 整个字段只有一个值，rawValue 本身就是内容，[REMOVE] 表示清空，其余按 valueType 决定数值增减还是整条覆盖。
+// warnings/fieldLabel 可选，用于收集格式问题提示；返回值为合并后的新值（当前值原样返回代表本轮不变）。===
+export function mergeGlobalScalarValue(currentValue, rawValue, valueType, warnings, fieldLabel) {
+  const trimmed = (rawValue || "").trim();
+  if (!trimmed) return currentValue; // 无变化
+
+  if (isRemoveMarker(trimmed)) return ""; // 清空该字段
+
+  if (looksLikeAttemptedRemove(trimmed)) {
+    if (warnings) {
+      warnings.push(
+        `${fieldLabel || ""} 的值 "${trimmed}" 疑似想写删除标记但格式不对（应为 [REMOVE]），已跳过，未做任何修改`,
+      );
+    }
+    return currentValue;
+  }
+
+  if (valueType !== "numeric") return trimmed; // 文本型：整条覆盖
+
+  const normalized = normalizeNumericToken(trimmed);
+  const deltaMatch = normalized.match(NUMERIC_DELTA_PATTERN);
+  const hardsetMatch = normalized.match(NUMERIC_HARDSET_PATTERN);
+
+  if (deltaMatch) {
+    const sign = deltaMatch[1] === "-" ? -1 : 1;
+    const delta = sign * parseFloat(deltaMatch[2]);
+    const oldValue = parseFloat(currentValue);
+    const base = Number.isFinite(oldValue) ? oldValue : 0;
+    return formatNumericValue(base + delta);
+  }
+  if (hardsetMatch) {
+    return formatNumericValue(parseFloat(hardsetMatch[1]));
+  }
+  if (looksLikeAttemptedNumericButMalformed(trimmed)) {
+    if (warnings) {
+      warnings.push(
+        `${fieldLabel || ""} 的值 "${trimmed}" 疑似想写数值(=N/+N/-N)但格式或用法不对，已跳过，未做任何修改`,
+      );
+    }
+    return currentValue;
+  }
+  if (warnings) {
+    warnings.push(
+      `${fieldLabel || ""} 的值 "${trimmed}" 不是合法的 +N/-N/=N 数值格式，已按普通文字整体覆盖，请检查该字段是否被写错`,
+    );
+  }
+  return trimmed;
+}
+
+
 // === Helper: 把状态表结构化对象序列化回世界书条目文本 ===
 // busyMap 为可选参数：手机私信插件维护的"当前忙碌角色"表（{角色名: true, ...}），
 // 不来自聊天记录全量重放（跟 Relationships/Inventory/Setups 不同源），只在序列化这一步拼进状态表末尾，
@@ -520,6 +580,17 @@ export function serializeStatusTableContent(state, busyMap) {
     `Inventory: ${serializeKeyValueList(state.inventory)}`,
     `Setups: ${serializeKeyValueList(state.setups)}`,
   ];
+  // 附加字段（面板"附加字段"配置）：角色维度的按 key:value 列表序列化，全局维度的直接写值（空值跳过不写）。
+  if (state.customChar) {
+    Object.entries(state.customChar).forEach(([fieldName, map]) => {
+      lines.push(`${fieldName}: ${serializeKeyValueList(map)}`);
+    });
+  }
+  if (state.customGlobal) {
+    Object.entries(state.customGlobal).forEach(([fieldName, value]) => {
+      if (value) lines.push(`${fieldName}: ${value}`);
+    });
+  }
   const busyNames = busyMap
     ? Object.keys(busyMap).filter((name) => busyMap[name])
     : [];
@@ -612,6 +683,48 @@ export function mergeFloorIntoStatusTable(state, floorFields, warnings, removedO
   );
   applyMapUpdates(state.setups, setupsParsed.map, warnings, "Setups");
 
+  // 附加字段合并：character 维度按"角色名: 值"key:value 列表合并（复用 applyNumericMapUpdates/applyMapUpdates，
+  // key 直接是角色名，不带"·"分隔符——每个角色在该字段下只有一份值，不像 Inventory 那样按物品名再细分）；
+  // global 维度整个字段只有一个值，走 mergeGlobalScalarValue。
+  if (!state.customChar) state.customChar = {};
+  if (!state.customGlobal) state.customGlobal = {};
+  getCustomFields().forEach((field) => {
+    const rawText = normalizeSelfNameToLiteral(
+      floorFields.custom ? floorFields.custom[field.name] : "",
+    );
+    if (field.scope === "character") {
+      if (!state.customChar[field.name]) state.customChar[field.name] = new Map();
+      const parsed = parseKeyValueListWithSkipped(rawText);
+      if (warnings) {
+        parsed.skipped.forEach((fragment) =>
+          warnings.push(
+            `${field.name} 中的片段 "${fragment}" 无法解析出 key:value 结构，已跳过`,
+          ),
+        );
+        parsed.corrected.forEach((msg) => warnings.push(`${field.name}：${msg}`));
+      }
+      if (field.valueType === "numeric") {
+        applyNumericMapUpdates(
+          state.customChar[field.name],
+          parsed.map,
+          warnings,
+          field.name,
+          false,
+        );
+      } else {
+        applyMapUpdates(state.customChar[field.name], parsed.map, warnings, field.name);
+      }
+    } else {
+      state.customGlobal[field.name] = mergeGlobalScalarValue(
+        state.customGlobal[field.name],
+        rawText,
+        field.valueType,
+        warnings,
+        field.name,
+      );
+    }
+  });
+
   removedCharacters.forEach((name) => {
     const prefix = `${name}·`;
     Array.from(state.inventory.keys()).forEach((key) => {
@@ -619,6 +732,10 @@ export function mergeFloorIntoStatusTable(state, floorFields, warnings, removedO
     });
     Array.from(state.setups.keys()).forEach((key) => {
       if (key.startsWith(prefix)) state.setups.delete(key);
+    });
+    // 角色维度的附加字段也联动清理：key 就是角色名本身，精确匹配删除（不是前缀匹配）。
+    Object.values(state.customChar).forEach((map) => {
+      map.delete(name);
     });
   });
 
@@ -644,7 +761,15 @@ export async function rebuildStatusTableFromChat() {
     relationships: new Map(),
     inventory: new Map(),
     setups: new Map(),
+    customChar: {},
+    customGlobal: {},
   };
+  // 按当前已配置的附加字段预先建好容器，即便本次重放没有任何楼层触发该字段，
+  // 序列化时也能看到"字段存在但为空"的一致结构（global 维度是空字符串，不会写进世界书条目）。
+  getCustomFields().forEach((field) => {
+    if (field.scope === "character") state.customChar[field.name] = new Map();
+    else state.customGlobal[field.name] = "";
+  });
   const newIssues = []; // 本次重放中新出现（之前没提示过）的问题，收集齐后一次性提示
   const everRemovedCharacters = []; // 整段重放期间，所有被 Relationships [REMOVE]（死亡/永久离场）过的角色名
 

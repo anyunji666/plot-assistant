@@ -416,9 +416,19 @@ export function createSummaryApiClient({
             );
         }
 
+        // 自定义反代路径直接把 messages 转发给酒馆后端的 chat-completions 接口，不经过
+        // context.generateRaw，因此不会像"跟随酒馆连接"那样自动做 {{user}}/{{char}} 等宏替换。
+        // 这里手动补一次 substituteParams，让两条路径下调用方写在 systemPrompt/userContent
+        // 里的宏保持一致的替换行为，调用方（比如状态表LLM的"附加字段"规则说明）不用关心
+        // 当前走的是哪条连接路径。
+        const substituteParams = getCtx().substituteParams;
+        const substitutedMessages = typeof substituteParams === 'function'
+            ? messages.map((m) => ({ ...m, content: substituteParams(m.content ?? '') }))
+            : messages;
+
         const body = {
             chat_completion_source: 'openai',
-            messages,
+            messages: substitutedMessages,
             model: cfg.model,
             max_tokens: 8000,
             temperature: 0.3,

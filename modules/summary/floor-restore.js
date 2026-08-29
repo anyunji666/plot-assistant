@@ -182,7 +182,10 @@ export function buildFloorRestoreUserContent(
 // 避免各自维护一份同样的正则、慢慢跑偏。找不到该标签时返回空字符串，不报错。===
 export function extractLabelLine(text, label) {
   if (!text || typeof text !== "string") return "";
-  const re = new RegExp(`^[ \\t]*${label}[ \\t]*[:：][ \\t]*(.*)$`, "m");
+  // label 转义：内置标签固定是安全的英文单词，转义对其无影响；附加字段允许用户自由命名，
+  // 万一名字里出现正则特殊字符（如 . * + ? ( ) [ ] 等），不转义会导致匹配出错甚至抛异常。
+  const escapedLabel = String(label).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`^[ \\t]*${escapedLabel}[ \\t]*[:：][ \\t]*(.*)$`, "m");
   const m = text.match(re);
   return m ? m[1].trim() : "";
 }
