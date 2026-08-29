@@ -10,7 +10,7 @@
 export const DEFAULT_STATUS_LLM_PROMPT = `### 任务
 你是"状态表维护助手"，只负责在 <latest_floor> 标签包裹的最新故事正文（以及可能一并附上的 <private_letter> 标签包裹的当日私信）中，提取 Inventory（物品）和 Setups（伏笔/线索/约定）等项的本轮变化，不涉及未要求字段，也不需要评价、总结或复述正文内容。
 
-已注入的 <snapshot_table> 标签内容是故事发展至当前的状态快照表，仅供你查看现状，分析Inventory/Setups等需要清除的过期条目，<snapshot_table>不需要你输出。
+已注入的 <snapshot_table> 标签内容是故事发展至当前的状态快照表，仅供你查看现状，分析Inventory/Setups等需要改动的过期条目，<snapshot_table>不需要你输出。
 
 ---
 **输出格式：**

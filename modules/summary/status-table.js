@@ -573,9 +573,14 @@ export function mergeGlobalScalarValue(currentValue, rawValue, valueType, warnin
 // busyMap 为可选参数：手机私信插件维护的"当前忙碌角色"表（{角色名: true, ...}），
 // 不来自聊天记录全量重放（跟 Relationships/Inventory/Setups 不同源），只在序列化这一步拼进状态表末尾，
 // 让正文 AI 每轮都能看到"谁正忙"，从而在这些角色不再登场时输出 Busy: 角色名: [REMOVE] 清除标记。
+// <snapshot_table> 开头固定拼一条总纲提醒（不受 Setups/Busy 是否为空影响，每次都输出）：
+// 告知剧情LLM这是"上一轮"的快照数据、仅供参考，不是本轮剧情必须遵照或复述的脚本，也不需要输出这个标签本身——
+// 跟下面两条只在 Setups/Busy 非空时才附加的"字段专属提醒"是不同用途，这条是给"怎么理解这份数据"用的，
+// 那两条是给"AI写摘要块时该怎么判断过期"用的。这条写死在代码里、不随"对话前强调"世界书条目被自定义改写而丢失。
 export function serializeStatusTableContent(state, busyMap) {
   const lines = [
     "<snapshot_table>",
+    "（提醒：该表内容是故事历程的总结快照，为故事上一轮的数据，仅供参考，不要在回复中输出该表）",
     `Relationships: ${serializeKeyValueList(state.relationships)}`,
     `Inventory: ${serializeKeyValueList(state.inventory)}`,
     `Setups: ${serializeKeyValueList(state.setups)}`,
