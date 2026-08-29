@@ -21,7 +21,7 @@ import { openPromptTemplateFormatDialog } from "./modules/summary/prompt-templat
 import { PHONE_FAB_POS_KEY, applyPhoneFabVisibility, openPhonePresetDialog, resetPhoneFabPos } from "./modules/phone/ui.js";
 import { ensureSummaryLorebookOnLoad, runAutoLargeSummary, runAutoSmallSummary, runSetOffset } from "./modules/summary/generator.js";
 import { openCustomFieldsDialog, openHideFloorDialog, openPreEmphasisDialog, openStatusLlmConfigDialog } from "./modules/summary/ui.js";
-import { getStatusLlmSettings } from "./modules/summary/status-llm/store.js";
+import { clearAllCustomFieldsAcrossCharacters, getStatusLlmSettings } from "./modules/summary/status-llm/store.js";
 import { getLorebookEntriesSummaryHtml, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, mountSummaryLorebookGlobally, notifyWorldInfoUpdated } from "./modules/worldinfo.js";
 
 
@@ -92,7 +92,9 @@ export function deleteIndexedDatabase(name) {
 // 小说摘要提取这块只重置导航栏显隐/流式/超时/限速/分段大小这些行为设置，
 // API 地址/Key/模型/自定义提示词保留不清——提示词想恢复默认，去"摘要提示词（可自定义）"
 // 弹窗里点"恢复默认"按钮即可）、
-// 以及所有对话的起始楼层记录和私信忙闲缓存（本地存储，一份 localStorage 覆盖所有对话，一次性清空）。
+// 以及所有对话的起始楼层记录和私信忙闲缓存（本地存储，一份 localStorage 覆盖所有对话，一次性清空）、
+// 以及所有角色卡绑定的"附加字段"定义（状态表LLM按角色卡分别存储的自定义字段，一并全部清空，
+// 不只是当前选中的这一个角色卡；API 地址/Key/模型/自定义提示词仍然保留不清）。
 // 不包含：总结功能生成的世界书条目（用户自己在世界书里删）。
 export async function clearAllPluginLocalData() {
   // 小说摘要模块的连接是长期缓存的（用过一次就不会自动断开），
@@ -132,6 +134,9 @@ export async function clearAllPluginLocalData() {
     // 只还原面板"再分析开/关"这一个开关状态（还原成当前默认值 true），避免清空数据时连带清掉用户填好的状态表 API 配置。
     getStatusLlmSettings().reanalyzeEnabled = true;
     saveSettingsDebounced();
+    // 附加字段定义按角色卡分别存储（byCharacter），跟连接配置是两码事，属于"剧情内容相关的本地缓存"，
+    // "清空数据"要覆盖所有角色卡一并清掉，不只是当前选中的这一个。
+    clearAllCustomFieldsAcrossCharacters();
   } catch (error) {
     console.error("[剧情助手] 重置插件配置失败:", error);
   }

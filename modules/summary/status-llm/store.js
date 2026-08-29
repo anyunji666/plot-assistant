@@ -157,3 +157,15 @@ export function deleteCustomField(id) {
   saveSettingsDebounced();
   return list;
 }
+
+// === Function: 控制面板"清空数据"专用——清空所有角色卡绑定的附加字段定义 ===
+// 附加字段跟着角色卡走（byCharacter），不属于全局连接配置（apiUrl/apiKey/model/customPrompt），
+// 但内容上属于"剧情内容相关的本地缓存"，"清空数据"按钮应当一并清掉，覆盖所有角色卡，
+// 而不只是当前选中的这一个；同时把未选中角色卡时的内存兜底数组也一并重置，避免清空后
+// 立刻又在没选角色卡的场景下看到清空前残留的临时数据。
+export function clearAllCustomFieldsAcrossCharacters() {
+  const settings = getStatusLlmSettings();
+  settings.byCharacter = {};
+  transientCustomFields = null;
+  saveSettingsDebounced();
+}

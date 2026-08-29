@@ -804,7 +804,7 @@ export function openCustomFieldsDialog() {
     return $group;
   }
 
-  const $nameInput = $('<input type="text" placeholder="如：好感度、天气">').css(inputCss);
+  const $nameInput = $('<input type="text" placeholder="如：武力值、青云宗声望值、内心想法、天气状况">').css(inputCss);
 
   const valueTypeGroupName = "custom-field-value-type";
   const $valueTypeGroup = buildRadioGroup(
