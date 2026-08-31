@@ -208,7 +208,7 @@ export async function extractInventorySetupsForLatestFloor() {
           saveStatusLlmSettings();
         }
         const metaInstructionBlock = metaInstructionText
-          ? `\n\n<metainstruction>是用户的元指令，除遵照上述要求外，还需根据用户的指令修改相应内容，输出格式要遵循上述规范。\n<metainstruction>\n${metaInstructionText}\n</metainstruction>`
+          ? `\n\n另外，用户还有一条本轮追加的修改指令，请一并按此输出对应字段变化，格式仍需遵循上文规范：\n${metaInstructionText}`
           : "";
 
         const userContent = `${snapshotText ? `${snapshotText}\n\n` : ""}${letterContent ? `${letterContent}\n\n` : ""}<latest_floor>\n${mes}\n</latest_floor>${metaInstructionBlock}`;
