@@ -16,6 +16,7 @@ import { callStatusLlm } from "./api.js";
 import { buildStatusLlmSystemPrompt } from "./prompts.js";
 import { getCustomFields, getStatusLlmSettings } from "./store.js";
 import { extractLabelLine } from "../floor-restore.js";
+import { rerenderLatestSummaryCard } from "../../beautify/render.js";
 
 // =====================================================================================
 // === 状态表LLM：独立提取 Inventory / Setups ===
@@ -294,7 +295,12 @@ export function registerStatusTableAutoUpdate() {
         // 提取内部静默失败不抛出，这里始终固定接一次全量重放，
         // 覆盖"提取失败/跳过，但 Relationships/Busy 仍要正常从正文解析更新"的情况。
         await extractInventorySetupsForLatestFloor();
-        handleMessageForStatusTable();
+        // 必须等这次全量重放（写入世界书「状态表」条目）真正完成，下面强制刷新卡片时
+        // fetchStatusTableSnapshot 读到的才是这一轮的最新值，不然会读到刷新前的旧快照。
+        await handleMessageForStatusTable();
+        // 状态表已整合完毕：只强制刷新"最新一层"卡片，让附加字段等内容不用刷新页面就能看到，
+        // 其余历史楼层不受影响（见 rerenderLatestSummaryCard 的说明）。
+        await rerenderLatestSummaryCard();
       });
     }
     rollbackEventNames.forEach((eventName) => {

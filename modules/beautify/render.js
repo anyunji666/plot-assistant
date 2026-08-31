@@ -351,13 +351,24 @@ function findSummaryDetailsEl(mesTextEl) {
 // === 处理单条消息：原文能解析出摘要字段 且 DOM 里还存在原生 <details> 时，替换成卡片。
 // lastAiIdx：当前聊天里最新一层AI楼层的下标。只有这一层的卡片，Relationships/Inventory/Setups/Busy
 // 四项才会换成 snapshot（状态表当前完整状态），其余历史楼层这几项仍展示该层原文自己的增量变化。
-// snapshot 为 null（世界书还没创建/条目不存在）时，最新层也照常回退到该层原文的解析结果。===
-function beautifyOneMessageEl(mesEl, lastAiIdx, snapshot) {
+// snapshot 为 null（世界书还没创建/条目不存在）时，最新层也照常回退到该层原文的解析结果。
+//
+// force：默认 false，此时维持原有行为——一旦 <details> 被换成卡片就不会再被二次处理，
+// 避免 replaceWith 触发的 DOM 变化反过来被 MutationObserver 捕获、形成无意义的重复替换/死循环。
+// force=true 时，即便这条消息已经是卡片（不再有 <details>），也会按当前最新数据强制重新渲染一次——
+// 只在明确知道"数据源已经变化、需要让已渲染的卡片跟上"的场景下由调用方主动传 true
+// （目前只有 rerenderLatestSummaryCard 会传 true，且只处理最新一层楼，其余历史楼层不受影响，
+// 因为历史楼层展示的是各自楼层原文当时的增量，跟"之后"状态表/附加字段配置怎么变都无关）。===
+function beautifyOneMessageEl(mesEl, lastAiIdx, snapshot, force = false) {
   const mesTextEl = mesEl.querySelector(".mes_text");
   if (!mesTextEl) return;
 
   const detailsEl = findSummaryDetailsEl(mesTextEl);
-  if (!detailsEl) return; // 没有摘要块，或已经被替换过（卡片不是 <details>，不会再被选中）
+  const existingCardEl = detailsEl ? null : mesTextEl.querySelector(`.${CARD_CLASS}`);
+  if (!detailsEl && !existingCardEl) return; // 没有摘要块
+  if (!detailsEl && !force) return; // 已经渲染过卡片，且不是强制刷新，维持"只处理一次"的原有行为
+
+  const targetEl = detailsEl || existingCardEl;
 
   const mesIdRaw = mesEl.getAttribute("mesid");
   const mesId = mesIdRaw !== null ? parseInt(mesIdRaw, 10) : NaN;
@@ -366,9 +377,11 @@ function beautifyOneMessageEl(mesEl, lastAiIdx, snapshot) {
     const chat = getCtx().chat;
     rawMes = Array.isArray(chat) && chat[mesId] ? chat[mesId].mes : null;
   }
-  // 拿不到 mesid/原文时（极端情况），退回读取 DOM 里 <details> 的纯文本内容做兜底解析，
-  // 保证至少能正常显示，不至于因为拿不到原文就完全不美化。
-  const sourceText = typeof rawMes === "string" ? rawMes : detailsEl.outerHTML;
+  // 拿不到 mesid/原文时（极端情况），首次渲染可以退回读取 DOM 里 <details> 的纯文本内容做兜底解析；
+  // 强制重渲染已生成的卡片时 <details> 已经不存在，没有原文就没法安全重建，直接跳过。
+  const sourceText =
+    typeof rawMes === "string" ? rawMes : detailsEl ? detailsEl.outerHTML : null;
+  if (!sourceText) return;
 
   const fields = parseFloorSummaryFields(sourceText);
   if (!fields) return; // 原文里的摘要块还没写完整（流式输出中）或解析失败，跳过，等下一次变化再试
@@ -388,7 +401,7 @@ function beautifyOneMessageEl(mesEl, lastAiIdx, snapshot) {
 
   const wrapper = document.createElement("div");
   wrapper.innerHTML = buildSummaryCardHtml(displayFields, busyNames);
-  detailsEl.replaceWith(wrapper.firstElementChild);
+  targetEl.replaceWith(wrapper.firstElementChild);
 }
 
 // === 全量扫描当前聊天里所有消息。状态表快照只读取一次（世界书条目是全局状态，跟具体哪层楼无关），
@@ -410,6 +423,24 @@ async function scanAndBeautifyAll() {
 }
 
 const debouncedScan = debounce(scanAndBeautifyAll, 150);
+
+// === 对外入口：强制刷新"最新一层AI楼层"的卡片——供状态表LLM结果整合完毕之后调用。
+// 只处理最新一层，不影响其余历史楼层（历史楼层展示的是各自当层原文的增量，本来就跟
+// "之后"状态表怎么变化无关，不需要跟着刷新）。找不到最新层/世界书还没有状态表条目时静默跳过。===
+export async function rerenderLatestSummaryCard() {
+  try {
+    const chatEl = document.getElementById("chat");
+    if (!chatEl) return;
+    const { idx: lastAiIdx } = getLastAiFloor();
+    if (lastAiIdx < 0) return;
+    const mesEl = chatEl.querySelector(`.mes[mesid="${lastAiIdx}"]`);
+    if (!mesEl) return;
+    const snapshot = await fetchStatusTableSnapshot();
+    beautifyOneMessageEl(mesEl, lastAiIdx, snapshot, true);
+  } catch (error) {
+    console.error("[剧情助手] 强制刷新最新楼层摘要卡片时出错:", error);
+  }
+}
 
 // === 对外入口：注册 MutationObserver，随聊天区域任意变化（新消息/编辑/滑动/切换对话）自动重新扫描 ===
 export function initSummaryBeautify() {
