@@ -20,7 +20,7 @@ import { PROMPT_TEMPLATE_SETTINGS_KEY, getPromptTemplateStageSyncEnabled, setPro
 import { openPromptTemplateFormatDialog } from "./modules/summary/prompt-template/ui.js";
 import { PHONE_FAB_POS_KEY, applyPhoneFabVisibility, openPhonePresetDialog, resetPhoneFabPos } from "./modules/phone/ui.js";
 import { ensureSummaryLorebookOnLoad, runAutoLargeSummary, runAutoSmallSummary, runSetOffset } from "./modules/summary/generator.js";
-import { openCustomFieldsDialog, openHideFloorDialog, openPreEmphasisDialog, openStatusLlmConfigDialog } from "./modules/summary/ui.js";
+import { openCustomFieldsDialog, openFieldMetaInstructionDialog, openHideFloorDialog, openPreEmphasisDialog, openStatusLlmConfigDialog } from "./modules/summary/ui.js";
 import { clearAllCustomFieldsAcrossCharacters, getStatusLlmSettings } from "./modules/summary/status-llm/store.js";
 import { getLorebookEntriesSummaryHtml, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, mountSummaryLorebookGlobally, notifyWorldInfoUpdated } from "./modules/worldinfo.js";
 
@@ -214,8 +214,9 @@ export async function showSummaryPopup() {
           </div>
           <div style="display: flex; gap: 8px; flex-wrap: wrap;">
             <button id="${POPUP_ID}-status-llm-config" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">API配置</button>
-            <button id="${POPUP_ID}-custom-fields" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">附加字段</button>
             <button id="${POPUP_ID}-pre-emphasis" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">对话前强调</button>
+            <button id="${POPUP_ID}-custom-fields" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">附加字段</button>
+            <button id="${POPUP_ID}-field-meta-instruction" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">字段修改</button>
           </div>
         </div>
 
@@ -562,6 +563,20 @@ export async function showSummaryPopup() {
       .on("click", () => {
         closePopup();
         openPreEmphasisDialog();
+      })
+      .hover(
+        function () {
+          $(this).css("background", "#2c5d9e");
+        },
+        function () {
+          $(this).css("background", "#3a7bd5");
+        },
+      );
+
+    $(`#${POPUP_ID}-field-meta-instruction`)
+      .on("click", () => {
+        closePopup();
+        openFieldMetaInstructionDialog();
       })
       .hover(
         function () {

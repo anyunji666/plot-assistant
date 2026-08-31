@@ -14,7 +14,7 @@ import { commitPendingInventoryChanges, getPhoneChatState, peekPendingInventoryC
 import { buildPhoneLetterContentForStatusLlm } from "../../phone/generator.js";
 import { callStatusLlm } from "./api.js";
 import { buildStatusLlmSystemPrompt } from "./prompts.js";
-import { getCustomFields, getStatusLlmSettings } from "./store.js";
+import { getCustomFields, getStatusLlmSettings, saveStatusLlmSettings } from "./store.js";
 import { extractLabelLine } from "../floor-restore.js";
 import {
   hideStatusLlmIndicator,
@@ -200,7 +200,18 @@ export async function extractInventorySetupsForLatestFloor() {
           console.error("[剧情助手] 读取本轮私信内容失败（Setups判断可能漏看私信）:", error);
         }
 
-        const userContent = `${snapshotText ? `${snapshotText}\n\n` : ""}${letterContent ? `${letterContent}\n\n` : ""}<latest_floor>\n${mes}\n</latest_floor>`;
+        // "字段修改"弹窗提交的一次性元指令：读到就立即清空（无论下面的AI调用最终是否成功），
+        // 保证只拼接发送这一次，不会在之后每一层都反复带上同一条旧指令。
+        const metaInstructionText = (settings.pendingMetaInstruction || "").trim();
+        if (metaInstructionText) {
+          settings.pendingMetaInstruction = "";
+          saveStatusLlmSettings();
+        }
+        const metaInstructionBlock = metaInstructionText
+          ? `\n\n<metainstruction>是用户的元指令，除遵照上述要求外，还需根据用户的指令修改相应内容，输出格式要遵循上述规范。\n<metainstruction>\n${metaInstructionText}\n</metainstruction>`
+          : "";
+
+        const userContent = `${snapshotText ? `${snapshotText}\n\n` : ""}${letterContent ? `${letterContent}\n\n` : ""}<latest_floor>\n${mes}\n</latest_floor>${metaInstructionBlock}`;
 
         const rawResult = await callStatusLlm([
           { role: "system", content: systemPrompt },

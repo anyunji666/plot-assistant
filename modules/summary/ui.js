@@ -343,6 +343,173 @@ export async function openPreEmphasisDialog() {
 }
 
 
+// === Function: 打开"字段修改"弹窗——面板"摘要配置"区新增按钮，让用户直接向状态表LLM
+// 发一条自然语言的一次性修改指令（Inventory/Setups/附加字段），不用理解字段格式规则，
+// 由AI自己按现有协议算出增量。指令只存一份，拼进下一次实际调用状态表LLM的请求末尾后立即清空——
+// 不是常驻配置，跟"对话前强调"/"状态表配置"这类持久化设置性质不同，所以弹窗骨架照抄后者，
+// 但保存目标是 pendingMetaInstruction 而不是长期生效的字段。===
+export async function openFieldMetaInstructionDialog() {
+  const cfg = getStatusLlmSettings();
+  const existingContent = cfg.pendingMetaInstruction || "";
+
+  const $bodyEl = $("body");
+  const prevBodyOverflow = $bodyEl.css("overflow");
+  $bodyEl.css("overflow", "hidden");
+
+  const result = await new Promise((resolve) => {
+    const $overlay = $("<div>").css({
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: "rgba(0,0,0,0.72)",
+      zIndex: 99999,
+      boxSizing: "border-box",
+    });
+
+    const $box = $("<div>").css({
+      position: "fixed",
+      top: "12px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      background: "#252525",
+      border: "1px solid #3a3a3a",
+      borderRadius: "10px",
+      padding: "clamp(16px, 4vw, 24px)",
+      width: "min(400px, calc(100% - 24px))",
+      maxHeight: "min(85vh, calc(100dvh - 24px))",
+      display: "flex",
+      flexDirection: "column",
+      gap: "16px",
+      color: "#e8e8e8",
+      fontFamily: "inherit",
+      boxSizing: "border-box",
+      boxShadow: "0 8px 32px rgba(0,0,0,0.55)",
+      overflowY: "auto",
+      WebkitOverflowScrolling: "touch",
+    });
+
+    const $title = $("<div>").text("字段修改").css({
+      fontSize: "1.05em",
+      fontWeight: "600",
+      color: "#f0f0f0",
+      letterSpacing: "0.01em",
+    });
+
+    const $desc = $("<div>")
+      .text(
+        "对状态表LLM维护的字段向AI发送修改要求，有Inventory（物品）、Setups（伏笔/线索/约定）及“附加字段”。指令为单次指令，只拼接发送在下一次对话中。",
+      )
+      .css({ fontSize: "0.8em", color: "#999", lineHeight: 1.5 });
+
+    const inputCss = {
+      width: "100%",
+      boxSizing: "border-box",
+      padding: "8px 10px",
+      borderRadius: "6px",
+      border: "1px solid #3a3a3a",
+      background: "#ffffff",
+      color: "#000000",
+      fontSize: "max(0.95em, 16px)",
+      fontFamily: "inherit",
+      outline: "none",
+    };
+
+    const $textWrap = $("<div>").css({
+      display: "flex",
+      flexDirection: "column",
+      gap: "4px",
+      minHeight: 0,
+    });
+    $textWrap.append(
+      $("<label>").text("修改指令").css({ fontSize: "0.82em", color: "#999" }),
+    );
+    const $textInput = $("<textarea>")
+      .attr({ rows: 6, placeholder: "例如：把{{user}}的玉佩数量改成3；清除角色A的“旧日承诺”这条伏笔" })
+      .css({
+        ...inputCss,
+        resize: "vertical",
+        minHeight: "100px",
+        maxHeight: "min(40vh, 40dvh)",
+      })
+      .val(existingContent);
+    $textWrap.append($textInput);
+
+    const $btnRow = $("<div>").css({
+      display: "flex",
+      gap: "10px",
+      justifyContent: "flex-end",
+      marginTop: "4px",
+    });
+    const btnCss = {
+      padding: "6px 10px",
+      borderRadius: "6px",
+      boxSizing: "border-box",
+      cursor: "pointer",
+      fontSize: "0.8em",
+      touchAction: "manipulation",
+    };
+    const $cancel = $("<button>")
+      .text("关闭")
+      .css({
+        ...btnCss,
+        border: "1px solid #3a3a3a",
+        background: "transparent",
+        color: "#c0c0c0",
+      });
+    const $confirm = $("<button>")
+      .text("提交")
+      .css({
+        ...btnCss,
+        border: "none",
+        background: "#5b9cf6",
+        color: "#ffffff",
+        fontWeight: "600",
+      });
+    $btnRow.append($cancel, $confirm);
+
+    $box.append($title, $desc, $textWrap, $btnRow);
+    $overlay.append($box);
+    $("body").append($overlay);
+    setTimeout(() => $textInput.trigger("focus"), 50);
+
+    const done = (confirmed) => {
+      $(document).off("keydown.fieldMetaInstructionDialog");
+      $overlay.remove();
+      $bodyEl.css("overflow", prevBodyOverflow || "");
+      resolve(confirmed ? { content: $textInput.val() } : null);
+    };
+
+    $confirm.on("click", () => done(true));
+    $cancel.on("click", () => done(false));
+
+    let overlayPointerDownOnSelf = false;
+    $overlay.on("mousedown touchstart", (e) => {
+      overlayPointerDownOnSelf = $(e.target).is($overlay);
+    });
+    $overlay.on("mouseup touchend", (e) => {
+      if (overlayPointerDownOnSelf && $(e.target).is($overlay)) done(false);
+      overlayPointerDownOnSelf = false;
+    });
+    $(document).on("keydown.fieldMetaInstructionDialog", (e) => {
+      if (e.key === "Escape") done(false);
+    });
+  });
+
+  if (!result) return;
+
+  cfg.pendingMetaInstruction = (result.content || "").trim();
+  saveStatusLlmSettings();
+  notify(
+    "success",
+    cfg.pendingMetaInstruction
+      ? "修改指令已记录，将在下一次状态表LLM调用时发送"
+      : "修改指令已清空",
+  );
+}
+
+
 // === Helper: 解析"隐藏楼层"弹窗里手填的楼层范围文本——支持单层号（如 5）或范围（如 2-45），
 // 与 extractSmallSummaryRange（解析世界书条目标题"小总结：起-止"）是两套不同格式，不复用。
 // 解析失败返回 null；单层号时 start === end。===

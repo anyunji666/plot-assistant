@@ -27,6 +27,7 @@ const DEFAULT_STATUS_LLM_SETTINGS = {
   apiTimeoutMin: 15,
   customPrompt: "", // 空 = 使用 DEFAULT_STATUS_LLM_PROMPT
   reanalyzeEnabled: true, // 面板"再分析"开关：默认开启，Inventory/Setups 完全依赖这次AI提取才能进状态表，关掉的话这两项永远不会更新，属于影响最大的开关，所以默认打开
+  pendingMetaInstruction: "", // 面板"字段修改"弹窗提交的一次性元指令：只在下一次实际调用状态表LLM时拼进请求末尾，发出后（无论调用成功与否）立即清空，不重复发送
 };
 
 export function getStatusLlmSettings() {
