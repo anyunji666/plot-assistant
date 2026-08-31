@@ -2359,3 +2359,34 @@
 .pa-overview-list li:last-child {
   margin-bottom: 0;
 }
+
+/* =====================================================================================
+   状态表LLM 进度提示（modules/beautify/render.js 的 showStatusLlmIndicator/hideStatusLlmIndicator）
+   非阻塞悬浮胶囊，位置对齐 summary/ui.js 里"生成中"阻塞式弹窗的顶部锚定方式，
+   但本身半透明、不带遮罩、不挡下面任何点击——纯提示，不需要关闭按钮。
+   ===================================================================================== */
+@keyframes paStatusLlmPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+.pa-status-llm-indicator {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  pointer-events: none;
+  padding: 6px 18px;
+  border-radius: 999px;
+  background: rgba(255, 205, 224, 0.55);
+  border: 1px solid rgba(255, 205, 224, 0.75);
+  color: rgba(122, 46, 74, 0.85);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: system-ui, -apple-system, sans-serif;
+  box-shadow: 0 4px 12px rgba(200, 100, 140, 0.12);
+  backdrop-filter: blur(3px);
+  animation: paStatusLlmPulse 1.6s ease-in-out infinite;
+  white-space: nowrap;
+}

@@ -442,6 +442,34 @@ export async function rerenderLatestSummaryCard() {
   }
 }
 
+// === 对外入口：状态表LLM 进度提示——非阻塞悬浮胶囊，不带关闭按钮（半透明、不遮挡任何点击，
+// 用户不需要主动关它）。show 调用是幂等的（已存在就不重复创建），hide 同理（不存在就什么都不做），
+// 三种收尾场景（正常结束/状态表LLM调用失败被内部吞掉/用户抢先发下一条打断）都直接调用 hide 即可，
+// 不需要调用方关心当前是不是已经显示。===
+const STATUS_LLM_INDICATOR_ID = "pa-status-llm-indicator";
+
+export function showStatusLlmIndicator() {
+  try {
+    if (document.getElementById(STATUS_LLM_INDICATOR_ID)) return;
+    const el = document.createElement("div");
+    el.id = STATUS_LLM_INDICATOR_ID;
+    el.className = "pa-status-llm-indicator";
+    el.textContent = "状态表生成中···";
+    document.body.appendChild(el);
+  } catch (error) {
+    console.error("[剧情助手] 显示状态表LLM进度提示时出错:", error);
+  }
+}
+
+export function hideStatusLlmIndicator() {
+  try {
+    const el = document.getElementById(STATUS_LLM_INDICATOR_ID);
+    if (el) el.remove();
+  } catch (error) {
+    console.error("[剧情助手] 隐藏状态表LLM进度提示时出错:", error);
+  }
+}
+
 // === 对外入口：注册 MutationObserver，随聊天区域任意变化（新消息/编辑/滑动/切换对话）自动重新扫描 ===
 export function initSummaryBeautify() {
   const chatEl = document.getElementById("chat");

@@ -16,7 +16,11 @@ import { callStatusLlm } from "./api.js";
 import { buildStatusLlmSystemPrompt } from "./prompts.js";
 import { getCustomFields, getStatusLlmSettings } from "./store.js";
 import { extractLabelLine } from "../floor-restore.js";
-import { rerenderLatestSummaryCard } from "../../beautify/render.js";
+import {
+  hideStatusLlmIndicator,
+  rerenderLatestSummaryCard,
+  showStatusLlmIndicator,
+} from "../../beautify/render.js";
 
 // =====================================================================================
 // === 状态表LLM：独立提取 Inventory / Setups ===
@@ -291,21 +295,41 @@ export function registerStatusTableAutoUpdate() {
 
     if (renderEventName) {
       context.eventSource.on(renderEventName, async () => {
-        // 先跑状态表LLM提取（同步等待，剧情LLM生成下一层前状态表已是最新）；
-        // 提取内部静默失败不抛出，这里始终固定接一次全量重放，
-        // 覆盖"提取失败/跳过，但 Relationships/Busy 仍要正常从正文解析更新"的情况。
-        await extractInventorySetupsForLatestFloor();
-        // 必须等这次全量重放（写入世界书「状态表」条目）真正完成，下面强制刷新卡片时
-        // fetchStatusTableSnapshot 读到的才是这一轮的最新值，不然会读到刷新前的旧快照。
-        await handleMessageForStatusTable();
-        // 状态表已整合完毕：只强制刷新"最新一层"卡片，让附加字段等内容不用刷新页面就能看到，
-        // 其余历史楼层不受影响（见 rerenderLatestSummaryCard 的说明）。
-        await rerenderLatestSummaryCard();
+        // 非阻塞悬浮提示：整个提取+整合期间用户仍可以正常操作（含继续发下一条），
+        // 提示本身不做任何拦截，只是告诉用户"状态表还在算"。三种收尾场景（正常结束/
+        // 状态表LLM调用失败被内部吞掉/下面 GENERATION_STARTED 监听到用户抢先发下一条）
+        // 都会让它消失，不需要用户手动关闭。
+        showStatusLlmIndicator();
+        try {
+          // 先跑状态表LLM提取（同步等待，剧情LLM生成下一层前状态表已是最新）；
+          // 提取内部静默失败不抛出，这里始终固定接一次全量重放，
+          // 覆盖"提取失败/跳过，但 Relationships/Busy 仍要正常从正文解析更新"的情况。
+          await extractInventorySetupsForLatestFloor();
+          // 必须等这次全量重放（写入世界书「状态表」条目）真正完成，下面强制刷新卡片时
+          // fetchStatusTableSnapshot 读到的才是这一轮的最新值，不然会读到刷新前的旧快照。
+          await handleMessageForStatusTable();
+          // 状态表已整合完毕：只强制刷新"最新一层"卡片，让附加字段等内容不用刷新页面就能看到，
+          // 其余历史楼层不受影响（见 rerenderLatestSummaryCard 的说明）。
+          await rerenderLatestSummaryCard();
+        } finally {
+          // extractInventorySetupsForLatestFloor / handleMessageForStatusTable 内部各自已经
+          // try/catch 吞掉了失败，理论上走不到这个 finally 是因为异常；这里用 finally 只是
+          // 兜底保证任何将来的改动即便抛错，提示也一定会消失，不会卡在屏幕上关不掉。
+          hideStatusLlmIndicator();
+        }
       });
     }
     rollbackEventNames.forEach((eventName) => {
       context.eventSource.on(eventName, () => handleMessageForStatusTable());
     });
+
+    // 用户打断场景：如果状态表LLM还在处理时用户已经把下一条发出去了（新一轮生成开始），
+    // 提示应该立即消失——不去打断后台仍在进行的提取/整合本身（它会正常跑完，跑完后
+    // hideStatusLlmIndicator 再调一次也没有副作用），只是不再需要显示"生成中"这个状态了。
+    const generationStartedEventName = context.event_types.GENERATION_STARTED;
+    if (generationStartedEventName) {
+      context.eventSource.on(generationStartedEventName, () => hideStatusLlmIndicator());
+    }
 
     console.log(
       `[剧情助手] 状态表自动更新监听已注册（新增楼层事件: ${renderEventName || "无"}；回退/编辑相关事件: ${
