@@ -16,14 +16,14 @@ export const DEFAULT_STATUS_LLM_PROMPT = `### 任务
 **输出格式：**
 输出以下行，不要输出任何其它文字、标签、解释或前后缀说明：
 \`\`\`
-Inventory: \${本轮变化，规则见下，无变化则留空}
-Setups: \${本轮变化，规则见下，无变化则留空}
+Inventory: \${本轮变化，规则见下，无变化则只输出 Inventory: }
+Setups: \${本轮变化，规则见下，无变化则只输出 Setups: }
 \`\`\`
 
 ---
 **字段判定规则（伪代码）：**
 
-**Inventory**（只写本轮变化，无变化则留空，多组分号分隔，按顺序执行）
+**Inventory**（只写本轮变化，多组分号分隔，按顺序执行）
 \`\`\`
 for 道具变化 in 本轮:
     if not 可随身携带的物品: 跳过  # 状态/情形不记录
@@ -35,7 +35,7 @@ for 道具变化 in 本轮:
 # 值只能是[REMOVE]/=N/+N/-N，N为纯数字，单位一律写进物品名、不要混进值里。正例："+2" "=3"　反例："+2瓶" "=3个(备用)"
 \`\`\`
 
-**Setups**（只写本轮变化，无变化则留空，多组分号分隔，按顺序执行）
+**Setups**（只写本轮变化，多组分号分隔，按顺序执行）
 \`\`\`
 Step1 存量清理：旧条目已兑现/作废/不可能再被拾起 → 角色名·关键词: [REMOVE]
 Step2 新增：本轮正文及 <private_letter name="角色名"> 标签包裹的当日私信中，是否出现值得长线追踪的伏笔/线索/未解约定？
@@ -67,7 +67,7 @@ function buildCustomFieldRuleBlock(field) {
 
   if (field.scope === "character") {
     if (field.valueType === "numeric") {
-      return `**${field.name}**（角色维度·数值，只写本轮变化，无变化则留空，多个角色分号分隔）
+      return `**${field.name}**（角色维度·数值，只写本轮变化，多个角色分号分隔）
 \`\`\`
 for 角色 in 本轮${field.name}有变化的角色:
     if 需要清除该角色本项记录: 值 = [REMOVE]
@@ -79,7 +79,7 @@ for 角色 in 本轮${field.name}有变化的角色:
 # 提取依据：${ruleText}
 \`\`\``;
     }
-    return `**${field.name}**（角色维度·文本，只写本轮变化，无变化则留空，多个角色分号分隔）
+    return `**${field.name}**（角色维度·文本，只写本轮变化，多个角色分号分隔）
 \`\`\`
 Step1 存量清理：旧值已过期/不再适用 → 角色名: [REMOVE]
 Step2 新增/更新：角色名: 新文本值（整条覆盖旧值，不是追加）
@@ -90,7 +90,7 @@ Step2 新增/更新：角色名: 新文本值（整条覆盖旧值，不是追�
 
   // scope === "global"：不分角色，整个字段只有一个值，值本身就是内容（不需要 "key: value" 结构）
   if (field.valueType === "numeric") {
-    return `**${field.name}**（全局·数值，不分角色，只有一个值，无变化则留空）
+    return `**${field.name}**（全局·数值，不分角色，只有一个值）
 \`\`\`
 if 需要清除: 值 = [REMOVE]
 elif 首次记录/需硬修正: 值 = "=N"
@@ -100,7 +100,7 @@ elif 减少(未归零): 值 = "-N"
 # 提取依据：${ruleText}
 \`\`\``;
   }
-  return `**${field.name}**（全局·文本，不分角色，只有一个值，无变化则留空）
+  return `**${field.name}**（全局·文本，不分角色，只有一个值）
 \`\`\`
 if 需要清除: 值 = [REMOVE]
 elif 有更新: 值 = 新文本值（整条覆盖旧值，不是追加），不需要"角色名:"前缀
@@ -113,14 +113,14 @@ export function buildCustomFieldsAppendix(customFields) {
   if (!Array.isArray(customFields) || customFields.length === 0) return "";
 
   const outputLines = customFields
-    .map((f) => `${f.name}: \${本轮变化，规则见下，无变化则留空}`)
+    .map((f) => `${f.name}: \${本轮变化，规则见下，无变化则只输出 ${f.name}: }`)
     .join("\n");
   const ruleBlocks = customFields.map(buildCustomFieldRuleBlock).join("\n\n");
 
   return `
 
 ---
-**附加字段（在上面 Inventory/Setups 两行之后继续追加输出，每个字段单独一行，同样"只写本轮变化，无变化则留空"）：**
+**附加字段（在上面 Inventory/Setups 两行之后继续追加输出，每个字段单独一行，同样"只写本轮变化"）：**
 \`\`\`
 ${outputLines}
 \`\`\`
@@ -162,7 +162,7 @@ export function buildStatusLlmSystemPrompt(customPromptOverride, customFields) {
   if (fields.length === 0) return base;
 
   const outputLines = fields
-    .map((f) => `${f.name}: \${本轮变化，规则见下，无变化则留空}`)
+    .map((f) => `${f.name}: \${本轮变化，规则见下，无变化则只输出 ${f.name}: }`)
     .join("\n");
   const ruleBlocksText = fields.map(buildCustomFieldRuleBlock).join("\n\n");
 
