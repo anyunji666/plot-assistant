@@ -24,7 +24,7 @@ const DEFAULT_NOVEL_SUMMARY_SETTINGS = {
   apiUrl: "",
   apiKey: "",
   model: "",
-  stream: true,
+  stream: false,
   apiTimeoutMin: 15,
   apiRateLimit: 3,
   chunkKb: 100,

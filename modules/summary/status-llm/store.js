@@ -38,6 +38,7 @@ export function getStatusLlmSettings() {
   for (const key of Object.keys(DEFAULT_STATUS_LLM_SETTINGS)) {
     if (cfg[key] === undefined) cfg[key] = DEFAULT_STATUS_LLM_SETTINGS[key];
   }
+  cfg.stream = false; // 界面已去掉流式勾选框，固定走非流式，忽略任何历史残留值
   if (!cfg.byCharacter) cfg.byCharacter = {};
   return cfg;
 }

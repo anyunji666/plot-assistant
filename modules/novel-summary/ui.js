@@ -619,7 +619,7 @@ function buildNovelSummaryTemplateHtml() {
         </div>
 
         <div class="ns-field ns-checkbox-field">
-          <label><input id="ns-stream" type="checkbox" checked> 使用流式响应</label>
+          <label><input id="ns-stream" type="checkbox"> 使用流式响应</label>
         </div>
 
         <div class="ns-field">
