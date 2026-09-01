@@ -72,8 +72,9 @@ export function spliceExtractedFieldsIntoMes(
   if (relRe.test(cleanedMes)) {
     return cleanedMes.replace(relRe, (m) => `${m}${insertion}`);
   }
-  // 兜底：没找到 Relationships 行（理论上不该发生，摘要块协议里它是必填项），
-  // 插在 <summary>摘要</summary> 标签后面，同样早于 Overview。
+  // 兜底：没找到 Relationships 行——协议里这一项只在"本轮关系有变化"时才输出，没变化的轮次
+  // AI 大概率会整行不写，属于常见情况而非异常；这时插在 <summary>摘要</summary> 标签后面，
+  // 同样早于 Overview（比 Time/Location 还靠前也没关系，不影响解析，字段是逐行匹配的）。
   const headerRe = /(<details>\s*<summary>\s*摘要\s*<\/summary>\s*\n?)/;
   if (headerRe.test(cleanedMes)) {
     return cleanedMes.replace(headerRe, (m) => `${m}${insertion}`);
