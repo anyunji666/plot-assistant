@@ -7,7 +7,13 @@
 // 三个文件里，跟 novel-summary/lib/ 同一套子文件夹组织方式，方便按"状态表LLM"整体查找。
 // =====================================================================================
 
-import { STATUS_TABLE_TITLE, getCtx, getLastAiFloor } from "../../core.js";
+import {
+  STATUS_TABLE_TITLE,
+  STATUS_LLM_FIELDS_START,
+  STATUS_LLM_FIELDS_END,
+  getCtx,
+  getLastAiFloor,
+} from "../../core.js";
 import { handleMessageForStatusTable, parseFloorSummaryFields } from "../status-table.js";
 import { getLorebookEntriesArray, getOrCreateSummaryLorebook } from "../../worldinfo.js";
 import { commitPendingInventoryChanges, getPhoneChatState, peekPendingInventoryChangeSegments } from "../../phone/store.js";
@@ -31,16 +37,20 @@ import {
 // 如果 Inventory/Setups 存在独立于正文之外的旁路存储里，楼层增删后旁路数据的楼层号就可能跟实际错位。
 // =====================================================================================
 
-// === Helper: 判断某一层是否已经处理过（正文里已出现 Inventory: 标签，不管值是否为空），
-// 避免同一层因为多个事件重复触发而重复调用状态表LLM ===
-function hasInventoryLabel(mesText) {
-  return /^[ \t]*Inventory[ \t]*[:：]/m.test(mesText || "");
+// === Helper: 判断某一层是否已经处理过（正文里已出现 <!-- status-llm-fields --> 包裹标记，不管值是否为空），
+// 避免同一层因为多个事件重复触发而重复调用状态表LLM。
+// 依据从"裸 Inventory: 文本"改成"是否有这个包裹注释"——裸文本可能是剧情LLM在协议外手滑写的，
+// 不能作为"状态表LLM已处理过"的证据，只有本模块自己包裹注释写进去的才算数。===
+function hasStatusLlmFieldsMarker(mesText) {
+  return (mesText || "").includes(STATUS_LLM_FIELDS_START);
 }
 
 
 // === Helper: 把状态表LLM返回的 Inventory/Setups（以及已配置的附加字段）结果拼进这一层摘要块正文里
 // （插在 Relationships 行之后——必须早于 Overview 行，否则会被 Overview 的贪婪正则一起吞掉）===
 // customFieldTexts: { 字段名: 提取到的本轮变化文本 }，来自面板"附加字段"里配置的定义，可为空对象。
+// 覆盖式：先整体删掉已存在的 <!-- status-llm-fields -->...<!-- /status-llm-fields --> 区块（如果有），
+// 再把这次的结果重新包上同样的注释插入——避免同一层因为多次触发（如提取失败重试）在正文里越叠越多。
 export function spliceExtractedFieldsIntoMes(
   mesText,
   inventoryText,
@@ -50,18 +60,25 @@ export function spliceExtractedFieldsIntoMes(
   const customLines = Object.entries(customFieldTexts)
     .map(([name, value]) => `${name}: ${value || ""}\n`)
     .join("");
-  const insertion = `Inventory: ${inventoryText || ""}\nSetups: ${setupsText || ""}\n${customLines}`;
+  const fieldsBlock = `Inventory: ${inventoryText || ""}\nSetups: ${setupsText || ""}\n${customLines}`;
+  const insertion = `${STATUS_LLM_FIELDS_START}\n${fieldsBlock}${STATUS_LLM_FIELDS_END}\n`;
+
+  const existingBlockRe = new RegExp(
+    `${STATUS_LLM_FIELDS_START}[\\s\\S]*?${STATUS_LLM_FIELDS_END}\\n?`,
+  );
+  const cleanedMes = mesText.replace(existingBlockRe, "");
+
   const relRe = /(Relationships\s*[:：][^\n]*\n)/;
-  if (relRe.test(mesText)) {
-    return mesText.replace(relRe, (m) => `${m}${insertion}`);
+  if (relRe.test(cleanedMes)) {
+    return cleanedMes.replace(relRe, (m) => `${m}${insertion}`);
   }
   // 兜底：没找到 Relationships 行（理论上不该发生，摘要块协议里它是必填项），
   // 插在 <summary>摘要</summary> 标签后面，同样早于 Overview。
   const headerRe = /(<details>\s*<summary>\s*摘要\s*<\/summary>\s*\n?)/;
-  if (headerRe.test(mesText)) {
-    return mesText.replace(headerRe, (m) => `${m}${insertion}`);
+  if (headerRe.test(cleanedMes)) {
+    return cleanedMes.replace(headerRe, (m) => `${m}${insertion}`);
   }
-  return mesText; // 没有摘要块，原样返回，调用方会先判断 parseFloorSummaryFields 是否为 null
+  return mesText; // 没有摘要块，原样返回（用原始 mesText 而非 cleanedMes），调用方会先判断 parseFloorSummaryFields 是否为 null
 }
 
 
@@ -152,7 +169,7 @@ export async function extractInventorySetupsForLatestFloor() {
       // 下面会被当作当前最新层的待生效改动重新读取、重新尝试拼进这一层。
       const referencedFloor = context.chat?.[pendingSplice.floorIdx];
       const stillPresent =
-        referencedFloor && hasInventoryLabel(referencedFloor.mes);
+        referencedFloor && hasStatusLlmFieldsMarker(referencedFloor.mes);
       if (stillPresent) {
         try {
           await commitPendingInventoryChanges(pendingSplice.snapshot);
@@ -171,7 +188,7 @@ export async function extractInventorySetupsForLatestFloor() {
     const floorFields = parseFloorSummaryFields(mes);
     if (!floorFields) return; // 没有摘要块（比如纯闲聊分支之类），跳过
 
-    if (hasInventoryLabel(mes)) return; // 已经处理过，跳过（避免多个事件重复触发同一层）
+    if (hasStatusLlmFieldsMarker(mes)) return; // 已经处理过，跳过（避免多个事件重复触发同一层）
 
     // AI调用单独 try/catch：失败（很多情况是模型截断）只跳过"AI从正文里判断的那部分变化"，
     // 不影响下面背包页手动改动的合并——两者来源独立，不该互相拖累。

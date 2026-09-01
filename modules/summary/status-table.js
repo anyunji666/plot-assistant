@@ -1,6 +1,15 @@
 "use strict";
 
-import { STATUS_TABLE_ENTRY_DEFAULTS, STATUS_TABLE_TITLE, getCtx, getLastAiFloor, notify, persistChatMetadata } from "../core.js";
+import {
+  STATUS_TABLE_ENTRY_DEFAULTS,
+  STATUS_TABLE_TITLE,
+  STATUS_LLM_FIELDS_START,
+  STATUS_LLM_FIELDS_END,
+  getCtx,
+  getLastAiFloor,
+  notify,
+  persistChatMetadata,
+} from "../core.js";
 import { handleCharacterBecameFree } from "../phone/generator.js";
 import { getPhoneChatState } from "../phone/store.js";
 import { getPromptTemplateStageSyncEnabled } from "./prompt-template/settings.js";
@@ -22,6 +31,21 @@ import { getCustomFields } from "./status-llm/store.js";
 // Setups 仍是自由文本；对代码而言只是不透明字符串，按 key 整体覆盖，内容格式不影响解析逻辑。
 // =====================================================================================
 
+// === Helper: 从 inner 全文里切出 <!-- status-llm-fields -->...<!-- /status-llm-fields --> 包裹的子串
+// （状态表LLM独立提取的 Inventory/Setups/附加字段 结果只会出现在这个标记块里，见 status-llm/extract.js）。
+// 找不到标记时返回空字符串——此时 Inventory/Setups/custom 一律解析为空，不会退回整个 inner 兜底：
+// 剧情LLM在协议外手滑写的裸 Inventory/Setups 文本正是"没有标记"的情况，必须被自然忽略，
+// 不能被误当成状态表LLM的正式结果合并进状态表。===
+function extractStatusLlmFieldsBlock(inner) {
+  const startIdx = inner.indexOf(STATUS_LLM_FIELDS_START);
+  if (startIdx === -1) return "";
+  const contentStart = startIdx + STATUS_LLM_FIELDS_START.length;
+  const endIdx = inner.indexOf(STATUS_LLM_FIELDS_END, contentStart);
+  if (endIdx === -1) return "";
+  return inner.slice(contentStart, endIdx);
+}
+
+
 // === Helper: 从单层楼消息原文里解析摘要模块的各字段，解析不到 <details>摘要</details> 时返回 null ===
 export function parseFloorSummaryFields(mesText) {
   if (!mesText || typeof mesText !== "string") return null;
@@ -30,22 +54,24 @@ export function parseFloorSummaryFields(mesText) {
   );
   if (!detailsMatch) return null;
   const inner = detailsMatch[1];
+  const statusLlmFieldsBlock = extractStatusLlmFieldsBlock(inner);
 
   const overviewMatch = inner.match(/Overview\s*[:：]\s*([\s\S]*)$/);
 
   // 附加字段（面板"附加字段"里配置的自定义变量）：按当前已配置的字段名逐个提取，
   // 未配置任何附加字段时 custom 为空对象，不影响原有解析结果。
+  // 跟 Inventory/Setups 一样只在状态表LLM标记块子串里提取，不信任剧情LLM协议外写的裸文本。
   const custom = {};
   getCustomFields().forEach((field) => {
-    custom[field.name] = extractLabelLine(inner, field.name);
+    custom[field.name] = extractLabelLine(statusLlmFieldsBlock, field.name);
   });
 
   return {
     time: extractLabelLine(inner, "Time"),
     location: extractLabelLine(inner, "Location"),
     relationships: extractLabelLine(inner, "Relationships"),
-    inventory: extractLabelLine(inner, "Inventory"),
-    setups: extractLabelLine(inner, "Setups"),
+    inventory: extractLabelLine(statusLlmFieldsBlock, "Inventory"),
+    setups: extractLabelLine(statusLlmFieldsBlock, "Setups"),
     busy: extractLabelLine(inner, "Busy"), // 仅供手机私信插件读取"角色: [REMOVE]"信号，不参与状态表 Relationships/Inventory/Setups 的常规合并
     expiredChapter: extractLabelLine(inner, "ExpiredChapter"), // 仅供剧情录入模块读取"章节名已演绎完"信号，同样不参与状态表合并
     overview: overviewMatch ? overviewMatch[1].trim() : "",

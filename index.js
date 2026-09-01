@@ -4,6 +4,7 @@ import { SUMMARY_BUTTON_ICON, SUMMARY_BUTTON_ID, SUMMARY_BUTTON_TEXT, SUMMARY_BU
 import { showSummaryPopup } from "./panel.js";
 import { registerLorebookAutoCreate } from "./modules/summary/generator.js";
 import { registerStatusTableAutoUpdate } from "./modules/summary/status-llm/extract.js";
+import { filterStatusLlmFieldsForGeneration } from "./modules/summary/status-llm/prompt-filter.js";
 import { applyMobileOptSettingsOnLoad } from "./modules/mobile-opt.js";
 import { injectPhoneFloatingButton } from "./modules/phone/ui.js";
 import { registerPhoneSlotInjection } from "./modules/phone/generator.js";
@@ -14,6 +15,12 @@ import { syncMapInfoEntry } from "./modules/map/generator.js";
 import { registerNovelAutoJump } from "./modules/novel/generator.js";
 import { initNovelSummaryModule } from "./modules/novel-summary/ui.js";
 import { initSummaryBeautify } from "./modules/beautify/render.js";
+
+
+// === 生成拦截器（酒馆 manifest.json 里 generate_interceptor 字段指向的全局函数）===
+// 必须挂在全局作用域上（globalThis），酒馆核心是按函数名字符串查找调用的，不是走 import。
+// 具体过滤逻辑见 modules/summary/status-llm/prompt-filter.js。
+globalThis.plotAssistantFilterStatusLlmFields = filterStatusLlmFieldsForGeneration;
 
 
 // === Function: 在扩展菜单里插入「剧情助手」入口 ===

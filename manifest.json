@@ -5,8 +5,9 @@
     "optional": [],
     "js": "index.js",
     "css": "style.css",
+    "generate_interceptor": "plotAssistantFilterStatusLlmFields",
     "author": "anyun",
-    "version": "3.6.0",
+    "version": "3.7.0",
     "homePage": "https://github.com/anyunji666/plot-assistant",
     "auto_update": false
 }

@@ -127,6 +127,12 @@ export const STEP_DELAY = 300; // 批次之间的延迟（毫秒）
 
 export const STATUS_TABLE_TITLE = "状态表"; // 结构化数据表世界书条目固定标题，与"小总结：起-止""状态存档"同级存在
 
+// 状态表LLM独立提取的 Inventory/Setups/附加字段 结果，拼进摘要块正文时用这对注释包裹标记边界——
+// 判重（这层是否已处理过）、覆盖式重新拼接、以及解析时只信任标记内内容（过滤剧情LLM协议外手滑写的裸文本），
+// 三处都依赖这对标记，统一在这里定义，避免多处硬编码字符串不一致。
+export const STATUS_LLM_FIELDS_START = "<!-- status-llm-fields -->";
+export const STATUS_LLM_FIELDS_END = "<!-- /status-llm-fields -->";
+
 // 状态表要让AI记住"当前"状态，离最新消息越近权重越高，所以创建时用"@D 在深度"而不是小总结/状态存档默认的"角色定义之前"。
 // 对应你在世界书面板里手动设置好的参照值：@D 在深度0、[系统]角色、order 666、概率100%。
 export const STATUS_TABLE_ENTRY_DEFAULTS = {
