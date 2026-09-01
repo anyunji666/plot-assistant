@@ -23,7 +23,7 @@ const DEFAULT_STATUS_LLM_SETTINGS = {
   apiUrl: "",
   apiKey: "",
   model: "",
-  stream: true,
+  stream: false,
   apiTimeoutMin: 15,
   customPrompt: "", // 空 = 使用 DEFAULT_STATUS_LLM_PROMPT
   reanalyzeEnabled: true, // 面板"再分析"开关：默认开启，Inventory/Setups 完全依赖这次AI提取才能进状态表，关掉的话这两项永远不会更新，属于影响最大的开关，所以默认打开

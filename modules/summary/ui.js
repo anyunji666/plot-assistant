@@ -1453,6 +1453,20 @@ export async function openStatusLlmConfigDialog() {
       }
     });
 
+    const $streamRow = $("<label>").css({
+      display: "flex",
+      alignItems: "center",
+      gap: "6px",
+      fontSize: "0.82em",
+      color: "#999",
+      cursor: "pointer",
+      userSelect: "none",
+    });
+    const $streamCheckbox = $('<input type="checkbox">')
+      .css({ cursor: "pointer" })
+      .prop("checked", !!cfg.stream);
+    $streamRow.append($streamCheckbox, $("<span>").text("使用流式响应"));
+
     const $promptHeader = $("<div>").css({
       display: "flex",
       justifyContent: "space-between",
@@ -1530,6 +1544,7 @@ export async function openStatusLlmConfigDialog() {
       buildFieldRow("API 地址", $apiUrlInput),
       buildFieldRow("API Key", $apiKeyInput),
       buildFieldRow("模型", $modelRow),
+      $streamRow,
       $promptHeader,
       $promptInput,
       $btnRow,
@@ -1547,6 +1562,7 @@ export async function openStatusLlmConfigDialog() {
               apiUrl: $apiUrlInput.val().trim(),
               apiKey: $apiKeyInput.val(),
               model: $modelInput.val().trim(),
+              stream: $streamCheckbox.is(":checked"),
               customPrompt: $promptInput.val(),
             }
           : null,
@@ -1574,6 +1590,7 @@ export async function openStatusLlmConfigDialog() {
   cfg.apiUrl = result.apiUrl;
   cfg.apiKey = result.apiKey;
   cfg.model = result.model;
+  cfg.stream = result.stream;
   cfg.customPrompt =
     result.customPrompt && result.customPrompt.trim() !== DEFAULT_STATUS_LLM_PROMPT.trim()
       ? result.customPrompt
