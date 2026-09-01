@@ -269,7 +269,14 @@ export async function extractInventorySetupsForLatestFloor() {
     const hasAnyCustomFieldValue = Object.values(customFieldTexts).some(
       (v) => v && v.trim(),
     );
-    if (!combinedInventoryText && !setupsText && !hasAnyCustomFieldValue) return; // 都没有变化，不用改这一层正文
+    const noFieldChange = !combinedInventoryText && !setupsText && !hasAnyCustomFieldValue;
+    // "再分析"开关关闭、且没有背包页待生效改动时，本来就没发起过状态表LLM调用，
+    // 不写标记，保留"开关重新打开后、只要这层楼还是最新层就能自然重试"的能力。
+    if (noFieldChange && !getStatusLlmSettings().reanalyzeEnabled) return;
+    // 走到这里说明：要么确实有变化要拼进正文；要么开关是打开的、状态表LLM已经真实调用过一次
+    // （只是这次返回是空的——可能是本轮真无变化，也可能是模型没遵循格式/被截断/安全拦截等），
+    // 两种情况下都要固定拼一次标记块（哪怕内容为空），把这层楼标记为"已处理"，
+    // 避免同一层楼因为多个事件重复触发而反复重新调用状态表LLM。
 
     const newMes = spliceExtractedFieldsIntoMes(
       mes,
