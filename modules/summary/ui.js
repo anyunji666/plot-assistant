@@ -1453,6 +1453,10 @@ export async function openStatusLlmConfigDialog() {
       }
     });
 
+    const $timeoutInput = $('<input type="number" min="1" step="1">')
+      .css(inputCss)
+      .val(Number.isFinite(cfg.apiTimeoutMin) ? cfg.apiTimeoutMin : 15);
+
     const $promptHeader = $("<div>").css({
       display: "flex",
       justifyContent: "space-between",
@@ -1530,6 +1534,7 @@ export async function openStatusLlmConfigDialog() {
       buildFieldRow("API 地址", $apiUrlInput),
       buildFieldRow("API Key", $apiKeyInput),
       buildFieldRow("模型", $modelRow),
+      buildFieldRow("超时（分钟）", $timeoutInput),
       $promptHeader,
       $promptInput,
       $btnRow,
@@ -1547,6 +1552,7 @@ export async function openStatusLlmConfigDialog() {
               apiUrl: $apiUrlInput.val().trim(),
               apiKey: $apiKeyInput.val(),
               model: $modelInput.val().trim(),
+              apiTimeoutMin: parseInt($timeoutInput.val(), 10),
               customPrompt: $promptInput.val(),
             }
           : null,
@@ -1574,6 +1580,10 @@ export async function openStatusLlmConfigDialog() {
   cfg.apiUrl = result.apiUrl;
   cfg.apiKey = result.apiKey;
   cfg.model = result.model;
+  cfg.apiTimeoutMin =
+    Number.isFinite(result.apiTimeoutMin) && result.apiTimeoutMin > 0
+      ? result.apiTimeoutMin
+      : 15;
   cfg.customPrompt =
     result.customPrompt && result.customPrompt.trim() !== DEFAULT_STATUS_LLM_PROMPT.trim()
       ? result.customPrompt

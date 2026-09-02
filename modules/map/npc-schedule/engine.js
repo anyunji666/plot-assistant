@@ -14,6 +14,7 @@ import { getCtx, getLastAiFloor } from "../../core.js";
 import { getSettings, saveSettings } from "../store.js";
 import { scheduleMapInfoSync } from "../generator.js";
 import { renderMarkerList } from "../markers.js";
+import { getLatestStatusTableRenderPromise } from "../../summary/status-llm/extract.js";
 import { callNpcScheduleLlm } from "./api.js";
 import {
   DEFAULT_NPC_SCHEDULE_SYSTEM_PROMPT,
@@ -99,6 +100,22 @@ function refreshMapUiIfOpen() {
   }
 }
 
+// === Helper: 等这一轮状态表LLM整合完再往下走，保证顺序是
+// 剧情LLM（正文已生成）→ 状态表LLM → NPC行程LLM。
+// 状态表模块没注册成功（比如当前酒馆版本不支持）时 getLatestStatusTableRenderPromise()
+// 会一直返回 null，这里直接跳过等待，不阻塞NPC行程LLM。
+async function waitForStatusTableUpdate() {
+  try {
+    const pending = getLatestStatusTableRenderPromise();
+    if (pending && typeof pending.then === "function") {
+      await pending;
+    }
+  } catch (error) {
+    // 状态表LLM那边的异常已经在它自己内部被吞掉了，这里只是兜底，不该连累NPC行程LLM不跑了
+    console.warn("[剧情助手/地图] 等待状态表LLM完成时出错（不影响NPC行程LLM继续执行）:", error);
+  }
+}
+
 // === Function: 跑一次NPC行程LLM，把结果写回各标记的 npcNote 字段 ===
 // 返回布尔值：true = 真的发起了请求并成功写回了结果；false = 因为开关未开/资料为空/
 // 没有任何标记点/请求失败等原因被跳过或中止，调用方可以据此决定要不要给用户反馈。
@@ -113,6 +130,9 @@ export async function runNpcScheduleUpdate() {
     const candidateMaps = collectCandidateMaps(settings);
     const hasAnyMarker = candidateMaps.some((m) => m.markers.length > 0);
     if (!hasAnyMarker) return false; // 没有任何地点标记，没法分配，跳过
+
+    // 廉价检查（开关/资料/标记）都过了，才值得等状态表LLM——避免没必要的等待。
+    await waitForStatusTableUpdate();
 
     const candidateLocationsText = buildCandidateLocationsText(
       candidateMaps.map((m) => ({

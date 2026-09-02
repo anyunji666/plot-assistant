@@ -301,6 +301,45 @@ export async function extractInventorySetupsForLatestFloor() {
 }
 
 
+// === 供其它模块（目前是地图/NPC智能行程）在"这一轮状态表LLM整合完"之后再排队执行，
+// 实现 剧情LLM → 状态表LLM → 其它自动化LLM 的严格先后顺序。===
+// 每次新楼层渲染时，下面 registerStatusTableAutoUpdate 的监听器会把这一轮的处理 Promise
+// 重新赋值给这个变量；导出的是取值函数（而不是变量本身），避免调用方直接拿到 let 绑定后
+// 因为 ES 模块静态分析/打包工具差异而读到过期值。
+let latestStatusTableRenderPromise = null;
+
+export function getLatestStatusTableRenderPromise() {
+  return latestStatusTableRenderPromise;
+}
+
+// === Helper: 新楼层渲染后要跑的完整状态表整合流程，抽成具名函数是因为渲染监听器现在
+// 只负责"发起并记录这一轮的 Promise"（见上面 latestStatusTableRenderPromise），
+// 实际流程还是这三步，跟之前完全一样。===
+async function runStatusTableRenderCycle() {
+  // 非阻塞悬浮提示：整个提取+整合期间用户仍可以正常操作（含继续发下一条），
+  // 提示本身不做任何拦截，只是告诉用户"状态表还在算"。三种收尾场景（正常结束/
+  // 状态表LLM调用失败被内部吞掉/下面 GENERATION_STARTED 监听到用户抢先发下一条）
+  // 都会让它消失，不需要用户手动关闭。
+  showStatusLlmIndicator();
+  try {
+    // 先跑状态表LLM提取（同步等待，剧情LLM生成下一层前状态表已是最新）；
+    // 提取内部静默失败不抛出，这里始终固定接一次全量重放，
+    // 覆盖"提取失败/跳过，但 Relationships/Busy 仍要正常从正文解析更新"的情况。
+    await extractInventorySetupsForLatestFloor();
+    // 必须等这次全量重放（写入世界书「状态表」条目）真正完成，下面强制刷新卡片时
+    // fetchStatusTableSnapshot 读到的才是这一轮的最新值，不然会读到刷新前的旧快照。
+    await handleMessageForStatusTable();
+    // 状态表已整合完毕：只强制刷新"最新一层"卡片，让附加字段等内容不用刷新页面就能看到，
+    // 其余历史楼层不受影响（见 rerenderLatestSummaryCard 的说明）。
+    await rerenderLatestSummaryCard();
+  } finally {
+    // extractInventorySetupsForLatestFloor / handleMessageForStatusTable 内部各自已经
+    // try/catch 吞掉了失败，理论上走不到这个 finally 是因为异常；这里用 finally 只是
+    // 兜底保证任何将来的改动即便抛错，提示也一定会消失，不会卡在屏幕上关不掉。
+    hideStatusLlmIndicator();
+  }
+}
+
 // === Function: 注册状态表自动更新监听——每次新楼层（AI消息）渲染完成后自动解析并合并进状态表 ===
 export function registerStatusTableAutoUpdate() {
   try {
@@ -330,29 +369,10 @@ export function registerStatusTableAutoUpdate() {
     }
 
     if (renderEventName) {
-      context.eventSource.on(renderEventName, async () => {
-        // 非阻塞悬浮提示：整个提取+整合期间用户仍可以正常操作（含继续发下一条），
-        // 提示本身不做任何拦截，只是告诉用户"状态表还在算"。三种收尾场景（正常结束/
-        // 状态表LLM调用失败被内部吞掉/下面 GENERATION_STARTED 监听到用户抢先发下一条）
-        // 都会让它消失，不需要用户手动关闭。
-        showStatusLlmIndicator();
-        try {
-          // 先跑状态表LLM提取（同步等待，剧情LLM生成下一层前状态表已是最新）；
-          // 提取内部静默失败不抛出，这里始终固定接一次全量重放，
-          // 覆盖"提取失败/跳过，但 Relationships/Busy 仍要正常从正文解析更新"的情况。
-          await extractInventorySetupsForLatestFloor();
-          // 必须等这次全量重放（写入世界书「状态表」条目）真正完成，下面强制刷新卡片时
-          // fetchStatusTableSnapshot 读到的才是这一轮的最新值，不然会读到刷新前的旧快照。
-          await handleMessageForStatusTable();
-          // 状态表已整合完毕：只强制刷新"最新一层"卡片，让附加字段等内容不用刷新页面就能看到，
-          // 其余历史楼层不受影响（见 rerenderLatestSummaryCard 的说明）。
-          await rerenderLatestSummaryCard();
-        } finally {
-          // extractInventorySetupsForLatestFloor / handleMessageForStatusTable 内部各自已经
-          // try/catch 吞掉了失败，理论上走不到这个 finally 是因为异常；这里用 finally 只是
-          // 兜底保证任何将来的改动即便抛错，提示也一定会消失，不会卡在屏幕上关不掉。
-          hideStatusLlmIndicator();
-        }
+      context.eventSource.on(renderEventName, () => {
+        // 同步赋值（在任何 await 之前完成），保证按同一事件注册顺序排在后面的监听器
+        // （比如地图模块的 NPC智能行程）在被调用时，已经能立刻拿到这一轮的 Promise。
+        latestStatusTableRenderPromise = runStatusTableRenderCycle();
       });
     }
     rollbackEventNames.forEach((eventName) => {
