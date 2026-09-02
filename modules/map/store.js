@@ -113,6 +113,8 @@ export function makeCharacterMapData() {
       big: makeBigMap(),
       small: [],
     },
+    npcScheduleText: "", // 用户在「NPC行程」面板手写/粘贴的NPC活动行程资料，自由文本，按角色卡区分
+    npcScheduleEnabled: false, // 「NPC智能行程」开关：开启后每层AI消息渲染完自动调用一次NPC行程LLM
   };
 }
 
@@ -359,8 +361,10 @@ export function colorForFaction(factionName) {
 export function exportMarkersJson() {
   const settings = getSettings();
   const payload = {
-    version: 2,
+    version: 3,
     factions: settings.factions,
+    npcScheduleText: settings.npcScheduleText || "",
+    npcScheduleEnabled: !!settings.npcScheduleEnabled,
     maps: {
       big: {
         markers: settings.maps.big.markers,
@@ -402,6 +406,8 @@ export function importMarkersJson(e, onDone) {
       const settings = getSettings();
 
       if (Array.isArray(data.factions)) settings.factions = data.factions;
+      if (typeof data.npcScheduleText === "string") settings.npcScheduleText = data.npcScheduleText;
+      if (typeof data.npcScheduleEnabled === "boolean") settings.npcScheduleEnabled = data.npcScheduleEnabled;
 
       if (data.maps) {
         if (data.maps.big) {

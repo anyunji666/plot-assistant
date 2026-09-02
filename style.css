@@ -1176,6 +1176,20 @@
     line-height: 1.4;
 }
 
+/* 小地图名称：不再可编辑，硬关联大地图同名标记，只做只读展示 */
+.mm-smallmap-name-display {
+    padding: 4px 6px;
+    font-size: 0.85em;
+    opacity: 0.9;
+}
+
+/* 孤儿小地图（关联的大地图标记已被删除）提示文案 */
+.mm-smallmap-orphan-hint {
+    font-size: 0.78em;
+    color: #f0ad4e;
+    line-height: 1.4;
+}
+
 .mm-checkbox-label {
     display: flex !important;
     align-items: center;
@@ -1271,12 +1285,130 @@
     flex-shrink: 0;
 }
 
+/* NPC信息小徽章：标记列表里跟在地点名称后面，提示"这里现在有谁"。
+   flex-basis: 100% 让它在 .mm-marker-item 的 flex 行里强制独占一行，
+   而不是挤在标记名称右边。 */
+.mm-marker-npc-badge {
+    display: block;
+    flex-basis: 100%;
+    font-size: 0.78em;
+    opacity: 0.8;
+    margin-top: 2px;
+    margin-left: 16px;
+    word-break: break-all;
+}
+
+/* 关联小地图的NPC徽章：跟标记自己的NPC徽章分开单独一行显示，不拼成一条字符串 */
+.mm-marker-submap-npc-badge {
+    opacity: 0.7;
+}
+
+/* NPC行程资料编辑面板 / NPC行程LLM连接配置面板：跟「管理势力」浮层同一套定位方式，
+   但内容更长（大文本框/多个输入框），单独给一个通用 class，宽度也放宽一些。 */
+.mm-side-panel {
+    position: absolute;
+    top: 50px;
+    right: 20px;
+    background: #222;
+    color: #eee;
+    border: 1px solid #555;
+    border-radius: 6px;
+    padding: 12px;
+    width: min(360px, calc(100vw - 40px));
+    max-width: calc(100% - 16px);
+    max-height: calc(100% - 70px);
+    overflow-y: auto;
+    box-sizing: border-box;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.mm-side-panel-title {
+    font-weight: bold;
+}
+
+.mm-side-panel-hint {
+    font-size: 0.8em;
+    opacity: 0.75;
+    line-height: 1.4;
+}
+
+.mm-side-panel label {
+    font-size: 0.85em;
+    opacity: 0.85;
+    margin-top: 4px;
+}
+
+.mm-side-panel input[type="text"],
+.mm-side-panel input[type="number"],
+.mm-side-panel textarea {
+    width: 100%;
+    box-sizing: border-box;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 4px;
+    color: inherit;
+    padding: 6px 8px;
+    font-size: 0.85em;
+}
+
+.mm-side-panel textarea {
+    min-height: 160px;
+    resize: vertical;
+}
+
+.mm-side-panel-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    gap: 8px;
+}
+
+/* 操作行里的勾选框（比如「启用AI调度」）不需要继承 .mm-side-panel label 的 margin-top，
+   否则跟同行的保存按钮对不齐 */
+.mm-side-panel-actions label {
+    margin-top: 0;
+}
+
+/* 模型名输入行：文本框/下拉框（二选一显示）+ 获取列表按钮，跟状态表配置弹窗同一套交互 */
+.mm-model-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.mm-model-row input[type="text"],
+.mm-model-row select {
+    flex: 1;
+    min-width: 0;
+}
+
+.mm-model-row button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 4px;
+    color: inherit;
+    padding: 6px 10px;
+    font-size: 0.82em;
+    cursor: pointer;
+}
+
+.mm-model-row button:hover {
+    background: rgba(255,255,255,0.18);
+}
+
 .mm-marker-item {
     padding: 6px 8px;
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.88em;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 6px;
 }
@@ -1560,6 +1692,12 @@
     .mm-form-popup {
         min-width: 200px;
         max-width: 78vw;
+    }
+
+    .mm-side-panel {
+        left: 8px;
+        right: 8px;
+        width: auto;
     }
 }
 

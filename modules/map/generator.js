@@ -31,6 +31,31 @@ export function buildRouteSummaryList(bigMap) {
     .filter(Boolean);
 }
 
+// 把"当前NPC"信息（大地图 + 已加载到上下文的小地图）单独拼成一段说明文字，
+// 跟大地图 customSummary 是否被用户自定义覆盖无关——不管标记/路线文本走的是自动生成还是
+// 手动编辑，只要标记上填了 npcNote（不管是「NPC智能行程」自动写的还是手动填的），
+// 都要能让主线剧情LLM看到，所以单独拼、不塞进上面那个 if/else 分支里。
+function buildNpcPositionsSummary(settings) {
+  const lines = [];
+  settings.maps.big.markers.forEach((m) => {
+    if (m.npcNote && m.npcNote.trim()) {
+      lines.push(`【大地图】${m.name}：${m.npcNote.trim()}`);
+    }
+  });
+  settings.maps.small
+    .filter((sm) => sm.loadedInContext)
+    .forEach((sm) => {
+      const entries = sm.markers
+        .filter((m) => m.npcNote && m.npcNote.trim())
+        .map((m) => `${m.name}-${m.npcNote.trim()}`);
+      if (entries.length > 0) {
+        lines.push(`【${sm.name}】内部地点：${entries.join("；")}`);
+      }
+    });
+  if (lines.length === 0) return "";
+  return `各地点暂时停留的NPC有：\n${lines.join("\n")}`;
+}
+
 export function buildSummaryText() {
   const settings = getSettings();
   const parts = [];
@@ -65,9 +90,12 @@ export function buildSummaryText() {
         noteParts.push(m.layoutNote.trim());
       }
       if (noteParts.length > 0) {
-        parts.push(`地图"${m.name}"的空间布局：\n${noteParts.join("\n")}`);
+        parts.push(`"${m.name}"的空间布局：\n${noteParts.join("\n")}`);
       }
     });
+
+  const npcPositionsText = buildNpcPositionsSummary(settings);
+  if (npcPositionsText) parts.push(npcPositionsText);
 
   if (parts.length === 0) return "";
 

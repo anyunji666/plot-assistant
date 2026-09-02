@@ -270,6 +270,7 @@ export function openRouteForm(fromMarker, toMarker) {
   const mapH2 = mapState.map.getContainer().clientHeight || window.innerHeight;
   L.popup({
     closeButton: false,
+    closeOnClick: false, // 点击地图空白处的关闭逻辑统一由 ui.js 的地图 click 事件处理
     minWidth: 260,
     autoPan: true,
     maxHeight: Math.round(mapH2 * 0.7),
@@ -435,6 +436,7 @@ export function openRouteActionsPopup(route, from, to) {
 
   L.popup({
     closeButton: false,
+    closeOnClick: false, // 点击地图空白处的关闭逻辑统一由 ui.js 的地图 click 事件处理
     minWidth: 200,
     autoPan: true,
   })

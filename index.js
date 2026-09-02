@@ -12,6 +12,7 @@ import { registerHolidayInjection } from "./modules/holiday/inject.js";
 import { getSettings } from "./modules/map/store.js";
 import { injectFloatingButton, registerMapGlobalEvents } from "./modules/map/ui.js";
 import { syncMapInfoEntry } from "./modules/map/generator.js";
+import { registerNpcScheduleAutoUpdate } from "./modules/map/npc-schedule/engine.js";
 import { registerNovelAutoJump } from "./modules/novel/generator.js";
 import { initNovelSummaryModule } from "./modules/novel-summary/ui.js";
 import { initSummaryBeautify } from "./modules/beautify/render.js";
@@ -106,6 +107,7 @@ jQuery(() => {
   getSettings(); // 确保当前角色（或临时）的地图数据结构已就绪
   injectFloatingButton();
   registerMapGlobalEvents();
+  registerNpcScheduleAutoUpdate(); // 「NPC智能行程」开关默认关闭，只在开启后才会真正发起请求
   // 插件刚加载时如果已经在某个角色的聊天里，主动同步一次「地图信息」条目，不用等切换聊天才触发；
   // 延迟一下给酒馆本身留出初始化时间，跟世界书自动创建那边的 1500ms 错开，避免同时抢着读写世界书。
   delay(1600).then(() => syncMapInfoEntry(false));

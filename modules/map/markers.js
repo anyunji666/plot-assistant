@@ -4,7 +4,7 @@ import { escapeHtml } from "../core.js";
 import { colorForFaction, getActiveMap, getSettings, isBigMapActive, mapState, saveSettings } from "./store.js";
 import { scheduleMapInfoSync } from "./generator.js";
 import { beginRouteFromMarker, bindRouteActionsEvents, bindRouteFormEvents, handleRoutePointClick, renderAllRoutes, renderRouteList } from "./routes.js";
-import { toggleMobileSidebar } from "./ui.js";
+import { populateMapSwitch, toggleMobileSidebar } from "./ui.js";
 
 
 // ============================================================
@@ -63,6 +63,8 @@ export function openMarkerForm(existingMarker, latlng) {
                 <select id="mm-f-faction">${factionOptions}</select>
                 <label>地点描述</label>
                 <textarea id="mm-f-description" placeholder="例如：这是一个易守难攻的据点">${isEdit ? escapeHtml(existingMarker.description || "") : ""}</textarea>
+                <label>当前此地停留的NPC</label>
+                <textarea id="mm-f-npc" placeholder="例如：李文远（巡视据点）；赵敏（后堂议事）">${isEdit ? escapeHtml(existingMarker.npcNote || "") : ""}</textarea>
                 <div class="mm-form-actions">
                     ${isEdit ? '<button id="mm-f-delete" class="mm-danger">删除</button>' : ""}
                     ${isEdit ? '<button id="mm-f-route">添加路线</button>' : ""}
@@ -76,6 +78,8 @@ export function openMarkerForm(existingMarker, latlng) {
             <div class="mm-form-popup">
                 <label>标记名称</label>
                 <input type="text" id="mm-f-name" value="${isEdit ? escapeHtml(existingMarker.name) : ""}" placeholder="例如：正房">
+                <label>当前此地停留的NPC</label>
+                <textarea id="mm-f-npc" placeholder="例如：赵敏（绣花）">${isEdit ? escapeHtml(existingMarker.npcNote || "") : ""}</textarea>
                 <div class="mm-form-actions">
                     ${isEdit ? '<button id="mm-f-delete" class="mm-danger">删除</button>' : ""}
                     <button id="mm-f-cancel">取消</button>
@@ -94,6 +98,7 @@ export function openMarkerForm(existingMarker, latlng) {
   const mapH1 = mapState.map.getContainer().clientHeight || window.innerHeight;
   L.popup({
     closeButton: false,
+    closeOnClick: false, // 点击地图空白处的关闭逻辑统一由 ui.js 的地图 click 事件处理，避免"关闭后又在该处新建一个"
     minWidth: 200,
     autoPan: true,
     maxHeight: Math.round(mapH1 * 0.7),
@@ -182,6 +187,20 @@ export function bindMarkerFormEvents(root, ctx) {
       }
 
       const map = getActiveMap();
+      const npcNote = (root.querySelector("#mm-f-npc")?.value || "").trim();
+
+      // 同地图下标记名不能重复（大地图内部之间、或某张小地图内部之间各自校验，编辑时排除自己）
+      const dupInSameMap = map.markers.some(
+        (m) => m.name === name && (!isEdit || m.id !== existingMarker.id),
+      );
+      if (dupInSameMap) {
+        toastr?.warning?.(
+          isBigMapActive()
+            ? `大地图上已存在名为"${name}"的地点标记，换个名字吧`
+            : `这张小地图上已存在名为"${name}"的标记，换个名字吧`,
+        );
+        return;
+      }
 
       if (isBigMapActive()) {
         const faction = root.querySelector("#mm-f-faction").value;
@@ -190,7 +209,20 @@ export function bindMarkerFormEvents(root, ctx) {
           .value.trim();
         if (isEdit) {
           const target = map.markers.find((m) => m.id === existingMarker.id);
-          Object.assign(target, { name, faction, description });
+          const oldName = target.name;
+          Object.assign(target, { name, faction, description, npcNote });
+          // 小地图硬关联大地图标记名：标记改名后，同步把关联的小地图也改成新名字。
+          // 如果新名字已经被另一张小地图占用（比如改成了某张孤儿小地图同名），就不强改，
+          // 让那张同名的小地图借着名字匹配自动被视为关联上——不需要额外的绑定逻辑。
+          if (name !== oldName) {
+            const settings = getSettings();
+            const linkedSmall = settings.maps.small.find((sm) => sm.name === oldName);
+            const nameTaken = settings.maps.small.some((sm) => sm.name === name);
+            if (linkedSmall && !nameTaken) {
+              linkedSmall.name = name;
+              populateMapSwitch();
+            }
+          }
         } else {
           map.markers.push({
             id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -199,19 +231,22 @@ export function bindMarkerFormEvents(root, ctx) {
             name,
             faction,
             description,
+            npcNote,
           });
         }
       } else {
-        // 小地图标记只有名称
+        // 小地图标记只有名称 + 当前NPC
         if (isEdit) {
           const target = map.markers.find((m) => m.id === existingMarker.id);
           target.name = name;
+          target.npcNote = npcNote;
         } else {
           map.markers.push({
             id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
             x: latlng.lng,
             y: latlng.lat,
             name,
+            npcNote,
           });
         }
       }
@@ -242,8 +277,12 @@ export function renderMarkerList() {
     // 小地图标记列表只需要名称，不做势力分组/颜色区分
     let smallHtml = "";
     map.markers.forEach((m) => {
+      const npcBadge = m.npcNote
+        ? `<span class="mm-marker-npc-badge">👤 ${escapeHtml(m.npcNote)}</span>`
+        : "";
       smallHtml += `<div class="mm-marker-item" data-id="${m.id}">
                 <span class="mm-marker-name">${escapeHtml(m.name)}</span>
+                ${npcBadge}
             </div>`;
     });
     listEl.innerHTML = smallHtml;
@@ -265,15 +304,33 @@ export function renderMarkerList() {
     groups[m.faction].push(m);
   });
 
+  const settings = getSettings();
+
   let html = "";
   Object.keys(groups).forEach((faction) => {
     const color = colorForFaction(faction);
     html += `<div class="mm-faction-group">
             <div class="mm-faction-group-title"><span class="mm-color-dot" style="background:${color};"></span>${escapeHtml(faction)}</div>`;
     groups[faction].forEach((m) => {
+      const npcBadge = m.npcNote
+        ? `<span class="mm-marker-npc-badge">👤 ${escapeHtml(m.npcNote)}</span>`
+        : "";
+      // 关联小地图的 NPC 单独一行显示，跟大地图标记自己的 NPC 分开，不拼成一条字符串。
+      const linkedSmall = settings.maps.small.find((sm) => sm.name === m.name);
+      let subBadge = "";
+      if (linkedSmall) {
+        const subEntries = linkedSmall.markers
+          .filter((mk) => mk.npcNote && mk.npcNote.trim())
+          .map((mk) => `${mk.name}-${mk.npcNote.trim()}`);
+        if (subEntries.length > 0) {
+          subBadge = `<span class="mm-marker-npc-badge mm-marker-submap-npc-badge">🏠 ${escapeHtml(subEntries.join("；"))}</span>`;
+        }
+      }
       html += `<div class="mm-marker-item" data-id="${m.id}">
                 <span class="mm-color-dot" style="background:${color};"></span>
                 <span class="mm-marker-name">${escapeHtml(m.name)}</span>
+                ${npcBadge}
+                ${subBadge}
             </div>`;
     });
     html += `</div>`;

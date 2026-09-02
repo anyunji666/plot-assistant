@@ -1,10 +1,13 @@
 "use strict";
 
 import { escapeHtml, getCtx, notify } from "../core.js";
-import { BIG_MAP_ID, BIG_MAP_SUMMARY_PLACEHOLDER, PALETTE, SMALL_MAP_NOTE_PLACEHOLDER, clearCurrentCharacterImages, deleteImage, exportMarkersJson, getActiveMap, getActiveMapId, getFabVisible, getMapCurrentCharacterName, getMapExtRoot, getSettings, importMarkersJson, isBigMapActive, loadImage, loadLeaflet, makeCharacterMapData, makeSmallMap, mapState, saveImage, saveSettings } from "./store.js";
+import { BIG_MAP_ID, BIG_MAP_SUMMARY_PLACEHOLDER, PALETTE, SMALL_MAP_NOTE_PLACEHOLDER, clearCurrentCharacterImages, colorForFaction, deleteImage, exportMarkersJson, getActiveMap, getActiveMapId, getFabVisible, getMapCurrentCharacterName, getMapExtRoot, getSettings, importMarkersJson, isBigMapActive, loadImage, loadLeaflet, makeCharacterMapData, makeSmallMap, mapState, saveImage, saveSettings } from "./store.js";
 import { buildRouteSummaryList, scheduleMapInfoSync, syncMapInfoEntry } from "./generator.js";
 import { bindPopupFormEvents, openMarkerForm, renderAllMarkers, renderMarkerList } from "./markers.js";
 import { cancelRouteMode, renderAllRoutes, renderRouteList, startRouteMode } from "./routes.js";
+import { runNpcScheduleUpdate } from "./npc-schedule/engine.js";
+import { getNpcScheduleLlmSettings, saveNpcScheduleLlmSettings } from "./npc-schedule/store.js";
+import { niFetchModelIds } from "../novel-summary/lib/api.js";
 
 
 // ============================================================
@@ -264,6 +267,8 @@ export function buildModalSkeleton() {
                     <input type="file" id="mm-import-json" accept="application/json" style="display:none;">
                 </label>
                 <button id="mm-manage-factions-btn">管理势力</button>
+                <button id="mm-npc-schedule-btn">📜 NPC行程</button>
+                <button id="mm-npc-llm-config-btn" title="配置NPC行程LLM连接与「启用AI调度」开关">⚙️NPC模型</button>
                 <button id="mm-clear-all-btn" class="mm-danger">清除当前角色的地图数据</button>
                 <button id="mm-sidebar-toggle-btn">📋 列表</button>
                 <button id="mm-close-btn">关闭</button>
@@ -291,11 +296,11 @@ export function buildModalSkeleton() {
                         <div id="mm-route-list"></div>
                     </div>
                     <div id="mm-sidebar-footer">
-                        点击地图任意位置添加标记。大地图上点击"添加路线"后依次点击两个已有标记，
-                        再填写方位、队伍信息与时间即可生成一条路线。小地图没有路线，
-                        用左侧"布局关系/特别说明"手写空间描述即可。大地图左侧可点击"自动载入"
-                        生成一版说明文字后自行修改，改过之后就不会再被自动覆盖。以上信息会自动写入当前角色的
-                        「角色名总结」世界书里固定标题为「地图信息」的一条条目，是否启用仍需去世界书面板里自己勾选。
+                        大地图上点击"添加路线"后选择标记点，输入"行动规划"即可生成一条路线。
+                        小地图没有自动载入功能，左侧"布局关系/特别说明"框里手写空间描述。
+                        以上信息会自动写入当前角色的
+                        「角色名总结」世界书里固定标题为「地图信息」的一条条目，
+                        需要取消注入的话可去世界书面板里关闭或删除「地图信息」栏。
                     </div>
                 </div>
             </div>
@@ -327,7 +332,7 @@ export function buildModalSkeleton() {
     .addEventListener("change", handleImageUpload);
   document
     .getElementById("mm-new-smallmap-btn")
-    .addEventListener("click", handleNewSmallMap);
+    .addEventListener("click", openSmallMapMarkerPicker);
   document
     .getElementById("mm-export-btn")
     .addEventListener("click", exportMarkersJson);
@@ -347,6 +352,12 @@ export function buildModalSkeleton() {
   document
     .getElementById("mm-manage-factions-btn")
     .addEventListener("click", openFactionManager);
+  document
+    .getElementById("mm-npc-schedule-btn")
+    .addEventListener("click", openNpcScheduleEditor);
+  document
+    .getElementById("mm-npc-llm-config-btn")
+    .addEventListener("click", openNpcScheduleLlmConfig);
   document
     .getElementById("mm-add-route-btn")
     .addEventListener("click", startRouteMode);
@@ -471,12 +482,33 @@ export async function initMap() {
   mapState.map.on("click", (e) => {
     if (mapState.routeMode) return; // 路线选点模式下，空白处点击不做任何事，只能点已有标记
     if (!mapState.imageOverlay) return; // 没有底图时不允许打点
+    if (mapState.pendingFormContext) {
+      // 当前已有弹窗（标记表单/路线表单/路线操作）打开，点击地图空白区域视为"关闭弹窗"，
+      // 不再在点击位置新建标记（否则会出现"关闭又立刻弹出一个新的"的怪现象）
+      mapState.map.closePopup();
+      return;
+    }
     openMarkerForm(null, e.latlng);
   });
 
   // 路线的角度/间距是按"当前缩放级别下的屏幕像素"算的，缩放变化后重新渲染一次，
   // 让路线和标记之间的视觉间距在任意缩放级别下都保持一致，不会显得忽远忽近。
   mapState.map.on("zoomend", renderAllRoutes);
+
+  // 地图上的点击（含空白处/标记）都由上面 map 自己的 click 事件处理好了；
+  // 但点击右侧菜单栏/侧边栏这些完全在 Leaflet 地图容器之外的区域，Leaflet 感知不到，
+  // 所以这里额外兜底：只要还有表单弹窗开着，点击地图容器以外的任何地方都直接关掉它。
+  document.addEventListener(
+    "mousedown",
+    (e) => {
+      if (!mapState.pendingFormContext) return;
+      const mapContainer = document.getElementById("mm-map-container");
+      if (mapContainer && !mapContainer.contains(e.target)) {
+        mapState.map.closePopup();
+      }
+    },
+    true,
+  );
 
   await loadActiveMapImageAndRender();
 }
@@ -585,14 +617,39 @@ export function createBlankImageDataUrl(width, height) {
 }
 
 
-export async function handleNewSmallMap() {
+export async function handleNewSmallMap(marker) {
+  const name = marker?.name?.trim();
+  if (!name) return; // 理论上不会走到这：入口只有 openSmallMapMarkerPicker，一定会传合法标记
+
+  const settings = getSettings();
+  const existing = settings.maps.small.find((m) => m.name === name);
+  if (existing) {
+    // 小地图硬关联大地图标记名，同名即视为已创建（含之前的孤儿小地图被自动认领的情况）：
+    // 不再弹改名副本框，直接提醒并切换过去，方便用户接着编辑。
+    toastr?.info?.(`"${name}"已创建过小地图，已为你切换过去`);
+    settings.activeMapId = existing.id;
+    saveSettings();
+    populateMapSwitch();
+    await loadActiveMapImageAndRender();
+    renderMarkerList();
+    renderRouteList();
+    renderMapMeta();
+    return;
+  }
+
+  await createSmallMapWithName(name);
+}
+
+
+// 实际执行新建：生成白底图 + 写入 settings.maps.small + 切换为当前地图。
+async function createSmallMapWithName(name) {
+  const settings = getSettings();
   const width = 1200;
   const height = 800;
   const dataUrl = createBlankImageDataUrl(width, height);
 
-  const settings = getSettings();
   const newMap = makeSmallMap({
-    name: `未命名地图${settings.maps.small.length + 1}`,
+    name,
     imageWidth: width,
     imageHeight: height,
   });
@@ -608,8 +665,77 @@ export async function handleNewSmallMap() {
   renderMapMeta();
   scheduleMapInfoSync();
   toastr?.success?.(
-    "已新建小地图（默认白底图），可在右侧改名，也可以点【替换底图图片】换成真实图片",
+    `已新建"${name}"的小地图（默认白底图），可在右侧点【替换底图图片】换成真实图片`,
   );
+}
+
+
+
+// 小地图的定位是"大地图某个地点的内部详图"，所以新建时强制先从大地图已有标记里选一个，
+// 用它的名称作为小地图名，避免出现小地图和大地图地点对不上号的情况。
+export function openSmallMapMarkerPicker() {
+  closeAllSidePanels();
+  const settings = getSettings();
+  const bigMarkers = settings.maps.big.markers;
+
+  let listHtml;
+  if (bigMarkers.length === 0) {
+    listHtml = `<div class="mm-side-panel-hint">大地图上还没有任何标记点，请先去大地图上点击添加一个地点标记，再回来新建它的内部详图。</div>`;
+  } else {
+    const groups = {};
+    bigMarkers.forEach((m) => {
+      if (!groups[m.faction]) groups[m.faction] = [];
+      groups[m.faction].push(m);
+    });
+    listHtml = Object.keys(groups)
+      .map((faction) => {
+        const color = colorForFaction(faction);
+        const items = groups[faction]
+          .map(
+            (m) => `
+                <div class="mm-marker-item" data-id="${m.id}">
+                    <span class="mm-color-dot" style="background:${color};"></span>
+                    <span class="mm-marker-name">${escapeHtml(m.name)}</span>
+                </div>`,
+          )
+          .join("");
+        return `<div class="mm-faction-group">
+                <div class="mm-faction-group-title"><span class="mm-color-dot" style="background:${color};"></span>${escapeHtml(faction)}</div>
+                ${items}
+            </div>`;
+      })
+      .join("");
+  }
+
+  const html = `
+        <div id="mm-smallmap-picker" class="mm-side-panel">
+            <div class="mm-side-panel-title">选择要新建详图的地点</div>
+            <div class="mm-side-panel-hint">
+                小地图是大地图某个地点的内部详图，点击一个大地图标记，即用该标记的名称新建一张小地图。
+            </div>
+            <div id="mm-smallmap-picker-list">${listHtml}</div>
+            <div class="mm-side-panel-actions">
+                <button id="mm-smallmap-picker-cancel">取消</button>
+            </div>
+        </div>`;
+  document
+    .getElementById("mm-map-container")
+    .insertAdjacentHTML("beforeend", html);
+  bindOutsideClickClose("mm-smallmap-picker");
+
+  document.getElementById("mm-smallmap-picker-cancel").onclick = () => {
+    document.getElementById("mm-smallmap-picker")?.remove();
+  };
+
+  document
+    .querySelectorAll("#mm-smallmap-picker .mm-marker-item")
+    .forEach((el) => {
+      el.addEventListener("click", () => {
+        const marker = bigMarkers.find((m) => m.id === el.dataset.id);
+        document.getElementById("mm-smallmap-picker")?.remove();
+        if (marker) handleNewSmallMap(marker);
+      });
+    });
 }
 
 
@@ -684,10 +810,15 @@ export function renderMapMeta() {
   uploadBigLabel?.classList.add("mm-hidden");
 
   const map = getActiveMap();
+  // 小地图名称硬关联大地图同名标记，不再支持手动改名（改名请去大地图上改标记名，会自动同步）。
+  // 大地图上找不到同名标记时，说明这是一张孤儿小地图（原关联标记被删了），给个提示。
+  const settings = getSettings();
+  const isOrphan = !settings.maps.big.markers.some((bm) => bm.name === map.name);
   el.innerHTML = `
         <div class="mm-map-meta-block">
-            <label>地图名称（局部地点的名称）</label>
-            <input type="text" id="mm-smallmap-name" value="${escapeHtml(map.name)}">
+            <label>地图名称（跟随大地图同名标记，自动同步）</label>
+            <div class="mm-smallmap-name-display">${escapeHtml(map.name)}</div>
+            ${isOrphan ? `<div class="mm-smallmap-orphan-hint">⚠️ 未关联大地图标记，新建同名标记后自动绑定</div>` : ""}
             <label class="mm-checkbox-label">
                 <input type="checkbox" id="mm-smallmap-loaded" ${map.loadedInContext ? "checked" : ""}>
                 加载到本次对话的 AI 上下文
@@ -701,16 +832,6 @@ export function renderMapMeta() {
             <button id="mm-smallmap-delete" class="mm-danger">删除这张小地图</button>
         </div>`;
 
-  document
-    .getElementById("mm-smallmap-name")
-    .addEventListener("change", (ev) => {
-      const val = ev.target.value.trim();
-      map.name = val || map.name;
-      ev.target.value = map.name;
-      saveSettings();
-      populateMapSwitch();
-      scheduleMapInfoSync();
-    });
   document
     .getElementById("mm-smallmap-loaded")
     .addEventListener("change", (ev) => {
@@ -758,13 +879,53 @@ export async function deleteSmallMap(id) {
 
 
 // ============================================================
+// 通用：三个浮层弹窗（管理势力 / NPC行程 / NPC模型配置）共用的
+// "同时只显示一个" + "点击弹窗外部区域自动关闭" 逻辑
+// ============================================================
+
+const SIDE_PANEL_IDS = ["mm-faction-manager", "mm-npc-schedule-editor", "mm-npc-llm-config", "mm-smallmap-picker"];
+
+// 打开任意一个浮层前先调用一次：保证同一时间只有一个浮层显示，不会互相重叠。
+function closeAllSidePanels() {
+  SIDE_PANEL_IDS.forEach((id) => document.getElementById(id)?.remove());
+}
+
+// 每个 panelId 只保留一个"外部点击关闭"监听，重新打开/刷新同一个浮层时会先顶掉旧的，
+// 避免同一个浮层每刷新一次就叠加一个新监听。用 mousedown 而不是 click，是为了在
+// "点击打开按钮"这类会触发浮层重建的场景里，跟浮层自身内部的 click 事件保持时序一致；
+// 绑定动作本身延后到下一个事件循环（setTimeout 0），避免"打开浮层"这一次点击本身
+// 被当成"点了外部"而立刻把刚打开的浮层关掉。
+const sidePanelOutsideClickHandlers = new Map();
+
+function bindOutsideClickClose(panelId) {
+  const prevHandler = sidePanelOutsideClickHandlers.get(panelId);
+  if (prevHandler) document.removeEventListener("mousedown", prevHandler, true);
+
+  const handler = (e) => {
+    const panel = document.getElementById(panelId);
+    if (!panel || !panel.isConnected) {
+      document.removeEventListener("mousedown", handler, true);
+      sidePanelOutsideClickHandlers.delete(panelId);
+      return;
+    }
+    if (!panel.contains(e.target)) {
+      panel.remove();
+      document.removeEventListener("mousedown", handler, true);
+      sidePanelOutsideClickHandlers.delete(panelId);
+    }
+  };
+  sidePanelOutsideClickHandlers.set(panelId, handler);
+  setTimeout(() => document.addEventListener("mousedown", handler, true), 0);
+}
+
+
+// ============================================================
 // 势力管理（全局共用，不区分大/小地图）
 // ============================================================
 
 export function openFactionManager() {
   const settings = getSettings();
-  const existing = document.getElementById("mm-faction-manager");
-  if (existing) existing.remove();
+  closeAllSidePanels();
 
   const rows = settings.factions
     .map(
@@ -789,6 +950,7 @@ export function openFactionManager() {
   document
     .getElementById("mm-map-container")
     .insertAdjacentHTML("beforeend", html);
+  bindOutsideClickClose("mm-faction-manager");
 
   function bindEvents() {
     document.querySelectorAll(".mm-faction-color").forEach((el) => {
@@ -846,6 +1008,206 @@ export function openFactionManager() {
   document.getElementById("mm-faction-close").onclick = () => {
     document.getElementById("mm-faction-manager")?.remove();
   };
+}
+
+
+// ============================================================
+// NPC智能行程（资料编辑 + LLM连接配置 + 启用开关）
+// ============================================================
+
+
+// 「NPC行程」资料编辑面板：一个大文本框，自由格式填写NPC活动规律，按角色卡区分存储。
+// 同时提供一个「立即刷新」按钮，方便不等下一层AI消息就手动触发一次NPC位置判断。
+export function openNpcScheduleEditor() {
+  const settings = getSettings();
+  closeAllSidePanels();
+
+  const html = `
+        <div id="mm-npc-schedule-editor" class="mm-side-panel">
+            <div class="mm-side-panel-title">NPC行程资料</div>
+            <div class="mm-side-panel-hint">
+                把NPC的活动规律/日程写在这里即可，自由格式。
+                <br><br>
+                配置好NPC模型并启用AI调度后，每层AI消息生成完，会结合这份资料 + 最新剧情，
+                自动判断各NPC此刻大致在地图哪个已有标记点，写进对应标记的"当前此地停留的NPC"栏位。
+                <br><br>
+                "立即刷新NPC位置"按钮用于手动触发：用当前已保存的资料 + 最新一层剧情正文，
+                立刻调用配置好的AI算一遍NPC位置并写入标记点。
+            </div>
+            <textarea id="mm-npc-schedule-text" placeholder="例如：
+李文远：卯时-巳时在演武场操练，午后多在书房处理军务，入夜后常去黑风寨巡视。
+赵敏：素日深居王府绣楼，逢集市日会去城中集市走动。">${escapeHtml(settings.npcScheduleText || "")}</textarea>
+            <div class="mm-side-panel-actions">
+                <button id="mm-npc-schedule-refresh-btn">立即刷新NPC位置</button>
+                <button id="mm-npc-schedule-close">保存</button>
+            </div>
+        </div>`;
+  document
+    .getElementById("mm-map-container")
+    .insertAdjacentHTML("beforeend", html);
+  bindOutsideClickClose("mm-npc-schedule-editor");
+
+  document
+    .getElementById("mm-npc-schedule-text")
+    .addEventListener("change", (ev) => {
+      settings.npcScheduleText = ev.target.value;
+      saveSettings();
+    });
+
+  document
+    .getElementById("mm-npc-schedule-refresh-btn")
+    .addEventListener("click", async () => {
+      // 手动刷新前先把文本框里可能还没触发 change 事件的最新内容存一下，避免用刚打完字
+      // 还没失焦就点刷新时，用到的还是上一次保存的旧资料。
+      settings.npcScheduleText = document.getElementById("mm-npc-schedule-text").value;
+      saveSettings();
+
+      const btn = document.getElementById("mm-npc-schedule-refresh-btn");
+      const oldText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "刷新中···";
+      try {
+        const ran = await runNpcScheduleUpdate();
+        if (ran) toastr?.success?.("NPC位置已刷新");
+      } catch (err) {
+        console.error("[剧情助手/地图] 手动刷新NPC位置失败:", err);
+        toastr?.error?.("刷新失败，请查看控制台报错");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = oldText;
+      }
+    });
+
+  document
+    .getElementById("mm-npc-schedule-close")
+    .addEventListener("click", () => {
+      // 显式存一次，不完全依赖 textarea 的 change/blur 事件，跟"立即刷新"按钮保持同样的保险写法
+      settings.npcScheduleText = document.getElementById("mm-npc-schedule-text").value;
+      saveSettings();
+      document.getElementById("mm-npc-schedule-editor")?.remove();
+    });
+}
+
+
+// NPC行程LLM连接配置：连接参数全局共享（不分角色卡），留空反代地址即跟随酒馆当前对话连接。
+// 「启用AI调度」开关本身仍按角色卡分别存储（跟 npcScheduleText 同级，见 map/store.js），
+// 只是入口从工具栏挪到了这个弹窗里，跟连接配置放在一起更符合"这是同一件事的配置"的直觉。
+export function openNpcScheduleLlmConfig() {
+  closeAllSidePanels();
+  const cfg = getNpcScheduleLlmSettings();
+  const mapSettings = getSettings();
+
+  const html = `
+        <div id="mm-npc-llm-config" class="mm-side-panel">
+            <div class="mm-side-panel-title">NPC行程LLM连接配置</div>
+            <div class="mm-side-panel-hint">
+                留空「反代地址」= 跟随酒馆当前对话连接（不需要额外配置，推荐直接留空）。
+                填写后走自定义 chat/completions 反代，与剧情LLM、状态表LLM相互独立、互不影响。
+            </div>
+            <label>反代地址（留空跟随酒馆连接）</label>
+            <input type="text" id="mm-npc-llm-url" value="${escapeHtml(cfg.apiUrl || "")}" placeholder="https://...">
+            <label>API Key</label>
+            <input type="text" id="mm-npc-llm-key" value="${escapeHtml(cfg.apiKey || "")}">
+            <label>模型名</label>
+            <div class="mm-model-row">
+                <input type="text" id="mm-npc-llm-model" value="${escapeHtml(cfg.model || "")}" placeholder="模型 ID，例如 gpt-4o-mini">
+                <select id="mm-npc-llm-model-select" class="mm-hidden"></select>
+                <button id="mm-npc-llm-model-fetch-btn" type="button">获取列表</button>
+            </div>
+            <label>超时（分钟）</label>
+            <input type="number" id="mm-npc-llm-timeout" min="1" value="${Number.isFinite(cfg.apiTimeoutMin) ? cfg.apiTimeoutMin : 15}">
+            <div class="mm-side-panel-actions">
+                <label class="mm-checkbox-label" id="mm-npc-enabled-label">
+                    <input type="checkbox" id="mm-npc-auto-toggle" ${mapSettings.npcScheduleEnabled ? "checked" : ""}>
+                    启用AI调度
+                </label>
+                <button id="mm-npc-llm-config-close">保存</button>
+            </div>
+        </div>`;
+  document
+    .getElementById("mm-map-container")
+    .insertAdjacentHTML("beforeend", html);
+  bindOutsideClickClose("mm-npc-llm-config");
+
+  document
+    .getElementById("mm-npc-auto-toggle")
+    .addEventListener("change", (ev) => {
+      mapSettings.npcScheduleEnabled = ev.target.checked;
+      saveSettings();
+    });
+
+  const persist = () => {
+    cfg.apiUrl = document.getElementById("mm-npc-llm-url").value.trim();
+    cfg.apiKey = document.getElementById("mm-npc-llm-key").value.trim();
+    cfg.model = document.getElementById("mm-npc-llm-model").value.trim();
+    const timeout = parseInt(
+      document.getElementById("mm-npc-llm-timeout").value,
+      10,
+    );
+    cfg.apiTimeoutMin = Number.isFinite(timeout) && timeout > 0 ? timeout : 15;
+    saveNpcScheduleLlmSettings();
+  };
+  ["mm-npc-llm-url", "mm-npc-llm-key", "mm-npc-llm-model", "mm-npc-llm-timeout"].forEach(
+    (id) => {
+      document.getElementById(id).addEventListener("change", persist);
+    },
+  );
+
+  // 拉取模型列表：跟状态表配置弹窗（modules/summary/ui.js）同一套交互——文本框先隐藏，
+  // 换成一个下拉框，选中后把值写回文本框、下拉框重新隐藏，方便跟已有的手填/自动保存逻辑复用。
+  document
+    .getElementById("mm-npc-llm-model-fetch-btn")
+    .addEventListener("click", async () => {
+      const url = document.getElementById("mm-npc-llm-url").value.trim();
+      if (!url) {
+        toastr?.error?.("请先填写反代地址，再获取模型列表");
+        return;
+      }
+      const fetchBtn = document.getElementById("mm-npc-llm-model-fetch-btn");
+      const oldText = fetchBtn.textContent;
+      fetchBtn.disabled = true;
+      fetchBtn.textContent = "获取中…";
+      try {
+        const models = await niFetchModelIds({
+          url,
+          key: document.getElementById("mm-npc-llm-key").value.trim(),
+          fetchImpl: fetch,
+        });
+        if (!models.length) {
+          toastr?.error?.("未获取到模型列表");
+          return;
+        }
+        const select = document.getElementById("mm-npc-llm-model-select");
+        const input = document.getElementById("mm-npc-llm-model");
+        select.innerHTML = ['<option value="" disabled selected>请选择模型</option>']
+          .concat(
+            models.map(
+              (m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`,
+            ),
+          )
+          .join("");
+        select.classList.remove("mm-hidden");
+        input.classList.add("mm-hidden");
+        select.onchange = () => {
+          input.value = select.value;
+          select.classList.add("mm-hidden");
+          input.classList.remove("mm-hidden");
+          persist();
+        };
+      } catch (err) {
+        toastr?.error?.(`拉取失败: ${err?.message || err}`);
+      } finally {
+        fetchBtn.disabled = false;
+        fetchBtn.textContent = oldText;
+      }
+    });
+
+  document
+    .getElementById("mm-npc-llm-config-close")
+    .addEventListener("click", () => {
+      persist();
+      document.getElementById("mm-npc-llm-config")?.remove();
+    });
 }
 
 
