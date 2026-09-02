@@ -1357,6 +1357,8 @@
 .mm-side-panel textarea {
     min-height: 160px;
     resize: vertical;
+    color: #111; /* 部分环境下 textarea 背景实际渲染是浅色，color:inherit 会继承外层深色主题文字色，
+                    深色字在浅色背景上还行，但个别客户端反而是浅色字，导致看不清，这里固定成深色字 */
 }
 
 .mm-side-panel-actions {
