@@ -271,33 +271,34 @@ export function bindMarkerFormEvents(root, ctx) {
 
 
 // ============================================================
-// 标记列表拖拽排序（仅大地图、仅限同势力分组内部）
+// 标记列表拖拽排序（仅大地图、仅限同势力分组内部拖动）
 // ============================================================
-// 只在同一个 .mm-faction-group 容器内生效，拖到别的势力分组上不响应，
+// 拖拽本身只在同一个 .mm-faction-group 容器内生效，拖到别的势力分组上不响应，
 // 避免"拖动改变了标记所属势力"的误解。
-// 底层 map.markers 数组本身不是按势力分组存的（不同势力的标记可能交错排列），
-// 排序时只把"这个势力占用的那几个数组下标"按新顺序原地换成对应的标记对象，
-// 其他势力标记原来在数组里的位置完全不动，不会把交错的顺序拉直合并。
+// 但落位后会把底层 map.markers 数组整体按"当前列表的分组显示顺序"重新拼接，
+// 不同势力的标记会被拉开成连续的几段、不再交错——这样"根据当前标记 自动载入"
+// 生成的文字才会跟着按势力分段展示，而不是维持原来数组里可能交错的顺序。
 let draggingMarkerId = null;
 let draggingFaction = null;
-
-function applyFactionOrder(map, faction, orderedIds) {
-  const positions = [];
-  map.markers.forEach((m, idx) => {
-    if (m.faction === faction) positions.push(idx);
-  });
-  const byId = Object.fromEntries(map.markers.map((m) => [m.id, m]));
-  orderedIds.forEach((id, i) => {
-    if (positions[i] !== undefined && byId[id]) {
-      map.markers[positions[i]] = byId[id];
-    }
-  });
-}
 
 function clearDragOverClasses(groupEl) {
   groupEl
     .querySelectorAll(".mm-drag-over-before, .mm-drag-over-after")
     .forEach((el) => el.classList.remove("mm-drag-over-before", "mm-drag-over-after"));
+}
+
+// 把 map.markers 整体重排：按 listEl 里各 .mm-faction-group 当前的先后顺序，
+// 组内再按该组标记项当前的 DOM 顺序，两层顺序全部来自刚渲染/刚拖拽完的列表本身。
+function reorderMarkersFromListDom(map, listEl) {
+  const byId = Object.fromEntries(map.markers.map((m) => [m.id, m]));
+  const newMarkers = [];
+  listEl.querySelectorAll(".mm-faction-group").forEach((groupEl) => {
+    groupEl.querySelectorAll(".mm-marker-item").forEach((el) => {
+      const marker = byId[el.dataset.id];
+      if (marker) newMarkers.push(marker);
+    });
+  });
+  map.markers = newMarkers;
 }
 
 function bindMarkerDragEvents(listEl) {
@@ -348,12 +349,8 @@ function bindMarkerDragEvents(listEl) {
         groupEl.appendChild(draggedEl);
       }
 
-      const orderedIds = Array.from(
-        groupEl.querySelectorAll(".mm-marker-item"),
-      ).map((el) => el.dataset.id);
-
       const map = getActiveMap();
-      applyFactionOrder(map, groupEl.dataset.faction, orderedIds);
+      reorderMarkersFromListDom(map, listEl);
       saveSettings();
       scheduleMapInfoSync();
       renderMarkerList();
