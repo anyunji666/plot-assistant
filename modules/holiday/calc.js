@@ -1,5 +1,7 @@
 "use strict";
 
+import { getChineseHolidays } from "./chinese-holidays.js";
+
 // =====================================================================================
 // 节假日模块 - 纯计算部分：日期解析、星期计算、节假日判断。
 // 全部是无副作用的纯函数，不碰 extension_settings/eventSource，方便单独跑测试用例。
@@ -117,6 +119,14 @@ function checkBuiltinSingleDayHoliday(date) {
   );
   const japanHit = japanList.find((h) => h.month === month && h.day === day);
   if (japanHit) segments.push(`${month}月${day}日是日本的 ${japanHit.name}`);
+
+  // 中国传统节日：农历固定月日（春节/元宵/端午/七夕/中秋/重阳/腊八）+ 清明节气，
+  // 按当年现算成公历月日，见 chinese-holidays.js。跟世界通用节日/日本节日一样是并列查找，
+  // 不是覆盖关系；这 8 个节日跟 WORLD_HOLIDAYS（1/1、2/14、5/1、10/31、12/24、12/25、12/31）
+  // 没有日期重叠，不存在"跟五一劳工节撞了要不要重复写"的情况。
+  const chinaList = getChineseHolidays(date.getFullYear());
+  const chinaHit = chinaList.find((h) => h.month === month && h.day === day);
+  if (chinaHit) segments.push(`${month}月${day}日是中国的 ${chinaHit.name}`);
 
   return segments.length > 0 ? segments.join(" ") : null;
 }
