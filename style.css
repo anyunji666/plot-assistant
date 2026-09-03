@@ -1419,6 +1419,18 @@
     background: rgba(255,255,255,0.08);
 }
 
+.mm-marker-item.mm-dragging {
+    opacity: 0.4;
+}
+
+.mm-marker-item.mm-drag-over-before {
+    box-shadow: inset 0 2px 0 0 var(--SmartThemeQuoteColor, #4ea1ff);
+}
+
+.mm-marker-item.mm-drag-over-after {
+    box-shadow: inset 0 -2px 0 0 var(--SmartThemeQuoteColor, #4ea1ff);
+}
+
 .mm-marker-item .mm-marker-name {
     flex: 1;
     white-space: nowrap;

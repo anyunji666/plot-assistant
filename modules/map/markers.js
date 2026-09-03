@@ -270,6 +270,98 @@ export function bindMarkerFormEvents(root, ctx) {
 }
 
 
+// ============================================================
+// 标记列表拖拽排序（仅大地图、仅限同势力分组内部）
+// ============================================================
+// 只在同一个 .mm-faction-group 容器内生效，拖到别的势力分组上不响应，
+// 避免"拖动改变了标记所属势力"的误解。
+// 底层 map.markers 数组本身不是按势力分组存的（不同势力的标记可能交错排列），
+// 排序时只把"这个势力占用的那几个数组下标"按新顺序原地换成对应的标记对象，
+// 其他势力标记原来在数组里的位置完全不动，不会把交错的顺序拉直合并。
+let draggingMarkerId = null;
+let draggingFaction = null;
+
+function applyFactionOrder(map, faction, orderedIds) {
+  const positions = [];
+  map.markers.forEach((m, idx) => {
+    if (m.faction === faction) positions.push(idx);
+  });
+  const byId = Object.fromEntries(map.markers.map((m) => [m.id, m]));
+  orderedIds.forEach((id, i) => {
+    if (positions[i] !== undefined && byId[id]) {
+      map.markers[positions[i]] = byId[id];
+    }
+  });
+}
+
+function clearDragOverClasses(groupEl) {
+  groupEl
+    .querySelectorAll(".mm-drag-over-before, .mm-drag-over-after")
+    .forEach((el) => el.classList.remove("mm-drag-over-before", "mm-drag-over-after"));
+}
+
+function bindMarkerDragEvents(listEl) {
+  listEl.querySelectorAll(".mm-marker-item").forEach((el) => {
+    el.addEventListener("dragstart", (e) => {
+      draggingMarkerId = el.dataset.id;
+      draggingFaction = el.dataset.faction || null;
+      el.classList.add("mm-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", draggingMarkerId);
+    });
+    el.addEventListener("dragend", () => {
+      el.classList.remove("mm-dragging");
+      listEl.querySelectorAll(".mm-faction-group").forEach(clearDragOverClasses);
+      draggingMarkerId = null;
+      draggingFaction = null;
+    });
+  });
+
+  listEl.querySelectorAll(".mm-faction-group").forEach((groupEl) => {
+    groupEl.addEventListener("dragover", (e) => {
+      if (!draggingMarkerId || groupEl.dataset.faction !== draggingFaction) return; // 不是本组的拖拽，不响应
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+
+      const target = e.target.closest(".mm-marker-item");
+      clearDragOverClasses(groupEl);
+      if (!target || target.dataset.id === draggingMarkerId) return;
+      const rect = target.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      target.classList.add(before ? "mm-drag-over-before" : "mm-drag-over-after");
+    });
+
+    groupEl.addEventListener("drop", (e) => {
+      if (!draggingMarkerId || groupEl.dataset.faction !== draggingFaction) return;
+      e.preventDefault();
+      clearDragOverClasses(groupEl);
+
+      const target = e.target.closest(".mm-marker-item");
+      const draggedEl = groupEl.querySelector(`.mm-marker-item[data-id="${draggingMarkerId}"]`);
+      if (!draggedEl) return;
+
+      if (target && target.dataset.id !== draggingMarkerId) {
+        const rect = target.getBoundingClientRect();
+        const before = e.clientY < rect.top + rect.height / 2;
+        target.insertAdjacentElement(before ? "beforebegin" : "afterend", draggedEl);
+      } else if (!target) {
+        groupEl.appendChild(draggedEl);
+      }
+
+      const orderedIds = Array.from(
+        groupEl.querySelectorAll(".mm-marker-item"),
+      ).map((el) => el.dataset.id);
+
+      const map = getActiveMap();
+      applyFactionOrder(map, groupEl.dataset.faction, orderedIds);
+      saveSettings();
+      scheduleMapInfoSync();
+      renderMarkerList();
+    });
+  });
+}
+
+
 export function renderMarkerList() {
   const listEl = document.getElementById("mm-marker-list");
   if (!listEl) return;
@@ -316,7 +408,7 @@ export function renderMarkerList() {
   let html = "";
   Object.keys(groups).forEach((faction) => {
     const color = colorForFaction(faction);
-    html += `<div class="mm-faction-group">
+    html += `<div class="mm-faction-group" data-faction="${escapeHtml(faction)}">
             <div class="mm-faction-group-title"><span class="mm-color-dot" style="background:${color};"></span>${escapeHtml(faction)}</div>`;
     groups[faction].forEach((m) => {
       const npcBadge = m.npcNote
@@ -333,7 +425,7 @@ export function renderMarkerList() {
           subBadge = `<span class="mm-marker-npc-badge mm-marker-submap-npc-badge">🏠 ${escapeHtml(subEntries.join("；"))}</span>`;
         }
       }
-      html += `<div class="mm-marker-item" data-id="${m.id}">
+      html += `<div class="mm-marker-item" data-id="${m.id}" data-faction="${escapeHtml(faction)}" draggable="true" title="按住可拖动调整同势力内的顺序">
                 <span class="mm-color-dot" style="background:${color};"></span>
                 <span class="mm-marker-name">${escapeHtml(m.name)}</span>
                 ${npcBadge}
@@ -354,4 +446,6 @@ export function renderMarkerList() {
       toggleMobileSidebar(false); // 移动端点完列表项收起抽屉，露出地图上弹出的编辑表单
     });
   });
+
+  bindMarkerDragEvents(listEl);
 }
