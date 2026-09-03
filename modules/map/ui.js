@@ -252,6 +252,8 @@ export function buildModalSkeleton() {
             <div id="mm-toolbar">
                 <span class="mm-title">🗺️ 地图标记</span>
 
+                <button id="mm-recenter-btn" title="回到图片（视野被拖远、找不到图片时点这个）">🎯</button>
+
                 <select id="mm-map-switch" title="切换当前编辑/查看的地图"></select>
 
                 <label class="mm-file-btn" id="mm-upload-image-label">
@@ -323,6 +325,12 @@ export function buildModalSkeleton() {
         e.preventDefault();
         cancelRouteMode();
       }
+    });
+  document
+    .getElementById("mm-recenter-btn")
+    .addEventListener("click", () => {
+      if (!mapState.imageOverlay) return; // 没有底图时按钮点了不做任何事
+      mapState.map.fitBounds(mapState.imageOverlay.getBounds());
     });
   document
     .getElementById("mm-map-switch")
