@@ -88,6 +88,13 @@ export function openMarkerForm(existingMarker, latlng) {
             </div>`;
   }
 
+  // 若地图上还有一个弹窗（标记表单/路线表单等）开着，先主动关掉它，把“清空旧状态”
+  // 这一步提前做完。否则等下面 openOn() 内部自动关闭旧弹窗时，会同步触发一次
+  // popupclose 事件，把刚设好的 pendingFormContext（新弹窗的状态）顺带清空成 null，
+  // 导致新弹窗的 popupopen 处理函数误判“不是插件打开的弹窗”而不去绑定取消/保存按钮，
+  // 新弹窗看起来打开了，实际上取消/保存全部失效，只能刷新页面重置状态才能恢复。
+  mapState.map.closePopup();
+
   mapState.pendingFormContext = { type: "marker", existingMarker, latlng, isEdit };
 
   const popupLatLng = isEdit

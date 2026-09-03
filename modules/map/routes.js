@@ -264,6 +264,11 @@ export function openRouteForm(fromMarker, toMarker) {
             </div>
         </div>`;
 
+  // 同 markers.js openMarkerForm 里的处理：先主动关掉地图上可能还开着的旧弹窗，
+  // 避免下面 openOn() 内部自动关闭旧弹窗时同步触发 popupclose，把刚设好的
+  // pendingFormContext 顺带清空成 null，导致这个新弹窗的取消/保存按钮绑不上事件。
+  mapState.map.closePopup();
+
   mapState.pendingFormContext = { type: "route", fromMarker, toMarker };
 
   // 同上：限制最大高度，内容过长时弹层内部出滚动条，而不是溢出屏幕外划不到。
@@ -431,6 +436,10 @@ export function openRouteActionsPopup(route, from, to) {
                 <button id="mm-ra-followup">后续行动</button>
             </div>
         </div>`;
+
+  // 同上：先主动关掉旧弹窗，避免 openOn() 内部自动关闭时的 popupclose 把刚设好的
+  // pendingFormContext 清空。
+  mapState.map.closePopup();
 
   mapState.pendingFormContext = { type: "route-actions", route, from, to };
 
