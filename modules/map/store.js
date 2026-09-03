@@ -355,13 +355,22 @@ export function colorForFaction(factionName) {
 
 
 // ============================================================
-// 导出 / 导入 JSON（仅标记数据，不含图片）
+// 导出 / 导入标记数据（JSON，含标记点位 + 底图图片，一次导入即可全部恢复）
 // ============================================================
 
-export function exportMarkersJson() {
+export async function exportMarkersJson() {
   const settings = getSettings();
+
+  // 底图图片和标记数据一起打包：避免"分两次导入"时图片尺寸对不上导致标记点位错位。
+  const bigImage = await loadImage(BIG_MAP_ID);
+  const smallImages = {};
+  for (const m of settings.maps.small) {
+    const img = await loadImage(m.id);
+    if (img) smallImages[m.id] = img;
+  }
+
   const payload = {
-    version: 3,
+    version: 4, // v4 起随标记数据一并导出底图图片（images 字段）与图片像素尺寸
     factions: settings.factions,
     npcScheduleText: settings.npcScheduleText || "",
     npcScheduleEnabled: !!settings.npcScheduleEnabled,
@@ -370,6 +379,8 @@ export function exportMarkersJson() {
         markers: settings.maps.big.markers,
         routes: settings.maps.big.routes,
         customSummary: settings.maps.big.customSummary || "",
+        imageWidth: settings.maps.big.imageWidth,
+        imageHeight: settings.maps.big.imageHeight,
       },
       small: settings.maps.small.map((m) => ({
         id: m.id,
@@ -377,7 +388,13 @@ export function exportMarkersJson() {
         layoutNote: m.layoutNote,
         loadedInContext: m.loadedInContext,
         markers: m.markers,
+        imageWidth: m.imageWidth,
+        imageHeight: m.imageHeight,
       })),
+    },
+    images: {
+      big: bigImage || null,
+      small: smallImages, // { [smallMapId]: dataUrl }，没有底图的小地图不写入该 key
     },
     exportedAt: new Date().toISOString(),
   };
@@ -400,7 +417,7 @@ export function importMarkersJson(e, onDone) {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = (ev) => {
+  reader.onload = async (ev) => {
     try {
       const data = JSON.parse(ev.target.result);
       const settings = getSettings();
@@ -417,24 +434,54 @@ export function importMarkersJson(e, onDone) {
             settings.maps.big.routes = data.maps.big.routes;
           if (typeof data.maps.big.customSummary === "string")
             settings.maps.big.customSummary = data.maps.big.customSummary;
+          if (typeof data.maps.big.imageWidth === "number")
+            settings.maps.big.imageWidth = data.maps.big.imageWidth;
+          if (typeof data.maps.big.imageHeight === "number")
+            settings.maps.big.imageHeight = data.maps.big.imageHeight;
         }
         if (Array.isArray(data.maps.small)) {
-          settings.maps.small = data.maps.small.map((m) =>
-            makeSmallMap({
+          settings.maps.small = data.maps.small.map((m) => {
+            const overrides = {
               id: m.id,
               name: m.name,
               layoutNote: m.layoutNote,
               loadedInContext: m.loadedInContext,
               markers: Array.isArray(m.markers) ? m.markers : [],
-            }),
-          );
+            };
+            // 避免把 undefined 写进 overrides 导致 Object.assign 把默认尺寸覆盖掉
+            if (typeof m.imageWidth === "number") overrides.imageWidth = m.imageWidth;
+            if (typeof m.imageHeight === "number") overrides.imageHeight = m.imageHeight;
+            return makeSmallMap(overrides);
+          });
+        }
+      }
+
+      // 底图图片和标记数据一起恢复：v4 起导出文件自带 images 字段，不需要用户再手动重新上传。
+      // 兼容旧版本（无 images 字段）导出的文件——这种情况下仍需用户手动补图。
+      let restoredImages = false;
+      if (data.images) {
+        if (typeof data.images.big === "string") {
+          await saveImage(BIG_MAP_ID, data.images.big);
+          restoredImages = true;
+        }
+        if (data.images.small && typeof data.images.small === "object") {
+          for (const [mapId, dataUrl] of Object.entries(data.images.small)) {
+            if (typeof dataUrl === "string") {
+              await saveImage(mapId, dataUrl);
+              restoredImages = true;
+            }
+          }
         }
       }
 
       settings.activeMapId = BIG_MAP_ID;
       saveSettings();
 
-      toastr?.success?.("标记数据导入成功（小地图需要重新上传对应图片）");
+      toastr?.success?.(
+        restoredImages
+          ? "标记数据和底图已一并导入成功"
+          : "标记数据导入成功（本文件不含底图，小地图需要重新上传对应图片）",
+      );
       if (typeof onDone === "function") onDone();
     } catch (err) {
       console.error(err);

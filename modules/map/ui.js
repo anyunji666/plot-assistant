@@ -263,9 +263,9 @@ export function buildModalSkeleton() {
                 <button id="mm-new-smallmap-btn">新建小地图</button>
 
                 <button id="mm-add-route-btn">添加路线</button>
-                <button id="mm-export-btn">导出标记 JSON</button>
+                <button id="mm-export-btn" title="导出的文件包含标记点位和当前底图图片，一次导入即可全部恢复">导出地图数据</button>
                 <label class="mm-file-btn">
-                    导入标记 JSON
+                    导入地图数据
                     <input type="file" id="mm-import-json" accept="application/json" style="display:none;">
                 </label>
                 <button id="mm-manage-factions-btn">管理势力</button>
@@ -1115,7 +1115,7 @@ export function openNpcScheduleLlmConfig() {
             <label>反代地址（留空跟随酒馆连接）</label>
             <input type="text" id="mm-npc-llm-url" value="${escapeHtml(cfg.apiUrl || "")}" placeholder="https://...">
             <label>API Key</label>
-            <input type="text" id="mm-npc-llm-key" value="${escapeHtml(cfg.apiKey || "")}">
+            <input type="password" id="mm-npc-llm-key" value="${escapeHtml(cfg.apiKey || "")}">
             <label>模型名</label>
             <div class="mm-model-row">
                 <input type="text" id="mm-npc-llm-model" value="${escapeHtml(cfg.model || "")}" placeholder="模型 ID，例如 gpt-4o-mini">
@@ -1230,7 +1230,7 @@ export async function clearAllData() {
       ? `确定要清除角色「${name}」的地图数据吗？\n`
       : "确定要清除当前这份临时地图数据吗？\n") +
       "包括：大地图和所有小地图的图片、标记、路线、势力设置。不会影响其他角色的地图数据。\n" +
-      "此操作不可恢复（标记数据可以提前导出 JSON 备份）。",
+      "此操作不可恢复（可以提前用「导出标记数据」备份，标记和底图会一起存进备份文件）。",
   );
   if (!ok) return;
 
@@ -1265,7 +1265,7 @@ export async function clearAllData() {
 
 
 // ============================================================
-// 导出 / 导入 JSON（仅标记数据，不含图片）
+// 导出 / 导入标记数据（JSON，含标记点位 + 底图图片，一次导入即可全部恢复）
 // ============================================================
 
 // 切换角色卡时：重新同步该角色的「地图信息」条目；如果弹窗正开着，也要把地图画面刷新成新角色的数据
