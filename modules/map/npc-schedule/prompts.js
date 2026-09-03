@@ -8,17 +8,18 @@
 
 export const DEFAULT_NPC_SCHEDULE_SYSTEM_PROMPT = `你是一个跑团/长篇角色扮演场景里的"NPC位置追踪助手"。
 
-你会收到三部分输入：
+你会收到三/四部分输入：
 1. <npc_schedule_data>：用户设定的NPC活行程参考资料（可能是具体角色的行程参考和人群的作息安排）。
 2. <candidate_locations>：当前地图上已有的地点标记清单。【大地图】前缀的为一级标记地点；其它前缀的为二级标记地点，是大地图地点的下属内部标记地点。
 3. <latest_floor>：最新一层的剧情正文，代表"当前时刻"实际发生的事。
+4. <holiday_judgment>（可能不存在）：当前公历日期、星期几、以及可能的节日提示。
 
 你的任务：判断<npc_schedule_data>里出现的每一个NPC，此刻最可能待在<candidate_locations>里的哪一个地点，输出严格 JSON 数组，不要任何多余文字、不要markdown代码块包裹、不要解释。
 
 判断规则：
 - 只输出资料/正文中实际出现的NPC，不要虚构<npc_schedule_data>/<latest_floor>里没提过的人物。
 - 若某NPC在<latest_floor>里已经被明确写出所在地点/正在做的事，直接以正文地点为准，不要被<npc_schedule_data>带偏。
-- 若正文没提到该NPC，则依据<npc_schedule_data>判断其"按行程逻辑此刻应该在哪"；资料没写清楚具体时段、或存在多个同样合理的地点时，从<candidate_locations>里合理选一个最贴近行程逻辑的地点即可，不必强求唯一确定解。
+- 若正文没提到该NPC，则依据<npc_schedule_data>判断其"按行程逻辑此刻应该在哪"；如果<npc_schedule_data>里的行程跟节假日/星期几有关（比如"周末在家""节假日去庙会摆摊"），结合<holiday_judgment>（如果存在）判断今天符不符合这些条件；资料没写清楚具体时段、或存在多个同样合理的地点时，从<candidate_locations>里合理选一个最贴近行程逻辑的地点即可，不必强求唯一确定解。
 - 若NPC此刻的具体去处只能定位到某个一级地点本身，没有更细的内部位置信息，location 写这个一级地点；若能进一步定位到该一级地点下属的某个二级地点，location 写那个二级地点，不要再重复写它所属的一级地点。
   一级/二级地点示例：候选地点里有【大地图】黑风寨、【黑风寨】正房/后院/地牢。
     只知道某NPC"在黑风寨"，具体在寨子哪儿没说：{"npc":"李四","map":"大地图","location":"黑风寨","note":""}
@@ -45,14 +46,20 @@ export function buildCandidateLocationsText(candidateMaps) {
 }
 
 // === Function: 拼装用户消息正文 ===
+// holidayText：跟主线剧情LLM同款的 <holiday_judgment>...</holiday_judgment> 整段文本（已带标签），
+// 由调用方（engine.js）复用 holiday/calc.js 生成；拿不到合法日期/节假日模块开关关闭时传空字符串，
+// 此时这一段完全不拼进 user content，不发送空标签、也不影响现有三段的结构。
 export function buildNpcScheduleUserContent({
   scheduleText,
   candidateLocationsText,
   latestFloorText,
+  holidayText,
 }) {
-  return [
+  const parts = [
     `<npc_schedule_data>\n${scheduleText || "（无）"}\n</npc_schedule_data>`,
     `<candidate_locations>\n${candidateLocationsText || "（无可用地点）"}\n</candidate_locations>`,
     `<latest_floor>\n${latestFloorText || "（无）"}\n</latest_floor>`,
-  ].join("\n\n");
+  ];
+  if (holidayText) parts.push(holidayText);
+  return parts.join("\n\n");
 }

@@ -15,12 +15,37 @@ import { getSettings, saveSettings } from "../store.js";
 import { scheduleMapInfoSync } from "../generator.js";
 import { renderMarkerList } from "../markers.js";
 import { getLatestStatusTableRenderPromise } from "../../summary/status-llm/extract.js";
+import { parseFloorSummaryFields } from "../../summary/status-table.js";
+import { buildHolidayTagContent, parseCustomHolidaysText } from "../../holiday/calc.js";
+import { getHolidayEnabled, getRestPresetText, getCustomHolidaysRawText } from "../../holiday/settings.js";
 import { callNpcScheduleLlm } from "./api.js";
 import {
   DEFAULT_NPC_SCHEDULE_SYSTEM_PROMPT,
   buildCandidateLocationsText,
   buildNpcScheduleUserContent,
 } from "./prompts.js";
+
+// === Helper: 跟 holiday/inject.js 发给主线剧情LLM的逻辑保持完全一致——
+// 复用同一个 buildHolidayTagContent()，同一份开关（节假日模块自己的开关）、同一份
+// 假期预设/自定义节假日设置，确保两边LLM看到的节假日播报文案是同一份，不会读到不一致的日期判断。
+// 节假日开关关闭 / 最新一层没有合法可解析的 Time 字段时，返回空字符串，调用方不拼这一段。
+function buildHolidayTextForNpcSchedule() {
+  try {
+    if (!getHolidayEnabled()) return "";
+    const { mes } = getLastAiFloor();
+    const fields = parseFloorSummaryFields(mes);
+    const timeText = fields && fields.time;
+    if (!timeText) return "";
+    const content = buildHolidayTagContent(timeText, {
+      customHolidays: parseCustomHolidaysText(getCustomHolidaysRawText()).items,
+      restPresetText: getRestPresetText(),
+    });
+    return content || "";
+  } catch (error) {
+    console.warn("[剧情助手/地图] 为NPC行程LLM生成节假日播报文本时出错（不影响本轮继续执行）:", error);
+    return "";
+  }
+}
 
 // === Helper: 非阻塞悬浮提示（复用状态表LLM同款胶囊样式，仅id/文案不同）===
 const NPC_SCHEDULE_INDICATOR_ID = "pa-npc-schedule-indicator";
@@ -142,10 +167,12 @@ export async function runNpcScheduleUpdate() {
     );
 
     const { mes: latestFloorText } = getLastAiFloor();
+    const holidayText = buildHolidayTextForNpcSchedule();
     const userContent = buildNpcScheduleUserContent({
       scheduleText,
       candidateLocationsText,
       latestFloorText,
+      holidayText,
     });
 
     showNpcScheduleIndicator();
