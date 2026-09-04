@@ -245,12 +245,25 @@ export function injectFloatingButton() {
 }
 
 
+// === Function: 更新"显示/隐藏标记点名称"按钮的文案与高亮状态 ===
+// 跟 mapState.showMarkerLabels 保持一致；开关本身不持久化，纯UI状态，跟切换地图/打开路线模式同级。
+function updateMarkerLabelsToggleBtn() {
+  const btn = document.getElementById("mm-marker-labels-toggle-btn");
+  if (!btn) return;
+  const on = mapState.showMarkerLabels;
+  btn.textContent = on ? "🏷️ 隐藏标记名称" : "🏷️ 显示标记名称";
+  btn.classList.toggle("mm-active", on);
+}
+
+
 export function buildModalSkeleton() {
   const html = `
     <dialog id="mm-modal-overlay">
         <div id="mm-modal">
             <div id="mm-toolbar">
                 <span class="mm-title">🗺️ 地图标记</span>
+
+                <button id="mm-marker-labels-toggle-btn" title="切换标记点名称是常驻显示、还是只有鼠标悬停时才显示">🏷️ 显示标记名称</button>
 
                 <button id="mm-recenter-btn" title="回到图片（视野被拖远、找不到图片时点这个）">🎯</button>
 
@@ -326,6 +339,14 @@ export function buildModalSkeleton() {
         cancelRouteMode();
       }
     });
+  document
+    .getElementById("mm-marker-labels-toggle-btn")
+    .addEventListener("click", () => {
+      mapState.showMarkerLabels = !mapState.showMarkerLabels;
+      updateMarkerLabelsToggleBtn();
+      renderAllMarkers(); // 重新绑定所有标记的tooltip，让 permanent 立即生效
+    });
+  updateMarkerLabelsToggleBtn(); // 初始按钮文案跟当前状态（默认隐藏）保持一致
   document
     .getElementById("mm-recenter-btn")
     .addEventListener("click", () => {

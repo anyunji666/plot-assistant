@@ -29,7 +29,12 @@ export function addLeafletMarker(marker) {
     iconAnchor: [8, 8],
   });
   const lm = L.marker([marker.y, marker.x], { icon }).addTo(mapState.markersLayer);
-  lm.bindTooltip(marker.name, { direction: "top", offset: [0, -8] });
+  lm.bindTooltip(marker.name, {
+    direction: "top",
+    offset: [0, -8],
+    className: "mm-marker-label",
+    permanent: mapState.showMarkerLabels,
+  });
   lm.on("click", (e) => {
     L.DomEvent.stopPropagation(e);
     if (mapState.routeMode) {

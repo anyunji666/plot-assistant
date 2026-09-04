@@ -1453,7 +1453,31 @@
     box-shadow: 0 0 3px rgba(0,0,0,0.6);
 }
 
+/* ---- 标记点名称常驻标签（"显示/隐藏标记点名称"开关打开时）----
+   pointer-events: none 避免标签本身挡住对标记点图标的点击；
+   非 permanent 状态下（鼠标悬停才显示）沿用 Leaflet 默认 tooltip 样式，不受这里影响。 */
+.leaflet-tooltip.mm-marker-label {
+    background: rgba(0,0,0,0.72);
+    color: #fff;
+    border: none;
+    box-shadow: none;
+    padding: 1px 6px;
+    font-size: 0.78em;
+    border-radius: 4px;
+    pointer-events: none;
+    white-space: nowrap;
+}
+
+.leaflet-tooltip.mm-marker-label::before {
+    display: none; /* 去掉默认的小箭头，常驻标签紧贴标记点，箭头显得多余 */
+}
+
 /* ---- 路线（队伍行进方向）---- */
+#mm-marker-labels-toggle-btn.mm-active {
+    background: rgba(59,130,246,0.55) !important;
+    border-color: #3b82f6 !important;
+}
+
 #mm-add-route-btn.mm-active {
     background: rgba(59,130,246,0.55) !important;
     border-color: #3b82f6 !important;

@@ -14,6 +14,7 @@ export const mapState = {
   routeFollowUp: null, // { party, departTime }：从某条路线发起"后续行动"时的一次性预填数据，表单读取后即清空
   pendingFormContext: null,
   transientMapData: null,
+  showMarkerLabels: false, // 是否在标记点旁边常驻显示名称（而不是鼠标悬停才显示）；纯UI状态，不持久化，刷新页面重置为默认关闭
 };
 
 
