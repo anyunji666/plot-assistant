@@ -141,9 +141,19 @@ async function waitForStatusTableUpdate() {
   }
 }
 
+// === 楼层去重：记录"上次成功处理过NPC行程LLM"的楼层index+正文内容，纯内存变量，不持久化。
+// 目的是避免同一层楼、同一份正文因为多次触发 CHARACTER_MESSAGE_RENDERED（比如重复渲染事件）
+// 被反复重新调用一次AI——候选地点/正文/节假日数据都没变，重复调用纯属浪费。
+// 同时记录正文内容（而不是只记录idx）是为了正确处理"重新生成/swipe同一层"的场景：
+// 这种情况下idx不变但正文变了，理应重新跑一次，不能被误判成"已处理过"而跳过。
+// 注意：这是内存变量，刷新网页/重载插件后会清零，刷新后第一次触发会视为"新的一层"重新跑一次，
+// 这是有意的取舍（换取实现简单，不用碰 settings/chatMetadata 持久化结构）。===
+let lastProcessedFloorIdx = -1;
+let lastProcessedFloorMes = "";
+
 // === Function: 跑一次NPC行程LLM，把结果写回各标记的 npcNote 字段 ===
 // 返回布尔值：true = 真的发起了请求并成功写回了结果；false = 因为开关未开/资料为空/
-// 没有任何标记点/请求失败等原因被跳过或中止，调用方可以据此决定要不要给用户反馈。
+// 没有任何标记点/同一层已处理过/请求失败等原因被跳过或中止，调用方可以据此决定要不要给用户反馈。
 export async function runNpcScheduleUpdate() {
   try {
     const settings = getSettings();
@@ -156,8 +166,20 @@ export async function runNpcScheduleUpdate() {
     const hasAnyMarker = candidateMaps.some((m) => m.markers.length > 0);
     if (!hasAnyMarker) return false; // 没有任何地点标记，没法分配，跳过
 
-    // 廉价检查（开关/资料/标记）都过了，才值得等状态表LLM——避免没必要的等待。
+    // 廉价检查（开关/资料/标记）都过了，才值得等状态表LLM。
     await waitForStatusTableUpdate();
+
+    // 去重判断放在等完状态表LLM之后：状态表LLM可能会把提取结果拼回正文（spliceExtractedFieldsIntoMes），
+    // 如果在等待之前就取快照，前后两次同一层楼实际拿到的mes会不一致（拼接前 vs 拼接后），去重判断会失效。
+    // 这里取一次idx/mes，后面统一复用（既用于去重比对，也用于latestFloorText/节假日解析），避免重复取值。
+    const { idx: currentFloorIdx, mes: latestFloorText } = getLastAiFloor();
+    if (
+      currentFloorIdx !== -1 &&
+      currentFloorIdx === lastProcessedFloorIdx &&
+      latestFloorText === lastProcessedFloorMes
+    ) {
+      return false; // 同一层楼、同一份正文已经处理过，跳过（避免重复渲染事件导致重复调用AI）
+    }
 
     const candidateLocationsText = buildCandidateLocationsText(
       candidateMaps.map((m) => ({
@@ -166,7 +188,6 @@ export async function runNpcScheduleUpdate() {
       })),
     );
 
-    const { mes: latestFloorText } = getLastAiFloor();
     const holidayText = buildHolidayTextForNpcSchedule();
     const userContent = buildNpcScheduleUserContent({
       scheduleText,
@@ -242,6 +263,10 @@ export async function runNpcScheduleUpdate() {
     saveSettings();
     refreshMapUiIfOpen();
     scheduleMapInfoSync();
+    // 只在真正成功写回结果后才更新去重记录——请求失败/解析失败的情况不应该被标记为"已处理"，
+    // 否则下一次同一层楼重新触发时会被误判成重复而跳过，永远无法自动重试成功。
+    lastProcessedFloorIdx = currentFloorIdx;
+    lastProcessedFloorMes = latestFloorText;
     return true;
   } catch (error) {
     console.error("[剧情助手/地图] NPC行程LLM运行时出错:", error);
