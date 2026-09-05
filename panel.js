@@ -868,8 +868,8 @@ export async function showSummaryPopup() {
     // 全局世界书挂载：真正的开关按钮。
     // 未挂载 -> 点击走"挂载"流程（会检测其他全局书，问是否顺带清理，只保留这一本）；
     // 已挂载 -> 点击只做单纯的 toggle off，不碰其他全局书，方便"先摘旧角色卡，再挂新角色卡"这种切换场景。
-    const MOUNT_GLOBAL_ON_STYLE = { background: "#3a9d5a", cursor: "pointer" };
-    const MOUNT_GLOBAL_OFF_STYLE = { background: "#555", cursor: "pointer" };
+    const MOUNT_GLOBAL_ON_STYLE = { background: "#3a9d5a", color: "#fff", cursor: "pointer" };
+    const MOUNT_GLOBAL_OFF_STYLE = { background: "#ffc107", color: "#000", cursor: "pointer" };
 
     function renderMountGlobalButton($btn, isOn) {
       $btn
