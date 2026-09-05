@@ -474,16 +474,20 @@ export async function showSummaryPopup() {
         },
       );
 
-    // 剧情录入·自动跳转章节：点击只切换开关状态，不关闭弹窗（跟移动端优化两个开关同一个视觉模式，
-    // 但配色常量单独声明一份——移动端优化那两个 MOBILE_OPT_ON/OFF_STYLE 常量在本函数更后面才 const
-    // 声明，这里提前引用会踩 TDZ）。
-    const NOVEL_AUTOJUMP_ON_STYLE = { background: "#3a9d5a" };
-    const NOVEL_AUTOJUMP_OFF_STYLE = { background: "#555" };
+    // 通用开关配色（灰/绿）：全文件所有"开=绿，关=灰"的普通开关按钮共用同一份，
+    // 声明在这里（最靠前的引用点之前），避免后面各处引用时踩 TDZ。
+    const TOGGLE_ON_STYLE = { background: "#3a9d5a" };
+    const TOGGLE_OFF_STYLE = { background: "#555" };
+
+    // 警示配色（绿/黄）：供"再分析开/关"和"尚未挂载/全局挂载"共用，跟其余开关按钮
+    // （自跳转、移动端优化等，仍用灰/绿）区分开，突出"未开启/未挂载"这两个需要用户注意的状态。
+    const ATTENTION_TOGGLE_ON_STYLE = { background: "#3a9d5a", color: "#fff", cursor: "pointer" };
+    const ATTENTION_TOGGLE_OFF_STYLE = { background: "#ffc107", color: "#000", cursor: "pointer" };
     const $novelAutoJumpBtn = $(`#${POPUP_ID}-novel-autojump`);
     function renderNovelAutoJumpButton($btn, isOn) {
       $btn
         .text(isOn ? "自跳转开" : "自跳转关")
-        .css(isOn ? NOVEL_AUTOJUMP_ON_STYLE : NOVEL_AUTOJUMP_OFF_STYLE);
+        .css(isOn ? TOGGLE_ON_STYLE : TOGGLE_OFF_STYLE);
     }
     renderNovelAutoJumpButton($novelAutoJumpBtn, getNovelAutoJumpSettings().enabled);
     $novelAutoJumpBtn.on("click", () => {
@@ -546,7 +550,7 @@ export async function showSummaryPopup() {
     function renderStatusLlmReanalyzeButton($btn, isOn) {
       $btn
         .text(isOn ? "再分析开" : "再分析关")
-        .css(isOn ? NOVEL_AUTOJUMP_ON_STYLE : NOVEL_AUTOJUMP_OFF_STYLE);
+        .css(isOn ? ATTENTION_TOGGLE_ON_STYLE : ATTENTION_TOGGLE_OFF_STYLE);
     }
     renderStatusLlmReanalyzeButton(
       $statusLlmReanalyzeBtn,
@@ -630,13 +634,10 @@ export async function showSummaryPopup() {
       );
 
     // 悬浮球显示开关：点击只切换状态，不关闭弹窗，方便连续切换/立刻在屏幕上看到效果。
-    const FAB_TOGGLE_ON_STYLE = { background: "#3a9d5a" };
-    const FAB_TOGGLE_OFF_STYLE = { background: "#555" };
-
     function renderFabToggleButton($btn, visible) {
       $btn
         .text(visible ? "悬浮球开" : "悬浮球关")
-        .css(visible ? FAB_TOGGLE_ON_STYLE : FAB_TOGGLE_OFF_STYLE);
+        .css(visible ? TOGGLE_ON_STYLE : TOGGLE_OFF_STYLE);
     }
 
     const $fabToggleBtn = $(`#${POPUP_ID}-fab-toggle`);
@@ -653,13 +654,10 @@ export async function showSummaryPopup() {
     });
 
     // 通讯器悬浮球显示开关：逻辑跟上面地图悬浮球那个完全一致，独立的开关/独立的坐标存储。
-    const PHONE_FAB_TOGGLE_ON_STYLE = { background: "#3a9d5a" };
-    const PHONE_FAB_TOGGLE_OFF_STYLE = { background: "#555" };
-
     function renderPhoneFabToggleButton($btn, visible) {
       $btn
         .text(visible ? "通讯器开" : "通讯器关")
-        .css(visible ? PHONE_FAB_TOGGLE_ON_STYLE : PHONE_FAB_TOGGLE_OFF_STYLE);
+        .css(visible ? TOGGLE_ON_STYLE : TOGGLE_OFF_STYLE);
     }
 
     const $phoneFabToggleBtn = $(`#${POPUP_ID}-phone-fab-toggle`);
@@ -675,13 +673,10 @@ export async function showSummaryPopup() {
 
     // 节假日播报开关：逻辑跟悬浮球开关一样，点击只切换状态、不关闭弹窗；
     // 跟悬浮球不同的是这里没有坐标要重置，纯粹是个布尔开关。
-    const HOLIDAY_TOGGLE_ON_STYLE = { background: "#3a9d5a" };
-    const HOLIDAY_TOGGLE_OFF_STYLE = { background: "#555" };
-
     function renderHolidayToggleButton($btn, enabled) {
       $btn
         .text(enabled ? "节假日开" : "节假日关")
-        .css(enabled ? HOLIDAY_TOGGLE_ON_STYLE : HOLIDAY_TOGGLE_OFF_STYLE);
+        .css(enabled ? TOGGLE_ON_STYLE : TOGGLE_OFF_STYLE);
     }
 
     const $holidayToggleBtn = $(`#${POPUP_ID}-holiday-toggle`);
@@ -697,13 +692,10 @@ export async function showSummaryPopup() {
     // "动态提示词"按钮打开只读的 EJS 格式说明浮层，关闭后重新打开控制面板（对齐用户对"退回面板"的预期，
     // 跟节假日两个弹窗"点击后直接 closePopup，不主动帮用户重新打开面板"的写法不同，是本栏的特例）；
     // "阶段词开/关"逻辑跟节假日播报开关完全一样，点击只切换状态、不关闭弹窗。
-    const PROMPT_TEMPLATE_TOGGLE_ON_STYLE = { background: "#3a9d5a" };
-    const PROMPT_TEMPLATE_TOGGLE_OFF_STYLE = { background: "#555" };
-
     function renderPromptTemplateToggleButton($btn, enabled) {
       $btn
         .text(enabled ? "阶段词开" : "阶段词关")
-        .css(enabled ? PROMPT_TEMPLATE_TOGGLE_ON_STYLE : PROMPT_TEMPLATE_TOGGLE_OFF_STYLE);
+        .css(enabled ? TOGGLE_ON_STYLE : TOGGLE_OFF_STYLE);
     }
 
     const $promptTemplateToggleBtn = $(`#${POPUP_ID}-prompt-template-stage-toggle`);
@@ -823,13 +815,10 @@ export async function showSummaryPopup() {
     );
 
     // 移动端优化：两个开关按钮，点击只切换状态，不关闭弹窗
-    const MOBILE_OPT_ON_STYLE = { background: "#3a9d5a" };
-    const MOBILE_OPT_OFF_STYLE = { background: "#555" };
-
     function renderMobileOptButton($btn, isOn) {
       $btn
         .text(isOn ? "已开启" : "未开启")
-        .css(isOn ? MOBILE_OPT_ON_STYLE : MOBILE_OPT_OFF_STYLE);
+        .css(isOn ? TOGGLE_ON_STYLE : TOGGLE_OFF_STYLE);
     }
 
     const $mobileOptRenderBtn = $(`#${POPUP_ID}-mobile-opt-render`);
@@ -868,13 +857,10 @@ export async function showSummaryPopup() {
     // 全局世界书挂载：真正的开关按钮。
     // 未挂载 -> 点击走"挂载"流程（会检测其他全局书，问是否顺带清理，只保留这一本）；
     // 已挂载 -> 点击只做单纯的 toggle off，不碰其他全局书，方便"先摘旧角色卡，再挂新角色卡"这种切换场景。
-    const MOUNT_GLOBAL_ON_STYLE = { background: "#3a9d5a", color: "#fff", cursor: "pointer" };
-    const MOUNT_GLOBAL_OFF_STYLE = { background: "#ffc107", color: "#000", cursor: "pointer" };
-
     function renderMountGlobalButton($btn, isOn) {
       $btn
         .text(isOn ? "全局挂载" : "尚未挂载")
-        .css(isOn ? MOUNT_GLOBAL_ON_STYLE : MOUNT_GLOBAL_OFF_STYLE);
+        .css(isOn ? ATTENTION_TOGGLE_ON_STYLE : ATTENTION_TOGGLE_OFF_STYLE);
     }
 
     const $mountGlobalBtn = $(`#${POPUP_ID}-mount-global`);
