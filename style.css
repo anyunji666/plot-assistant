@@ -1465,17 +1465,17 @@
    只在"显示标记名称"开关打开时才会被插入DOM，不需要额外的显隐开关。 */
 .mm-npc-dots {
     position: absolute;
-    top: 19px;
+    top: 26px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 2px;
+    gap: 4px;
     pointer-events: none; /* 不挡住标记点本身的点击 */
 }
 
 .mm-npc-dot {
-    width: 5px;
-    height: 5px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: #2ecc71;
     border: 1px solid rgba(0,0,0,0.5);
