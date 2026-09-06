@@ -13,7 +13,7 @@
 import { getCtx, getLastAiFloor } from "../../core.js";
 import { getSettings, saveSettings } from "../store.js";
 import { scheduleMapInfoSync } from "../generator.js";
-import { renderMarkerList } from "../markers.js";
+import { renderAllMarkers, renderMarkerList } from "../markers.js";
 import { getLatestStatusTableRenderPromise } from "../../summary/status-llm/extract.js";
 import { parseFloorSummaryFields } from "../../summary/status-table.js";
 import { buildHolidayTagContent, parseCustomHolidaysText } from "../../holiday/calc.js";
@@ -120,6 +120,7 @@ function refreshMapUiIfOpen() {
   try {
     if (!document.getElementById("mm-modal-overlay")?.open) return;
     renderMarkerList();
+    renderAllMarkers(); // 地图图标上的NPC绿点跟着这轮AI调度结果一起刷新，不用手动切地图才更新
   } catch (error) {
     console.error("[剧情助手/地图] 刷新NPC信息后刷新地图UI时出错:", error);
   }

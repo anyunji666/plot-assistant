@@ -19,12 +19,55 @@ export function renderAllMarkers() {
 }
 
 
+// === Helper: 统计一条 npcNote 里有几个 NPC ===
+// npcNote 格式固定是"张三（备注）；李四（备注）"，无论手动填写还是NPC行程LLM自动写回
+// （见 npc-schedule/engine.js 的 grouped.forEach 那段）都用中文分号"；"分隔多个NPC，
+// 按它切分、去掉空白项即可得到人数。
+function countNpcEntries(npcNote) {
+  if (!npcNote || typeof npcNote !== "string") return 0;
+  return npcNote
+    .split("；")
+    .map((s) => s.trim())
+    .filter(Boolean).length;
+}
+
+
+// === Helper: 计算某个标记在地图图标上应该显示的NPC绿点数（1/2/3，3代表"3人及以上"）===
+// 大地图标记若按名字关联着一张小地图，绿点数取该小地图全部标记的人数总和（不再叠加大地图
+// 标记自己的 npcNote，避免同一批人被重复计数）；没有关联小地图时才退回去用自己的 npcNote。
+// 小地图标记本身没有下属地图，直接用自己的 npcNote。
+function getMarkerNpcDotCount(marker) {
+  let count;
+  if (isBigMapActive()) {
+    const settings = getSettings();
+    const linkedSmall = settings.maps.small.find((sm) => sm.name === marker.name);
+    if (linkedSmall) {
+      count = linkedSmall.markers.reduce((sum, mk) => sum + countNpcEntries(mk.npcNote), 0);
+    } else {
+      count = countNpcEntries(marker.npcNote);
+    }
+  } else {
+    count = countNpcEntries(marker.npcNote);
+  }
+  return Math.min(count, 3); // 封顶3个点，3个点代表"多人"，不追求精确到具体数字
+}
+
+
 export function addLeafletMarker(marker) {
   const L = window.L;
   const color = colorForFaction(marker.faction);
+  // NPC绿点只在"显示标记名称"开关打开时才附带显示，跟标签常驻显示同一个开关，
+  // 关掉之后图标恢复成纯色圆点，不额外占地方。
+  const dotCount = mapState.showMarkerLabels ? getMarkerNpcDotCount(marker) : 0;
+  const dotsHtml = dotCount > 0
+    ? `<div class="mm-npc-dots">${'<span class="mm-npc-dot"></span>'.repeat(dotCount)}</div>`
+    : "";
   const icon = L.divIcon({
     className: "",
-    html: `<div class="mm-leaflet-icon" style="width:16px;height:16px;background:${color};"></div>`,
+    html: `<div class="mm-leaflet-icon-wrap">
+      <div class="mm-leaflet-icon" style="width:16px;height:16px;background:${color};"></div>
+      ${dotsHtml}
+    </div>`,
     iconSize: [16, 16],
     iconAnchor: [8, 8],
   });
@@ -32,8 +75,8 @@ export function addLeafletMarker(marker) {
   lm.bindTooltip(marker.name, {
     direction: "top",
     offset: [0, -8],
-    className: "mm-marker-label",
-    permanent: mapState.showMarkerLabels,
+    className: "mm-marker-label", // 悬停显示、常驻显示都统一用这套小标签样式，不再区分套用Leaflet原生气泡样式
+    permanent: mapState.showMarkerLabels, // 只控制"是否一直挂着"，样式本身不受这个开关影响
   });
   lm.on("click", (e) => {
     L.DomEvent.stopPropagation(e);

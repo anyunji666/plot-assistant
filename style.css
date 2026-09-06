@@ -1447,15 +1447,43 @@
 }
 
 /* ---- Leaflet 自定义标记 ---- */
+/* 外层包一层 relative 容器，让下方的NPC绿点可以绝对定位溢出显示，
+   不影响 .mm-leaflet-icon 本身16x16的尺寸和 iconAnchor 定位锚点。 */
+.mm-leaflet-icon-wrap {
+    position: relative;
+    width: 16px;
+    height: 16px;
+}
+
 .mm-leaflet-icon {
     border-radius: 50%;
     border: 2px solid #fff;
     box-shadow: 0 0 3px rgba(0,0,0,0.6);
 }
 
-/* ---- 标记点名称常驻标签（"显示/隐藏标记点名称"开关打开时）----
-   pointer-events: none 避免标签本身挡住对标记点图标的点击；
-   非 permanent 状态下（鼠标悬停才显示）沿用 Leaflet 默认 tooltip 样式，不受这里影响。 */
+/* NPC在场提示：标记图标正下方的小绿点，1个=1人，2个=2人，3个=3人及以上（多人）。
+   只在"显示标记名称"开关打开时才会被插入DOM，不需要额外的显隐开关。 */
+.mm-npc-dots {
+    position: absolute;
+    top: 19px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 2px;
+    pointer-events: none; /* 不挡住标记点本身的点击 */
+}
+
+.mm-npc-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #2ecc71;
+    border: 1px solid rgba(0,0,0,0.5);
+    box-shadow: 0 0 2px rgba(0,0,0,0.6);
+}
+
+/* ---- 标记点名称标签（悬停显示、常驻显示统一用这套样式，不再区分Leaflet原生气泡样式）----
+   pointer-events: none 避免标签本身挡住对标记点图标的点击。 */
 .leaflet-tooltip.mm-marker-label {
     background: rgba(0,0,0,0.72);
     color: #fff;
