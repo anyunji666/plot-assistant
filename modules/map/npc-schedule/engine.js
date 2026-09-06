@@ -181,6 +181,10 @@ export async function runNpcScheduleUpdate() {
       return false; // 同一层楼、同一份正文已经处理过，跳过（避免重复渲染事件导致重复调用AI）
     }
 
+    // 跟状态表LLM保持一致：只对"插件格式的正式剧情回复"（正文里带 <details><summary>摘要</summary>...</details>
+    // 摘要块）生效——角色卡开场白、纯闲聊分支等没有这个摘要块的楼层直接跳过，不浪费一次AI调用。
+    if (!parseFloorSummaryFields(latestFloorText)) return false;
+
     const candidateLocationsText = buildCandidateLocationsText(
       candidateMaps.map((m) => ({
         mapLabel: m.mapLabel,
