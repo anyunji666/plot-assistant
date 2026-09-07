@@ -1064,6 +1064,7 @@ export function openCustomFieldsDialog() {
     display: "flex",
     gap: "8px",
     flexWrap: "wrap",
+    justifyContent: "flex-end",
   });
   $addBtnRow.append($importBtn, $exportBtn, $addBtn, $importFileInput);
 

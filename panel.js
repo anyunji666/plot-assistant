@@ -23,7 +23,8 @@ import { ensureSummaryLorebookOnLoad, runAutoLargeSummary, runAutoSmallSummary, 
 import { openCustomFieldsDialog, openFieldMetaInstructionDialog, openHideFloorDialog, openPreEmphasisDialog, openStatusLlmConfigDialog } from "./modules/summary/ui.js";
 import { clearAllCustomFieldsAcrossCharacters, getStatusLlmSettings } from "./modules/summary/status-llm/store.js";
 import { getLorebookEntriesSummaryHtml, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, mountSummaryLorebookGlobally, notifyWorldInfoUpdated } from "./modules/worldinfo.js";
-import { CHAT_MIGRATION_CONFIG_KEY, openChatMigrationDialog } from "./modules/chat-migration.js";
+import { CHAT_MIGRATION_CONFIG_KEY } from "./modules/chat-migration/store.js";
+import { openChatMigrationDialog } from "./modules/chat-migration/ui.js";
 
 
 // === Helper: 转义 HTML 特殊字符（章节名是用户自由输入的，拼进 <option> 前需要转义） ===
