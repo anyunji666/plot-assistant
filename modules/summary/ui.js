@@ -1065,7 +1065,7 @@ export function openCustomFieldsDialog() {
     gap: "8px",
     flexWrap: "wrap",
   });
-  $addBtnRow.append($addBtn, $exportBtn, $importBtn, $importFileInput);
+  $addBtnRow.append($importBtn, $exportBtn, $addBtn, $importFileInput);
 
   let editingFieldId = null; // null = 新增；否则是正在编辑的字段 id
 

@@ -602,9 +602,9 @@ export function openChatMigrationDialog() {
     lastConfig.importMode || "overwrite",
   );
 
-  const $importBtn = $("<button>").text("选择文件导入").css({ ...btnCss, background: "#c0392b" });
+  const $importBtn = $("<button>").text("选择文件导入").css({ ...btnCss, background: "#3a9d5a" });
   const $importFileInput = $('<input type="file" accept=".json,application/json">').css({ display: "none" });
-  const $btnRow = $("<div>").css({ display: "flex", gap: "8px", flexWrap: "wrap" });
+  const $btnRow = $("<div>").css({ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" });
   $btnRow.append($exportBtn, $importBtn, $importFileInput);
 
   $box.append($titleRow, $desc, $modeGroup, $tagWrap, $rangeWrap, $importModeDivider, $importModeGroup, $btnRow);
