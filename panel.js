@@ -23,6 +23,7 @@ import { ensureSummaryLorebookOnLoad, runAutoLargeSummary, runAutoSmallSummary, 
 import { openCustomFieldsDialog, openFieldMetaInstructionDialog, openHideFloorDialog, openPreEmphasisDialog, openStatusLlmConfigDialog } from "./modules/summary/ui.js";
 import { clearAllCustomFieldsAcrossCharacters, getStatusLlmSettings } from "./modules/summary/status-llm/store.js";
 import { getLorebookEntriesSummaryHtml, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, mountSummaryLorebookGlobally, notifyWorldInfoUpdated } from "./modules/worldinfo.js";
+import { CHAT_MIGRATION_CONFIG_KEY, openChatMigrationDialog } from "./modules/chat-migration.js";
 
 
 // === Helper: 转义 HTML 特殊字符（章节名是用户自由输入的，拼进 <option> 前需要转义） ===
@@ -85,7 +86,7 @@ export function deleteIndexedDatabase(name) {
 
 // === Function: 清空本插件的全部本地缓存数据（控制面板"清空数据"按钮）===
 // 范围：三个 IndexedDB 库（私信/头像/图片/背景 + 地图图片 + 小说摘要提取的分段原文/摘要进度）、
-// 两个悬浮球位置的 localStorage、
+// 两个悬浮球位置的 localStorage、聊天记录迁移弹窗记住的上次配置（模式/标签/范围/导入方式）、
 // 七块插件自己的 extension_settings（通讯器/地图/移动端优化/节假日/小说自动跳转与当前章节/小说摘要提取/
 // 提示词模板联动，删掉后下次读取会自动用默认值重建，节假日这块连同你已经录入的自定义节假日一起清空；
 // 提示词模板联动这块只有"阶段词开/关"一个布尔值，清空后还原为默认关闭；
@@ -115,8 +116,9 @@ export async function clearAllPluginLocalData() {
   try {
     localStorage.removeItem(FAB_POS_KEY);
     localStorage.removeItem(PHONE_FAB_POS_KEY);
+    localStorage.removeItem(CHAT_MIGRATION_CONFIG_KEY);
   } catch (error) {
-    console.error("[剧情助手] 清空 localStorage 悬浮球位置记忆失败:", error);
+    console.error("[剧情助手] 清空 localStorage 悬浮球位置记忆/聊天记录迁移记忆配置失败:", error);
   }
 
   try {
@@ -302,6 +304,10 @@ export async function showSummaryPopup() {
         <div>
           <p style="color: #72b1e8; font-weight: 500; margin-bottom: 10px;">数据管理</p>
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0;">
+            <span style="font-size: 12px; color: #999; flex: 1;">导出/导入当前聊天的正文+摘要，用于PC与移动端之间迁移</span>
+            <button id="${POPUP_ID}-chat-migration" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;">聊天记录</button>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid #3a3a3a;">
             <span style="font-size: 12px; color: #999; flex: 1;">清除世界书以外的本插件数据</span>
             <button id="${POPUP_ID}-clear-all-data" style="background: #c0392b; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;">清空数据</button>
           </div>
@@ -784,6 +790,20 @@ export async function showSummaryPopup() {
       // 还原为默认（不注入任何章节），所以这里不用重新拉取章节列表，直接把选中项拨回 __none__ 即可。
       $(`#${POPUP_ID}-novel-active-chapter`).val("__none__");
     }
+
+    // 聊天记录迁移：打开导出/导入弹窗，不关闭本控制面板
+    $(`#${POPUP_ID}-chat-migration`)
+      .on("click", () => {
+        openChatMigrationDialog();
+      })
+      .hover(
+        function () {
+          $(this).css("background", "#2c5d9e");
+        },
+        function () {
+          $(this).css("background", "#3a7bd5");
+        },
+      );
 
     // 清空数据：二次确认，确认后清空本地缓存（不含世界书总结条目），成功后提示刷新手机弹窗
     $(`#${POPUP_ID}-clear-all-data`).on(
