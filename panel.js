@@ -791,9 +791,10 @@ export async function showSummaryPopup() {
       $(`#${POPUP_ID}-novel-active-chapter`).val("__none__");
     }
 
-    // 聊天记录迁移：打开导出/导入弹窗，不关闭本控制面板
+    // 聊天记录迁移：关闭本控制面板后再打开导出/导入弹窗，跟剧情录入等按钮写法一致
     $(`#${POPUP_ID}-chat-migration`)
       .on("click", () => {
+        closePopup();
         openChatMigrationDialog();
       })
       .hover(

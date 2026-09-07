@@ -573,13 +573,14 @@ export function openChatMigrationDialog() {
     .text("导出楼层范围（可选，留空导出全部；起始/结束都是楼层号，含首尾）")
     .css({ fontSize: "0.82em", color: "#999" });
   const $rangeInputRow = $("<div>").css({ display: "flex", gap: "8px", alignItems: "center" });
+  const rangeInputCss = { ...inputCss, width: "5em", flex: "0 0 auto" };
   const $rangeStartInput = $("<input>")
     .attr({ type: "number", min: "0", placeholder: "起始" })
-    .css({ ...inputCss, width: "auto", flex: "1" });
+    .css(rangeInputCss);
   const $rangeSep = $("<span>").text("—").css({ color: "#999" });
   const $rangeEndInput = $("<input>")
     .attr({ type: "number", min: "0", placeholder: "结束" })
-    .css({ ...inputCss, width: "auto", flex: "1" });
+    .css(rangeInputCss);
   if (Number.isFinite(lastConfig.rangeStart)) $rangeStartInput.val(lastConfig.rangeStart);
   if (Number.isFinite(lastConfig.rangeEnd)) $rangeEndInput.val(lastConfig.rangeEnd);
   $rangeInputRow.append($rangeStartInput, $rangeSep, $rangeEndInput);
