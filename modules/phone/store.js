@@ -17,7 +17,7 @@ import { getCurrentCharacterName, getLorebookEntriesArray, getOrCreateSummaryLor
 //   - 联系人：读取当前"角色名总结"世界书里所有「角色卡：」前缀的条目（复用"创建角色"功能写入的数据）。
 //   - 私信正文：本地 IndexedDB（PHONE_IDB_NAME），按"角色名::日期"存储，不占世界书 token。
 //   - 忙/闲判定缓存 + 待注入私信槽位标记：本地存储（PHONE_CHAT_META_KEY），跟随"角色卡+对话文件"走。
-//   - 私信预设（开场白/扮演指令）：extension_settings[PHONE_MODULE_NAME].presetByCharacter，按当前角色卡
+//   - 私信预设（拼接在提示词开头的背景参考内容）：extension_settings[PHONE_MODULE_NAME].presetByCharacter，按当前角色卡
 //     分开存，写法跟"假期预设"（modules/holiday/settings.js 的 restPresetText）一样，不占世界书条目。
 // 忙/闲判定：纯文本匹配——角色名（含去姓简称）是否出现在最后一层 AI 楼层正文里；
 //   出现 → 判定"忙"，把角色写进本地缓存的 busy 表，由状态表序列化时拼出 Busy 字段供正文 AI 感知，

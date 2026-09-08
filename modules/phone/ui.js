@@ -57,9 +57,7 @@ export async function openPhonePresetDialog() {
     });
 
     const $hint = $("<div>")
-      .text(
-        '手机私信生成回复时的开场白/扮演指令，"联系人"会自动替换成实际联系人姓名。',
-      )
+      .text("拼接在提示词开头的内容。")
       .css({ fontSize: "0.8em", color: "#999", lineHeight: 1.5 });
 
     const $textarea = $("<textarea>").val(currentContent).css({

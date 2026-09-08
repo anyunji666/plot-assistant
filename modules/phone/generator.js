@@ -50,13 +50,11 @@ export async function generateCharacterPhoneReply(
 ) {
   const cardBody = await getPhoneContactCardBody(characterName);
   const presetContent = loadPhonePresetContent();
-  // 预设默认内容里用"联系人"占位真实联系人姓名，用户如果保存过自己的版本也统一按这个占位符替换。
-  const openingLine = presetContent.split("联系人").join(characterName);
   const { mes: lastAiMes } = getLastAiFloor();
   const letterBody = await buildPrivateLetterBody(characterName);
 
   const systemPrompt = [
-    openingLine,
+    presetContent,
     `你负责扮演角色"${characterName}"，根据<private_letter>历史聊天内容，并结合<Latest_plot>的最新故事进展，给{{user}}回一条私信。`,
     "你会收到以下几部分输入：\n" +
       `1. <character_information>：角色"${characterName}"的角色卡资料（性别、性格背景等）。\n` +
