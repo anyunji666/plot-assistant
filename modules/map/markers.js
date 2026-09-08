@@ -20,13 +20,14 @@ export function renderAllMarkers() {
 
 
 // === Helper: 统计一条 npcNote 里有几个 NPC ===
-// npcNote 格式固定是"张三（备注）；李四（备注）"，无论手动填写还是NPC行程LLM自动写回
-// （见 npc-schedule/engine.js 的 grouped.forEach 那段）都用中文分号"；"分隔多个NPC，
-// 按它切分、去掉空白项即可得到人数。
+// npcNote 格式固定是"张三（备注）；李四（备注）"，NPC行程LLM自动写回
+// （见 npc-schedule/engine.js 的 grouped.forEach 那段）固定用中文分号"；"分隔多个NPC；
+// 手动填写时额外兼容半角分号";"（顿号、逗号容易和备注内容本身的标点混淆，故不纳入），
+// 按它们切分、去掉空白项即可得到人数。
 function countNpcEntries(npcNote) {
   if (!npcNote || typeof npcNote !== "string") return 0;
   return npcNote
-    .split("；")
+    .split(/[；;]/)
     .map((s) => s.trim())
     .filter(Boolean).length;
 }
