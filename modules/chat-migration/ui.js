@@ -8,7 +8,7 @@
 import { confirmAction, errorCatched, escapeHtml, notify } from "../core.js";
 import { parseFloorRangeInput } from "./parser.js";
 import { checkChatMigrationIssues, downloadChatMigrationExport, importChatMigrationFromText } from "./generator.js";
-import { loadLastChatMigrationConfig, saveLastChatMigrationConfig } from "./store.js";
+import { loadLastExportRange, loadLastImportRange, saveLastExportRange, saveLastImportRange } from "./store.js";
 
 export function openChatMigrationDialog() {
   const $bodyEl = $("body");
@@ -127,9 +127,7 @@ export function openChatMigrationDialog() {
     return $group;
   }
 
-  const lastConfig = loadLastChatMigrationConfig();
-
-  // === 正文截取模式 ===
+  // === 正文截取模式（每次打开弹窗都用默认选项，不再记忆上次的选择）===
   const modeGroupName = "chat-migration-mode";
   const $modeGroup = buildRadioGroup(
     modeGroupName,
@@ -138,13 +136,12 @@ export function openChatMigrationDialog() {
       ["whitelist", "摘要块 + 保留标签块 —— 只保留下方标签命中的整段"],
       ["exclude", "摘要块 + 其它（默认）—— 正文全保留，剔除下方标签命中的整段"],
     ],
-    lastConfig.mode || "exclude",
+    "exclude",
   );
 
   const $tagWrap = $("<div>").css({ display: "flex", flexDirection: "column", gap: "4px" });
   const $tagLabel = $("<label>").css({ fontSize: "0.82em", color: "#999" });
   const $tagInput = $("<input>").attr({ type: "text", placeholder: "如 thinking,ooc" }).css(inputCss);
-  if (lastConfig.tags) $tagInput.val(lastConfig.tags);
   $tagWrap.append($tagLabel, $tagInput);
 
   function syncTagWrapToMode() {
@@ -168,7 +165,7 @@ export function openChatMigrationDialog() {
     .text("导出楼层范围（可选，留空导出全部；起始/结束都是楼层号，含首尾）")
     .css({ fontSize: "0.82em", color: "#999" });
   const $rangeInputRow = $("<div>").css({ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" });
-  const rangeInputCss = { ...inputCss, width: "5em", flex: "0 0 auto" };
+  const rangeInputCss = { ...inputCss, width: "8em", flex: "0 0 auto" };
   const $rangeStartInput = $("<input>")
     .attr({ type: "number", min: "0", placeholder: "起始" })
     .css(rangeInputCss);
@@ -176,14 +173,22 @@ export function openChatMigrationDialog() {
   const $rangeEndInput = $("<input>")
     .attr({ type: "number", min: "0", placeholder: "结束" })
     .css(rangeInputCss);
-  if (Number.isFinite(lastConfig.rangeStart)) $rangeStartInput.val(lastConfig.rangeStart);
-  if (Number.isFinite(lastConfig.rangeEnd)) $rangeEndInput.val(lastConfig.rangeEnd);
 
-  // === 导出按钮：跟导出楼层范围输入框同一行，靠行尾 ===
-  const $exportBtn = $("<button>").text("导出为文件").css({ ...btnCss, background: "#3a9d5a", marginLeft: "auto" });
+  $rangeInputRow.append($rangeStartInput, $rangeSep, $rangeEndInput);
 
-  $rangeInputRow.append($rangeStartInput, $rangeSep, $rangeEndInput, $exportBtn);
-  $rangeWrap.append($rangeLabel, $rangeInputRow);
+  // === "最近一次导出/导入" 提示文字：靠按钮左边 ===
+  const lastHintCss = { fontSize: "0.8em", color: "#999" };
+  function formatLastHint(prefix, range) {
+    return range ? `最近一次 ${prefix}：${range.start}-${range.end}` : `最近一次 ${prefix}：暂无`;
+  }
+  const $lastExportHint = $("<span>").css(lastHintCss).text(formatLastHint("导出", loadLastExportRange()));
+  const $lastImportHint = $("<span>").css(lastHintCss).text(formatLastHint("导入", loadLastImportRange()));
+
+  // === 导出按钮：另起一行放在导出楼层范围输入框下面，左边是"最近一次导出"提示 ===
+  const $exportRow = $("<div>").css({ display: "flex", gap: "10px", alignItems: "center", justifyContent: "space-between" });
+  const $exportBtn = $("<button>").text("导出").css({ ...btnCss, background: "#3a9d5a" });
+  $exportRow.append($lastExportHint, $exportBtn);
+  $rangeWrap.append($rangeLabel, $rangeInputRow, $exportRow);
 
   // === 导入方式 ===
   const $importModeDivider = $("<div>").css({ borderTop: "1px solid #3a3a3a", margin: "4px 0" });
@@ -195,13 +200,13 @@ export function openChatMigrationDialog() {
       ["merge", "按楼层号合并更新（推荐配合“导出楼层范围”做增量同步）"],
       ["newchat", "导入为新聊天（新建一个聊天，不影响当前聊天）"],
     ],
-    lastConfig.importMode || "overwrite",
+    "overwrite",
   );
 
-  const $importBtn = $("<button>").text("选择文件导入").css({ ...btnCss, background: "#3a9d5a" });
+  const $importBtn = $("<button>").text("导入").css({ ...btnCss, background: "#3a9d5a" });
   const $importFileInput = $('<input type="file" accept=".json,application/json">').css({ display: "none" });
-  const $btnRow = $("<div>").css({ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" });
-  $btnRow.append($importBtn, $importFileInput);
+  const $btnRow = $("<div>").css({ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" });
+  $btnRow.append($lastImportHint, $importBtn, $importFileInput);
 
   $box.append($titleRow, $desc, $modeGroup, $tagWrap, $rangeWrap, $importModeDivider, $importModeGroup, $btnRow);
   $overlay.append($box);
@@ -236,18 +241,6 @@ export function openChatMigrationDialog() {
     if (e.key === "Escape") close();
   });
 
-  // === 记住当前弹窗里的配置，供下次打开时回填 ===
-  function persistCurrentConfig(extra) {
-    saveLastChatMigrationConfig({
-      mode: $modeGroup.find("input:checked").val(),
-      tags: $tagInput.val(),
-      rangeStart: parseFloorRangeInput($rangeStartInput.val()) ?? null,
-      rangeEnd: parseFloorRangeInput($rangeEndInput.val()) ?? null,
-      importMode: $importModeGroup.find("input:checked").val(),
-      ...extra,
-    });
-  }
-
   $exportBtn.on(
     "click",
     errorCatched(async () => {
@@ -263,9 +256,12 @@ export function openChatMigrationDialog() {
         if (!proceed) return;
       }
 
-      const count = downloadChatMigrationExport(mode, tagsRaw, rangeStart, rangeEnd);
+      const { count, floorStart, floorEnd } = downloadChatMigrationExport(mode, tagsRaw, rangeStart, rangeEnd);
       notify("success", `已导出 ${count} 层楼的聊天记录。`);
-      persistCurrentConfig();
+      if (Number.isFinite(floorStart) && Number.isFinite(floorEnd)) {
+        saveLastExportRange(floorStart, floorEnd);
+        $lastExportHint.text(formatLastHint("导出", { start: floorStart, end: floorEnd }));
+      }
     }),
   );
 
@@ -294,10 +290,13 @@ export function openChatMigrationDialog() {
         notify("info", "检测到这是范围导出文件，已自动切换为「按楼层号合并更新」。");
       }
 
-      const count = await importChatMigrationFromText(rawText, importMode);
-      if (count === null) return; // 用户在某个确认弹窗里点了取消
+      const result = await importChatMigrationFromText(rawText, importMode);
+      if (result === null) return; // 用户在某个确认弹窗里点了取消
+      const { count, floorStart, floorEnd } = result;
       notify("success", `已处理 ${count} 层楼，状态表已同步重建。`);
-      persistCurrentConfig({ importMode });
+      if (Number.isFinite(floorStart) && Number.isFinite(floorEnd)) {
+        saveLastImportRange(floorStart, floorEnd);
+      }
       close();
     });
     reader.onerror = () => {

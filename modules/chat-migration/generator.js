@@ -125,7 +125,15 @@ export function buildChatMigrationExport(mode, tagsRaw, rangeStart, rangeEnd) {
   };
 }
 
-// === Function: 触发导出 JSON 文件下载，返回导出的楼层数 ===
+// === Helper: 从一批 floors 里取出实际的楼层号区间 {start, end}，取不到时返回 null ===
+function computeFloorRangeOfFloors(floors) {
+  if (!Array.isArray(floors) || floors.length === 0) return null;
+  const indices = floors.map((f) => Number(f && f.index)).filter((n) => Number.isFinite(n));
+  if (indices.length === 0) return null;
+  return { start: Math.min(...indices), end: Math.max(...indices) };
+}
+
+// === Function: 触发导出 JSON 文件下载，返回 {count, floorStart, floorEnd}（实际导出的楼层数/区间）===
 export function downloadChatMigrationExport(mode, tagsRaw, rangeStart, rangeEnd) {
   const data = buildChatMigrationExport(mode, tagsRaw, rangeStart, rangeEnd);
   const text = JSON.stringify(data, null, 2);
@@ -141,7 +149,8 @@ export function downloadChatMigrationExport(mode, tagsRaw, rangeStart, rangeEnd)
   a.download = `聊天记录-${safeName}${rangeTag}-${stamp}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  return data.floors.length;
+  const floorRange = computeFloorRangeOfFloors(data.floors);
+  return { count: data.floors.length, floorStart: floorRange ? floorRange.start : null, floorEnd: floorRange ? floorRange.end : null };
 }
 
 // === Helper: 文件里的 floors -> 完整的酒馆消息对象数组（用于 overwrite / newchat 两种整份写入的场景）===
@@ -287,7 +296,8 @@ async function importChatMigrationAsNewChat(data) {
 }
 
 // === Function: 解析导入文件文本，按选定的导入方式处理，最后重建状态表 ===
-// 返回处理的楼层数；用户在确认弹窗里点了"取消"则返回 null。
+// 返回 {count, floorStart, floorEnd}（处理的楼层数/实际楼层区间）；
+// 用户在确认弹窗里点了"取消"则返回 null。
 export async function importChatMigrationFromText(rawText, importMode = "overwrite") {
   let data;
   try {
@@ -311,7 +321,12 @@ export async function importChatMigrationFromText(rawText, importMode = "overwri
     if (!proceedAnyway) return null;
   }
 
-  if (importMode === "merge") return await mergeChatMigrationFloors(data);
-  if (importMode === "newchat") return await importChatMigrationAsNewChat(data);
-  return await overwriteChatMigrationFloors(data);
+  let count;
+  if (importMode === "merge") count = await mergeChatMigrationFloors(data);
+  else if (importMode === "newchat") count = await importChatMigrationAsNewChat(data);
+  else count = await overwriteChatMigrationFloors(data);
+  if (count === null) return null; // 确认弹窗里点了取消
+
+  const floorRange = computeFloorRangeOfFloors(data.floors);
+  return { count, floorStart: floorRange ? floorRange.start : null, floorEnd: floorRange ? floorRange.end : null };
 }
