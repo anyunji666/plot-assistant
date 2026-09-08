@@ -384,6 +384,7 @@ export async function showSummaryPopup() {
       }
     }
 
+    // === 关闭按钮 ===
     $(`#close-${POPUP_ID}`)
       .on("click", closePopup)
       .hover(
@@ -395,6 +396,7 @@ export async function showSummaryPopup() {
         },
       );
 
+    // === 总结功能 ===
     $(`#${POPUP_ID}-auto-small`)
       .on("click", () => {
         closePopup();
@@ -451,6 +453,7 @@ export async function showSummaryPopup() {
         },
       );
 
+    // === 同人小说 ===
     $(`#${POPUP_ID}-novel-entry`)
       .on("click", () => {
         closePopup();
@@ -523,6 +526,7 @@ export async function showSummaryPopup() {
       }),
     );
 
+    // === 摘要配置 ===
     $(`#${POPUP_ID}-status-llm-config`)
       .on("click", () => {
         closePopup();
@@ -598,6 +602,7 @@ export async function showSummaryPopup() {
         },
       );
 
+    // === 联系人 ===
     $(`#${POPUP_ID}-create-character`)
       .on("click", () => {
         closePopup();
@@ -626,6 +631,25 @@ export async function showSummaryPopup() {
         },
       );
 
+    // 通讯器悬浮球显示开关：逻辑跟上面地图悬浮球那个完全一致，独立的开关/独立的坐标存储。
+    function renderPhoneFabToggleButton($btn, visible) {
+      $btn
+        .text(visible ? "通讯器开" : "通讯器关")
+        .css(visible ? TOGGLE_ON_STYLE : TOGGLE_OFF_STYLE);
+    }
+
+    const $phoneFabToggleBtn = $(`#${POPUP_ID}-phone-fab-toggle`);
+    renderPhoneFabToggleButton($phoneFabToggleBtn, getPhoneFabVisible());
+
+    $phoneFabToggleBtn.on("click", () => {
+      const nowVisible = !getPhoneFabVisible();
+      setPhoneFabVisibleSetting(nowVisible);
+      if (!nowVisible) resetPhoneFabPos();
+      applyPhoneFabVisibility();
+      renderPhoneFabToggleButton($phoneFabToggleBtn, nowVisible);
+    });
+
+    // === 地图 ===
     $(`#${POPUP_ID}-map-marker`)
       .on("click", () => {
         closePopup();
@@ -660,24 +684,7 @@ export async function showSummaryPopup() {
       renderFabToggleButton($fabToggleBtn, nowVisible);
     });
 
-    // 通讯器悬浮球显示开关：逻辑跟上面地图悬浮球那个完全一致，独立的开关/独立的坐标存储。
-    function renderPhoneFabToggleButton($btn, visible) {
-      $btn
-        .text(visible ? "通讯器开" : "通讯器关")
-        .css(visible ? TOGGLE_ON_STYLE : TOGGLE_OFF_STYLE);
-    }
-
-    const $phoneFabToggleBtn = $(`#${POPUP_ID}-phone-fab-toggle`);
-    renderPhoneFabToggleButton($phoneFabToggleBtn, getPhoneFabVisible());
-
-    $phoneFabToggleBtn.on("click", () => {
-      const nowVisible = !getPhoneFabVisible();
-      setPhoneFabVisibleSetting(nowVisible);
-      if (!nowVisible) resetPhoneFabPos();
-      applyPhoneFabVisibility();
-      renderPhoneFabToggleButton($phoneFabToggleBtn, nowVisible);
-    });
-
+    // === 节假日 ===
     // 节假日播报开关：逻辑跟悬浮球开关一样，点击只切换状态、不关闭弹窗；
     // 跟悬浮球不同的是这里没有坐标要重置，纯粹是个布尔开关。
     function renderHolidayToggleButton($btn, enabled) {
@@ -695,6 +702,35 @@ export async function showSummaryPopup() {
       renderHolidayToggleButton($holidayToggleBtn, nowEnabled);
     });
 
+    $(`#${POPUP_ID}-holiday-rest-preset`)
+      .on("click", () => {
+        closePopup();
+        openRestPresetDialog();
+      })
+      .hover(
+        function () {
+          $(this).css("background", "#2c5d9e");
+        },
+        function () {
+          $(this).css("background", "#3a7bd5");
+        },
+      );
+
+    $(`#${POPUP_ID}-holiday-custom`)
+      .on("click", () => {
+        closePopup();
+        openCustomHolidaysDialog();
+      })
+      .hover(
+        function () {
+          $(this).css("background", "#2c5d9e");
+        },
+        function () {
+          $(this).css("background", "#3a7bd5");
+        },
+      );
+
+    // === 提示词模板联动 ===
     // 提示词模板联动：
     // "动态提示词"按钮打开只读的 EJS 格式说明浮层，关闭后重新打开控制面板（对齐用户对"退回面板"的预期，
     // 跟节假日两个弹窗"点击后直接 closePopup，不主动帮用户重新打开面板"的写法不同，是本栏的特例）；
@@ -733,34 +769,7 @@ export async function showSummaryPopup() {
         },
       );
 
-    $(`#${POPUP_ID}-holiday-rest-preset`)
-      .on("click", () => {
-        closePopup();
-        openRestPresetDialog();
-      })
-      .hover(
-        function () {
-          $(this).css("background", "#2c5d9e");
-        },
-        function () {
-          $(this).css("background", "#3a7bd5");
-        },
-      );
-
-    $(`#${POPUP_ID}-holiday-custom`)
-      .on("click", () => {
-        closePopup();
-        openCustomHolidaysDialog();
-      })
-      .hover(
-        function () {
-          $(this).css("background", "#2c5d9e");
-        },
-        function () {
-          $(this).css("background", "#3a7bd5");
-        },
-      );
-
+    // === 数据管理 ===
     // 清空数据后，统一把弹窗里所有"读设置渲染文字+颜色"的开关按钮／下拉框重新刷一遍。
     // 清空数据不会关闭本控制面板弹窗，这些按钮在弹窗里已经渲染过一次了，对应的 extension_settings
     // 被清空数据流程删掉/还原后，如果不重新调用各自的 render 函数，按钮显示的开/关状态会跟被清空后的
@@ -836,7 +845,8 @@ export async function showSummaryPopup() {
       }),
     );
 
-    // 移动端优化：两个开关按钮，点击只切换状态，不关闭弹窗
+    // === 移动端优化 ===
+    // 两个开关按钮，点击只切换状态，不关闭弹窗
     function renderMobileOptButton($btn, isOn) {
       $btn
         .text(isOn ? "已开启" : "未开启")
@@ -876,6 +886,7 @@ export async function showSummaryPopup() {
       renderMobileOptButton($mobileOptLazyBtn, s.lazyLoad);
     });
 
+    // === 世界书条目 ===
     // 全局世界书挂载：真正的开关按钮。
     // 未挂载 -> 点击走"挂载"流程（会检测其他全局书，问是否顺带清理，只保留这一本）；
     // 已挂载 -> 点击只做单纯的 toggle off，不碰其他全局书，方便"先摘旧角色卡，再挂新角色卡"这种切换场景。

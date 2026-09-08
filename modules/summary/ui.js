@@ -1166,6 +1166,7 @@ export function openCustomFieldsDialog() {
   }
   renderList();
 
+  // === 挂载弹窗 & 关闭逻辑 ===
   $box.append($titleRow, $desc, $charLabel, $listWrap, $addBtnRow, $formWrap);
   $overlay.append($box);
   $("body").append($overlay);
@@ -1199,6 +1200,7 @@ export function openCustomFieldsDialog() {
     if (e.key === "Escape") close();
   });
 
+  // === 按钮事件绑定 ===
   $addBtn.on("click", () => openForm(null));
   $formCancelBtn.on("click", () => closeForm());
 
