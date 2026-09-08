@@ -25,6 +25,8 @@ import { clearAllCustomFieldsAcrossCharacters, getStatusLlmSettings } from "./mo
 import { getLorebookEntriesSummaryHtml, getOrCreateSummaryLorebook, isSummaryLorebookGloballyEnabled, mountSummaryLorebookGlobally, notifyWorldInfoUpdated } from "./modules/worldinfo.js";
 import { CHAT_MIGRATION_CONFIG_KEY } from "./modules/chat-migration/store.js";
 import { openChatMigrationDialog } from "./modules/chat-migration/ui.js";
+import { PHONE_MIGRATION_STATE_KEY } from "./modules/phone-migration/store.js";
+import { openPhoneMigrationDialog } from "./modules/phone-migration/ui.js";
 
 
 // === Helper: 转义 HTML 特殊字符（章节名是用户自由输入的，拼进 <option> 前需要转义） ===
@@ -118,6 +120,7 @@ export async function clearAllPluginLocalData() {
     localStorage.removeItem(FAB_POS_KEY);
     localStorage.removeItem(PHONE_FAB_POS_KEY);
     localStorage.removeItem(CHAT_MIGRATION_CONFIG_KEY);
+    localStorage.removeItem(PHONE_MIGRATION_STATE_KEY);
   } catch (error) {
     console.error("[剧情助手] 清空 localStorage 悬浮球位置记忆/聊天记录迁移记忆配置失败:", error);
   }
@@ -307,6 +310,10 @@ export async function showSummaryPopup() {
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0;">
             <span style="font-size: 12px; color: #999; flex: 1;">导出/导入当前聊天的正文+摘要，用于PC与移动端之间迁移</span>
             <button id="${POPUP_ID}-chat-migration" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;">聊天记录</button>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid #3a3a3a;">
+            <span style="font-size: 12px; color: #999; flex: 1;">导出/导入当前角色卡下的私信聊天记录与联系人角色卡资料</span>
+            <button id="${POPUP_ID}-phone-migration" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;">私信数据</button>
           </div>
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid #3a3a3a;">
             <span style="font-size: 12px; color: #999; flex: 1;">清除世界书以外的本插件数据</span>
@@ -806,6 +813,21 @@ export async function showSummaryPopup() {
       .on("click", () => {
         closePopup();
         openChatMigrationDialog();
+      })
+      .hover(
+        function () {
+          $(this).css("background", "#2c5d9e");
+        },
+        function () {
+          $(this).css("background", "#3a7bd5");
+        },
+      );
+
+    // 私信数据迁移：跟聊天记录迁移同一套写法
+    $(`#${POPUP_ID}-phone-migration`)
+      .on("click", () => {
+        closePopup();
+        openPhoneMigrationDialog();
       })
       .hover(
         function () {
