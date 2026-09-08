@@ -167,7 +167,7 @@ export function openChatMigrationDialog() {
   const $rangeLabel = $("<label>")
     .text("导出楼层范围（可选，留空导出全部；起始/结束都是楼层号，含首尾）")
     .css({ fontSize: "0.82em", color: "#999" });
-  const $rangeInputRow = $("<div>").css({ display: "flex", gap: "8px", alignItems: "center" });
+  const $rangeInputRow = $("<div>").css({ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" });
   const rangeInputCss = { ...inputCss, width: "5em", flex: "0 0 auto" };
   const $rangeStartInput = $("<input>")
     .attr({ type: "number", min: "0", placeholder: "起始" })
@@ -178,11 +178,12 @@ export function openChatMigrationDialog() {
     .css(rangeInputCss);
   if (Number.isFinite(lastConfig.rangeStart)) $rangeStartInput.val(lastConfig.rangeStart);
   if (Number.isFinite(lastConfig.rangeEnd)) $rangeEndInput.val(lastConfig.rangeEnd);
-  $rangeInputRow.append($rangeStartInput, $rangeSep, $rangeEndInput);
-  $rangeWrap.append($rangeLabel, $rangeInputRow);
 
-  // === 导出按钮 ===
-  const $exportBtn = $("<button>").text("导出为文件").css({ ...btnCss, background: "#3a7bd5" });
+  // === 导出按钮：跟导出楼层范围输入框同一行，靠行尾 ===
+  const $exportBtn = $("<button>").text("导出为文件").css({ ...btnCss, background: "#3a9d5a", marginLeft: "auto" });
+
+  $rangeInputRow.append($rangeStartInput, $rangeSep, $rangeEndInput, $exportBtn);
+  $rangeWrap.append($rangeLabel, $rangeInputRow);
 
   // === 导入方式 ===
   const $importModeDivider = $("<div>").css({ borderTop: "1px solid #3a3a3a", margin: "4px 0" });
@@ -200,7 +201,7 @@ export function openChatMigrationDialog() {
   const $importBtn = $("<button>").text("选择文件导入").css({ ...btnCss, background: "#3a9d5a" });
   const $importFileInput = $('<input type="file" accept=".json,application/json">').css({ display: "none" });
   const $btnRow = $("<div>").css({ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end" });
-  $btnRow.append($exportBtn, $importBtn, $importFileInput);
+  $btnRow.append($importBtn, $importFileInput);
 
   $box.append($titleRow, $desc, $modeGroup, $tagWrap, $rangeWrap, $importModeDivider, $importModeGroup, $btnRow);
   $overlay.append($box);
