@@ -9,7 +9,7 @@ import { parseContactExtra } from "./parser.js";
 
 // === Function: 打开"私信预设"编辑框（纯文本，取消/保存，样式对齐"对话前强调"弹窗）===
 export async function openPhonePresetDialog() {
-  const currentContent = await loadPhonePresetContent();
+  const currentContent = loadPhonePresetContent();
 
   const $bodyEl = $("body");
   const prevBodyOverflow = $bodyEl.css("overflow");
@@ -141,8 +141,8 @@ export async function openPhonePresetDialog() {
   if (result === null) return;
 
   try {
-    const lorebookName = await savePhonePresetContent(result);
-    notify("success", `「${PHONE_PRESET_TITLE}」已保存到「${lorebookName}」`);
+    const characterName = savePhonePresetContent(result);
+    notify("success", `「${PHONE_PRESET_TITLE}」已保存（角色：${characterName}）`);
   } catch (error) {
     console.error("[剧情助手] 保存私信预设失败:", error);
     notify("error", `保存私信预设失败：${error.message || error}`);

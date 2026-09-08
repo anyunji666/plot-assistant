@@ -2,11 +2,11 @@
 
 import { saveSettingsDebounced } from "../../../../../../script.js";
 import { extension_settings } from "../../../../../extensions.js";
-import { CHARACTER_ENTRY_DEFAULTS, CHARACTER_ENTRY_TITLE_PREFIX, DEFAULT_PHONE_PRESET_CONTENT, PHONE_AVATAR_STORE, PHONE_BACKGROUND_STORE, PHONE_CHAT_META_KEY, PHONE_GLOBAL_BACKGROUND_KEY, PHONE_IDB_NAME, PHONE_IDB_STORE, PHONE_PRESET_TITLE, PHONE_STICKER_LIST_KEY, PHONE_STICKER_STORE, STATUS_TABLE_TITLE, getChatMetadataStore, getCtx, notify, persistChatMetadata } from "../core.js";
+import { CHARACTER_ENTRY_TITLE_PREFIX, DEFAULT_PHONE_PRESET_CONTENT, PHONE_AVATAR_STORE, PHONE_BACKGROUND_STORE, PHONE_CHAT_META_KEY, PHONE_GLOBAL_BACKGROUND_KEY, PHONE_IDB_NAME, PHONE_IDB_STORE, PHONE_STICKER_LIST_KEY, PHONE_STICKER_STORE, STATUS_TABLE_TITLE, getChatMetadataStore, notify, persistChatMetadata } from "../core.js";
 import { extractCharacterInfoBody } from "./parser.js";
 import { extractLabelLine } from "../summary/floor-restore.js";
 import { BARE_NUMBER_PATTERN, extractOtherPartyName, parseKeyValueListWithSkipped } from "../summary/status-table.js";
-import { getCurrentCharacterName, getFreeUid, getLorebookEntriesArray, getOrCreateSummaryLorebook, notifyWorldInfoUpdated } from "../worldinfo.js";
+import { getCurrentCharacterName, getLorebookEntriesArray, getOrCreateSummaryLorebook } from "../worldinfo.js";
 
 
 // #####################################################################################
@@ -17,6 +17,8 @@ import { getCurrentCharacterName, getFreeUid, getLorebookEntriesArray, getOrCrea
 //   - 联系人：读取当前"角色名总结"世界书里所有「角色卡：」前缀的条目（复用"创建角色"功能写入的数据）。
 //   - 私信正文：本地 IndexedDB（PHONE_IDB_NAME），按"角色名::日期"存储，不占世界书 token。
 //   - 忙/闲判定缓存 + 待注入私信槽位标记：本地存储（PHONE_CHAT_META_KEY），跟随"角色卡+对话文件"走。
+//   - 私信预设（开场白/扮演指令）：extension_settings[PHONE_MODULE_NAME].presetByCharacter，按当前角色卡
+//     分开存，写法跟"假期预设"（modules/holiday/settings.js 的 restPresetText）一样，不占世界书条目。
 // 忙/闲判定：纯文本匹配——角色名（含去姓简称）是否出现在最后一层 AI 楼层正文里；
 //   出现 → 判定"忙"，把角色写进本地缓存的 busy 表，由状态表序列化时拼出 Busy 字段供正文 AI 感知，
 //     正文 AI 在该角色本轮不再出现时输出 Busy: 角色名: [REMOVE]，插件在下一次状态表重算时读到这个信号，
@@ -33,13 +35,16 @@ import { getCurrentCharacterName, getFreeUid, getLorebookEntriesArray, getOrCrea
 export const PHONE_MODULE_NAME = "plot_assistant_phone";
 
 
-// extension_settings[PHONE_MODULE_NAME] 顶层结构：{ fabVisible: boolean }
+// extension_settings[PHONE_MODULE_NAME] 顶层结构：{ fabVisible: boolean, presetByCharacter: { 角色名: 预设原文 } }
 export function getPhoneExtRoot() {
   if (!extension_settings[PHONE_MODULE_NAME]) {
     extension_settings[PHONE_MODULE_NAME] = {};
   }
   const root = extension_settings[PHONE_MODULE_NAME];
   if (typeof root.fabVisible !== "boolean") root.fabVisible = false;
+  if (!root.presetByCharacter || typeof root.presetByCharacter !== "object") {
+    root.presetByCharacter = {};
+  }
   return root;
 }
 
@@ -140,16 +145,15 @@ export async function getPhoneContactCardBody(characterName) {
 }
 
 
-// === Helper: 读取"私信预设"条目，取不到时返回默认内容（不写入世界书，仅供编辑框预填）。===
-export async function loadPhonePresetContent() {
+// === Helper: 读取"私信预设"原文，取不到时返回默认内容。
+// 存储位置跟"假期预设"（modules/holiday/settings.js 的 restPresetText）一样，直接放
+// extension_settings，按当前角色卡分开存，不再占用世界书条目。===
+export function loadPhonePresetContent() {
   try {
-    const lorebookName = await getOrCreateSummaryLorebook();
-    const entries = await getLorebookEntriesArray(lorebookName);
-    const existing = entries.find((e) => e.comment === PHONE_PRESET_TITLE);
-    return existing &&
-      typeof existing.content === "string" &&
-      existing.content.trim()
-      ? existing.content
+    const name = getCurrentCharacterName();
+    const text = getPhoneExtRoot().presetByCharacter[name];
+    return typeof text === "string" && text.trim()
+      ? text
       : DEFAULT_PHONE_PRESET_CONTENT;
   } catch (error) {
     console.error("[剧情助手] 读取私信预设失败:", error);
@@ -158,44 +162,12 @@ export async function loadPhonePresetContent() {
 }
 
 
-// === Helper: 保存/新建"私信预设"条目。始终 disable:true、非常驻关键词触发——
-// 这条条目不参与酒馆正文的世界书注入，只是插件生成私信回复时直接读取内容拼提示词用。===
-export async function savePhonePresetContent(content) {
-  const context = getCtx();
-  const lorebookName = await getOrCreateSummaryLorebook();
-  const data = await context.loadWorldInfo(lorebookName);
-  if (!data || !data.entries)
-    throw new Error(`无法加载世界书: ${lorebookName}`);
-
-  const existing = Object.values(data.entries).find(
-    (entry) => entry.comment === PHONE_PRESET_TITLE,
-  );
-
-  if (existing) {
-    data.entries[existing.uid].content = content;
-    data.entries[existing.uid].disable = true;
-  } else {
-    const newUid = getFreeUid(data);
-    if (newUid === null) throw new Error("无法为新世界书条目分配 uid。");
-    data.entries[newUid] = {
-      uid: newUid,
-      comment: PHONE_PRESET_TITLE,
-      content,
-      disable: true,
-      constant: false,
-      key: [],
-      position: 0,
-      useGroupScoring: false,
-      excludeRecursion: true,
-      preventRecursion: true,
-      delayUntilRecursion: 0,
-      ...CHARACTER_ENTRY_DEFAULTS,
-    };
-  }
-
-  await context.saveWorldInfo(lorebookName, data, true);
-  notifyWorldInfoUpdated(lorebookName);
-  return lorebookName;
+// === Helper: 保存"私信预设"原文到 extension_settings，按当前角色卡分开存。===
+export function savePhonePresetContent(content) {
+  const name = getCurrentCharacterName();
+  getPhoneExtRoot().presetByCharacter[name] = String(content ?? "");
+  saveSettingsDebounced();
+  return name;
 }
 
 

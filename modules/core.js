@@ -41,7 +41,7 @@ export const MAP_INFO_ENTRY_DEFAULTS = {
   probability: 100,
 };
 
-export const PHONE_PRESET_TITLE = "私信预设"; // 手机私信开场白预设世界书条目固定标题，跟角色卡条目一样 disable:true 常驻、不参与主线注入，插件直接读取内容使用
+export const PHONE_PRESET_TITLE = "私信预设"; // 手机私信开场白预设的显示标题（弹窗标题/提示文案用）；内容存在 extension_settings 里，按当前角色卡分开存，不占世界书条目
 
 // "私信预设"条目首次创建前用于预填编辑框的默认内容——手机私信生成提示词里唯一可编辑的部分（开场白/扮演指令），
 // 其余结构（人设/最新正文/私信历史块）和输出格式要求都写死在代码里，不放进这段可编辑文本。

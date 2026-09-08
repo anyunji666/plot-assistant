@@ -49,7 +49,7 @@ export async function generateCharacterPhoneReply(
   becauseFreedReply,
 ) {
   const cardBody = await getPhoneContactCardBody(characterName);
-  const presetContent = await loadPhonePresetContent();
+  const presetContent = loadPhonePresetContent();
   // 预设默认内容里用"联系人"占位真实联系人姓名，用户如果保存过自己的版本也统一按这个占位符替换。
   const openingLine = presetContent.split("联系人").join(characterName);
   const { mes: lastAiMes } = getLastAiFloor();
@@ -57,19 +57,26 @@ export async function generateCharacterPhoneReply(
 
   const systemPrompt = [
     openingLine,
+    `你负责扮演角色"${characterName}"，根据<private_letter>历史聊天内容，并结合<Latest_plot>的最新故事进展，给{{user}}回一条私信。`,
+    "你会收到以下几部分输入：\n" +
+      `1. <character_information>：角色"${characterName}"的角色卡资料（性别、性格背景等）。\n` +
+      "2. <Latest_plot>：酒馆正文最后一层AI楼层原文，代表\"当前时刻\"实际发生的事。\n" +
+      "3. <private_letter>：{{user}}和该角色迄今为止的私信记录，包含时间和当前俩人关系阶段。",
     `<character_information character="${characterName}">\n${
       cardBody || "gender: \nother: "
     }\n</character_information>`,
     `<Latest_plot>\n${lastAiMes || "（暂无正文）"}\n</Latest_plot>`,
     `<private_letter name="${characterName}">\n{{user}}和${characterName}的私信：\n${letterBody}\n</private_letter>`,
-    "回复内容按以下规则判断，依次检查，命中哪条就按哪条执行，不要同时套用多条：\n" +
-      "1. 如果 <Latest_plot> 里角色已经当面/在场景中回复过这条私信的内容：直接照抄正文里角色说的那句话，作为私信回复输出。\n" +
-      "2. 否则，如果 <Latest_plot> 结尾角色正和 {{user}} 处于同一场景中互动/聊天（人在场，已知道私信内容）：" +
-      "只输出「😊」这一个表情符号代表\"已读\"，不要输出任何其它文字。\n" +
-      "3. 否则（角色没有和 {{user}} 处于同一场景互动，就是单纯有空看手机）：正常编一条符合角色语气、针对 {{user}} 这条私信内容的回复。",
-    "只输出这一条私信正文本身：第一人称、符合角色说话习惯的一两句话，可以带口语化的语气词/表情，" +
-      "但不要加任何前缀、不要写「角色名：」这种称呼前缀，不要加动作/心理描写的括号说明，不要输出多余的解释。" +
-      "（命中上面规则2输出「😊」的情况除外，这种情况就只输出这一个表情符号，不受本条格式要求约束。）",
+    "判断规则（依次检查，命中哪条就按哪条执行，不要同时套用多条）：\n" +
+      "1. 如果 <Latest_plot> 里角色已经当面/在场景中回复过这条私信的内容：\n" +
+      "   直接原样照抄正文里角色说的那句话，作为私信回复输出。\n" +
+      "2. 否则，如果 <Latest_plot> 结尾角色正和 {{user}} 处于同一场景中互动/聊天（人在场，已经知道私信内容）：\n" +
+      "   只输出「😊」这一个表情符号代表\"已读\"，不输出任何其它文字（不受下面输出格式要求约束）。\n" +
+      "3. 否则（角色没有和 {{user}} 处于同一场景互动，就是单纯有空看手机）：\n" +
+      "   正常编一条符合角色语气、针对这条私信内容的回复，遵循下面的输出格式要求。",
+    "输出格式要求（仅适用于命中规则1、3的情况）：\n" +
+      "只输出这一条私信正文本身——第一人称、符合角色说话习惯的一两句话，可以带口语化的语气词/表情。\n" +
+      "不要加任何前缀，不要写「角色名：」这种称呼前缀，不要加动作/心理描写的括号说明，不要输出多余的解释。",
   ]
     .filter(Boolean)
     .join("\n\n");
