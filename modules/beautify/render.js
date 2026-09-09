@@ -421,16 +421,27 @@ function beautifyOneMessageEl(mesEl, lastAiIdx, snapshot, force = false) {
   targetEl.replaceWith(wrapper.firstElementChild);
 }
 
-// === 全量扫描当前聊天里所有消息。状态表快照只读取一次（世界书条目是全局状态，跟具体哪层楼无关），
-// 读取失败/为空时不影响卡片其余部分的正常渲染（回退到各层原文解析结果）。===
-async function scanAndBeautifyAll() {
+// === 扫描消息并转卡片。targetMesEls 传入具体节点集合时，只处理这些节点（不遍历其余历史楼层，
+// 这是性能优化的关键：聊天记录再长，日常"只有最新一层在动"的场景下开销也跟历史楼层数无关）；
+// 不传（或传入空集合）时退回全量扫描，用于插件加载/切换聊天等首次没有具体变化目标的场景。
+// 状态表快照只读取一次（世界书条目是全局状态，跟具体哪层楼无关），读取失败/为空时不影响
+// 卡片其余部分的正常渲染（回退到各层原文解析结果）。===
+async function scanAndBeautifyAll(targetMesEls = null) {
   const chatEl = document.getElementById("chat");
   if (!chatEl) return;
 
   const lastAiIdx = getLastAiFloor().idx;
   const snapshot = lastAiIdx >= 0 ? await fetchStatusTableSnapshot() : null;
 
-  chatEl.querySelectorAll(".mes").forEach((mesEl) => {
+  const mesEls =
+    targetMesEls && targetMesEls.size
+      ? targetMesEls
+      : chatEl.querySelectorAll(".mes");
+
+  mesEls.forEach((mesEl) => {
+    // 传进来的是"变化时刻"抓到的节点，保险起见跳过此刻已经不在文档里的孤立节点
+    // （比如刚好被别的逻辑同一时间清理掉），避免在游离节点上做无意义的替换。
+    if (targetMesEls && !chatEl.contains(mesEl)) return;
     try {
       beautifyOneMessageEl(mesEl, lastAiIdx, snapshot);
     } catch (error) {
@@ -439,7 +450,39 @@ async function scanAndBeautifyAll() {
   });
 }
 
-const debouncedScan = debounce(scanAndBeautifyAll, 150);
+// === 累加"确实发生了变化"的 .mes 节点，供下面的防抖扫描只处理这些节点用。
+// 用独立的累加集合而不是直接把 mutations 传给 debounce：debounce 只保留最后一次调用的参数，
+// 如果不单独累加，短时间内多次的 DOM 变化会互相覆盖、丢失中间几次变化涉及的节点。===
+let pendingMesEls = new Set();
+
+function collectChangedMesEls(mutations) {
+  for (const record of mutations) {
+    const scanRoot =
+      record.type === "characterData" ? record.target.parentElement : record.target;
+    const targetMes = scanRoot && scanRoot.closest ? scanRoot.closest(".mes") : null;
+    if (targetMes) pendingMesEls.add(targetMes);
+    if (record.addedNodes) {
+      record.addedNodes.forEach((node) => {
+        if (node.nodeType !== 1) return; // 只关心元素节点，文本节点交给上面 characterData 分支处理
+        if (node.classList && node.classList.contains("mes")) {
+          pendingMesEls.add(node);
+        } else if (typeof node.querySelectorAll === "function") {
+          node.querySelectorAll(".mes").forEach((el) => pendingMesEls.add(el));
+        }
+      });
+    }
+  }
+}
+
+function flushPendingScan() {
+  const els = pendingMesEls;
+  pendingMesEls = new Set();
+  scanAndBeautifyAll(els.size ? els : null).catch((error) => {
+    console.error("[剧情助手] 摘要卡片美化扫描时出错:", error);
+  });
+}
+
+const debouncedScan = debounce(flushPendingScan, 150);
 
 // === 对外入口：强制刷新"最新一层AI楼层"的卡片——供状态表LLM结果整合完毕之后调用。
 // 只处理最新一层，不影响其余历史楼层（历史楼层展示的是各自当层原文的增量，本来就跟
@@ -497,7 +540,10 @@ export function initSummaryBeautify() {
   }
   if (observer) return; // 避免重复注册
 
-  observer = new MutationObserver(() => debouncedScan());
+  observer = new MutationObserver((mutations) => {
+    collectChangedMesEls(mutations);
+    debouncedScan();
+  });
   observer.observe(chatEl, { childList: true, subtree: true, characterData: true });
 
   // 顶栏点击展开/收拢：用事件委托挂在 #chat 上一次性注册，而不是每张卡片单独挂监听——
@@ -530,5 +576,10 @@ export function stopSummaryBeautify() {
   if (observer) {
     observer.disconnect();
     observer = null;
+  }
+  pendingMesEls = new Set(); // 清掉可能残留的待处理节点，避免下次重新开启时处理到过期集合
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
   }
 }
