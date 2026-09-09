@@ -3,7 +3,7 @@
 import { saveSettingsDebounced } from "../../../../../../script.js";
 import { extension_settings } from "../../../../../extensions.js";
 
-import { STATUS_TABLE_TITLE, escapeHtml, getCtx, getLastAiFloor } from "../core.js";
+import { CUSTOM_FIELD_SCOPE, STATUS_TABLE_TITLE, escapeHtml, getCtx, getLastAiFloor } from "../core.js";
 import { extractLabelLine } from "../summary/floor-restore.js";
 import { parseFloorSummaryFields } from "../summary/status-table.js";
 import {
@@ -304,7 +304,7 @@ function buildCustomFieldsHtml(customFields, customValues, scope) {
     .map((f) => {
       const value = customValues ? customValues[f.name] : "";
       if (!value) return "";
-      return scope === "global"
+      return scope === CUSTOM_FIELD_SCOPE.GLOBAL
         ? buildCustomGlobalFieldHtml(CUSTOM_FIELD_ICON, f.name, value)
         : buildKeyValueBlockHtml(CUSTOM_FIELD_ICON, f.name, value);
     })
@@ -328,11 +328,11 @@ export function buildSummaryCardHtml(fields, busyNames = []) {
     </div>`);
   }
 
-  parts.push(buildCustomFieldsHtml(customFields, fields.custom, "global"));
+  parts.push(buildCustomFieldsHtml(customFields, fields.custom, CUSTOM_FIELD_SCOPE.GLOBAL));
 
   if (fields.relationships) parts.push(buildRelationshipsRowsHtml(fields.relationships));
   if (fields.inventory) parts.push(buildKeyValueBlockHtml("🎒", "物品", fields.inventory, true));
-  parts.push(buildCustomFieldsHtml(customFields, fields.custom, "character"));
+  parts.push(buildCustomFieldsHtml(customFields, fields.custom, CUSTOM_FIELD_SCOPE.CHARACTER));
   if (fields.setups) parts.push(buildKeyValueBlockHtml("🧩", "伏笔", fields.setups));
 
   const busyHtml = buildBusyRowsHtml(busyNames);

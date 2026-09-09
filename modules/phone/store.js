@@ -757,7 +757,7 @@ export function phoneDbDateIndexKey(characterName) {
 }
 
 
-// 读取某个联系人某一天的消息数组（[{id, from, text, ts}]，from 为 "user"/"character"/"system"），
+// 读取某个联系人某一天的消息数组（[{id, from, text, ts}]，from 取值见 core.js 的 PHONE_MESSAGE_FROM），
 // 没有记录时返回空数组，不抛错。
 export async function getPhoneMessagesForDate(characterName, dateKey) {
   try {

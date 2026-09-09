@@ -1,6 +1,6 @@
 "use strict";
 
-import { DEFAULT_PRE_EMPHASIS_CONTENT, GENERATING_OVERLAY_ID, PRE_EMPHASIS_TITLE, confirmAction, errorCatched, getCtx, getOffsetRecord, notify } from "../core.js";
+import { CUSTOM_FIELD_SCOPE, CUSTOM_FIELD_VALUE_TYPE, DEFAULT_PRE_EMPHASIS_CONTENT, GENERATING_OVERLAY_ID, PRE_EMPHASIS_TITLE, confirmAction, errorCatched, getCtx, getOffsetRecord, notify } from "../core.js";
 import { loadPreEmphasisEntry, savePreEmphasisEntry } from "./pre-emphasis.js";
 import { getSummaryProgress } from "./floor-restore.js";
 import { getOrCreateSummaryLorebook } from "../worldinfo.js";
@@ -974,20 +974,20 @@ export function openCustomFieldsDialog() {
   const $valueTypeGroup = buildRadioGroup(
     valueTypeGroupName,
     [
-      ["numeric", "数值增减（+N/-N/=N）"],
-      ["text", "文本覆盖（整条替换）"],
+      [CUSTOM_FIELD_VALUE_TYPE.NUMERIC, "数值增减（+N/-N/=N）"],
+      [CUSTOM_FIELD_VALUE_TYPE.TEXT, "文本覆盖（整条替换）"],
     ],
-    "numeric",
+    CUSTOM_FIELD_VALUE_TYPE.NUMERIC,
   );
 
   const scopeGroupName = "custom-field-scope";
   const $scopeGroup = buildRadioGroup(
     scopeGroupName,
     [
-      ["character", "按角色（各角色各一份）"],
-      ["global", "全局（不分角色，只一份）"],
+      [CUSTOM_FIELD_SCOPE.CHARACTER, "按角色（各角色各一份）"],
+      [CUSTOM_FIELD_SCOPE.GLOBAL, "全局（不分角色，只一份）"],
     ],
-    "character",
+    CUSTOM_FIELD_SCOPE.CHARACTER,
   );
 
   // 提取依据说明的示例文案，按"取值方式×维度"四种组合各写一条，随单选切换动态展示——
@@ -1077,12 +1077,12 @@ export function openCustomFieldsDialog() {
     $valueTypeGroup
       .find("input")
       .each(function () {
-        $(this).prop("checked", $(this).val() === (field ? field.valueType : "numeric"));
+        $(this).prop("checked", $(this).val() === (field ? field.valueType : CUSTOM_FIELD_VALUE_TYPE.NUMERIC));
       });
     $scopeGroup
       .find("input")
       .each(function () {
-        $(this).prop("checked", $(this).val() === (field ? field.scope : "character"));
+        $(this).prop("checked", $(this).val() === (field ? field.scope : CUSTOM_FIELD_SCOPE.CHARACTER));
       });
     $ruleInput.val(field ? field.rule || "" : "");
     updateRuleExample();

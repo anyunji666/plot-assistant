@@ -1,6 +1,8 @@
 "use strict";
 
 import {
+  CUSTOM_FIELD_SCOPE,
+  CUSTOM_FIELD_VALUE_TYPE,
   STATUS_TABLE_ENTRY_DEFAULTS,
   STATUS_TABLE_TITLE,
   STATUS_LLM_FIELDS_START,
@@ -562,7 +564,7 @@ export function mergeGlobalScalarValue(currentValue, rawValue, valueType, warnin
     return currentValue;
   }
 
-  if (valueType !== "numeric") return trimmed; // 文本型：整条覆盖
+  if (valueType !== CUSTOM_FIELD_VALUE_TYPE.NUMERIC) return trimmed; // 文本型：整条覆盖
 
   const normalized = normalizeNumericToken(trimmed);
   const deltaMatch = normalized.match(NUMERIC_DELTA_PATTERN);
@@ -723,7 +725,7 @@ export function mergeFloorIntoStatusTable(state, floorFields, warnings, removedO
     const rawText = normalizeSelfNameToLiteral(
       floorFields.custom ? floorFields.custom[field.name] : "",
     );
-    if (field.scope === "character") {
+    if (field.scope === CUSTOM_FIELD_SCOPE.CHARACTER) {
       if (!state.customChar[field.name]) state.customChar[field.name] = new Map();
       const parsed = parseKeyValueListWithSkipped(rawText);
       if (warnings) {
@@ -734,7 +736,7 @@ export function mergeFloorIntoStatusTable(state, floorFields, warnings, removedO
         );
         parsed.corrected.forEach((msg) => warnings.push(`${field.name}：${msg}`));
       }
-      if (field.valueType === "numeric") {
+      if (field.valueType === CUSTOM_FIELD_VALUE_TYPE.NUMERIC) {
         applyNumericMapUpdates(
           state.customChar[field.name],
           parsed.map,
@@ -798,7 +800,7 @@ export async function rebuildStatusTableFromChat() {
   // 按当前已配置的附加字段预先建好容器，即便本次重放没有任何楼层触发该字段，
   // 序列化时也能看到"字段存在但为空"的一致结构（global 维度是空字符串，不会写进世界书条目）。
   getCustomFields().forEach((field) => {
-    if (field.scope === "character") state.customChar[field.name] = new Map();
+    if (field.scope === CUSTOM_FIELD_SCOPE.CHARACTER) state.customChar[field.name] = new Map();
     else state.customGlobal[field.name] = "";
   });
   const newIssues = []; // 本次重放中新出现（之前没提示过）的问题，收集齐后一次性提示

@@ -1,5 +1,7 @@
 "use strict";
 
+import { CHAT_MIGRATION_TAG_MODE } from "../core.js";
+
 // =====================================================================================
 // === 聊天记录迁移 · 解析工具 ===
 // 纯文本处理，不依赖酒馆 context，供 generator.js / ui.js 复用。
@@ -62,9 +64,9 @@ function keepTagBlocks(text, tagNames) {
 
 // === Function: 按选中模式，从"去掉摘要块之后剩余的原文"里截取正文 ===
 export function buildBody(rest, mode, tagNames) {
-  if (mode === "summary_only") return "";
-  if (mode === "whitelist") return keepTagBlocks(rest, tagNames);
-  return removeTagBlocks(rest, tagNames); // mode === "exclude"（默认）
+  if (mode === CHAT_MIGRATION_TAG_MODE.SUMMARY_ONLY) return "";
+  if (mode === CHAT_MIGRATION_TAG_MODE.WHITELIST) return keepTagBlocks(rest, tagNames);
+  return removeTagBlocks(rest, tagNames); // mode === CHAT_MIGRATION_TAG_MODE.EXCLUDE（默认）
 }
 
 // === Helper: 输入框里的楼层号字符串 -> 非负整数，空/非法输入返回 undefined（代表"不限"）===

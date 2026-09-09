@@ -1,7 +1,7 @@
 "use strict";
 
 import { openCreateCharacterDialog } from "../character.js";
-import { PHONE_PRESET_TITLE, errorCatched, escapeHtml, getCtx, notify } from "../core.js";
+import { PHONE_MESSAGE_FROM, PHONE_PRESET_TITLE, errorCatched, escapeHtml, getCtx, notify } from "../core.js";
 import { sendPhoneMessageToCharacter } from "./generator.js";
 import { PHONE_INVENTORY_SELF_KEY, addPhoneStickers, appendPhoneMessage, cancelPendingInventoryChange, clearPhoneMessages, deletePhoneChatBackground, deletePhoneGlobalBackground, deletePhoneMessage, deletePhoneSticker, deletePhoneInventoryItem, getAllPhoneAvatarsForCurrentCharacter, getAllPhoneMessages, getPhoneChatBackground, getPhoneChatState, getPhoneContactsList, getPhoneFabVisible, getPhoneGlobalBackground, getPhoneInventoryMap, getPhoneStickerList, groupPhoneInventoryByOwner, loadPhonePresetContent, parsePhoneStickerImportText, readImageFileCompressed, renamePhoneSticker, savePhoneAvatar, savePhoneChatBackground, savePhoneGlobalBackground, savePhonePresetContent, splitStoryTime, updatePhoneMessageText, upsertPhoneInventoryItem } from "./store.js";
 import { parseContactExtra, getCurrentStoryTime } from "./parser.js";
@@ -286,8 +286,8 @@ export function openPhoneInsertMessageDialog(characterName) {
     close();
   });
 
-  $sendAsUser.on("click", () => submit("user"));
-  $sendAsCharacter.on("click", () => submit("character"));
+  $sendAsUser.on("click", () => submit(PHONE_MESSAGE_FROM.USER));
+  $sendAsCharacter.on("click", () => submit(PHONE_MESSAGE_FROM.CHARACTER));
   $closeBtn.on("click", close);
 
   let overlayPointerDownOnSelf = false;
@@ -1577,7 +1577,7 @@ export async function renderPhoneChatMessages(characterName) {
           const timeStr =
             storyParts.time || new Date(m.ts).toTimeString().slice(0, 5);
           const side =
-            m.from === "user" ? "pa-phone-msg-right" : "pa-phone-msg-left";
+            m.from === PHONE_MESSAGE_FROM.USER ? "pa-phone-msg-right" : "pa-phone-msg-left";
           const sticker = m.stickerId ? stickerMap.get(m.stickerId) : null;
           const bubbleClass = sticker
             ? "pa-phone-msg-bubble pa-phone-msg-bubble-sticker"

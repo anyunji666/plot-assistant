@@ -18,7 +18,7 @@
 //   - 联系人角色卡资料：只新增缺失的联系人，已存在同名角色卡的不会被覆盖（增量导入）。
 // =====================================================================================
 
-import { CHARACTER_ENTRY_DEFAULTS, CHARACTER_ENTRY_TITLE_PREFIX, PHONE_IDB_STORE, confirmAction, getCtx } from "../core.js";
+import { CHARACTER_ENTRY_DEFAULTS, CHARACTER_ENTRY_TITLE_PREFIX, PHONE_IDB_STORE, PHONE_MESSAGE_FROM, confirmAction, getCtx } from "../core.js";
 import { extractCharacterKeywords } from "../character.js";
 import { getCurrentCharacterName, getFreeUid, getLorebookEntriesArray, getOrCreateSummaryLorebook, notifyWorldInfoUpdated } from "../worldinfo.js";
 import { clearPhoneMessages, getAllPhoneMessages, openPhoneDB, phoneDbDateIndexKey, phoneDbMessagesKey } from "../phone/store.js";
@@ -131,7 +131,7 @@ async function replacePhoneMessagesForContact(contactName, days) {
       if (!dateKey) return;
       const msgs = (Array.isArray(day.msgs) ? day.msgs : []).map((m, i) => ({
         id: `${Number(m.ts) || Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,
-        from: m.from === "user" || m.from === "character" ? m.from : "system",
+        from: m.from === PHONE_MESSAGE_FROM.USER || m.from === PHONE_MESSAGE_FROM.CHARACTER ? m.from : PHONE_MESSAGE_FROM.SYSTEM,
         text: typeof m.text === "string" ? m.text : "",
         stickerId: null,
         ts: Number(m.ts) || Date.now(),

@@ -2,7 +2,7 @@
 
 import { saveSettingsDebounced } from "../../../../../../../script.js";
 import { extension_settings } from "../../../../../../extensions.js";
-import { getCtx } from "../../core.js";
+import { CUSTOM_FIELD_SCOPE, CUSTOM_FIELD_VALUE_TYPE, getCtx } from "../../core.js";
 
 // =====================================================================================
 // === 状态表LLM：设置层 ===
@@ -52,6 +52,7 @@ export function saveStatusLlmSettings() {
 // 让使用者自己起字段名+写提取规则，动态拼进状态表LLM的提示词、动态解析AI返回、动态合并进状态表，
 // 不用改代码就能加新的LLM控制变量。每条定义：
 //   { id, name, valueType: "numeric" | "text", scope: "character" | "global", rule }
+// valueType/scope 取值对应 core.js 的 CUSTOM_FIELD_VALUE_TYPE/CUSTOM_FIELD_SCOPE 常量。
 // valueType 决定合并语义（numeric=+N/-N/=N/[REMOVE] 数值增减；text=整条文本覆盖）；
 // scope 决定是否按角色区分（character="角色名: 值"多角色分号分隔；global=不分角色，全局只有一个值）
 // ——注意这个 scope 是"状态表里角色维度 vs 全局维度"，跟这里"按角色卡存储字段定义"是两个不同维度的概念，
@@ -138,8 +139,8 @@ export function saveCustomField(field) {
   );
   if (isDuplicate) throw new Error(`字段名 "${name}" 已存在`);
 
-  const valueType = field.valueType === "text" ? "text" : "numeric";
-  const scope = field.scope === "global" ? "global" : "character";
+  const valueType = field.valueType === CUSTOM_FIELD_VALUE_TYPE.TEXT ? CUSTOM_FIELD_VALUE_TYPE.TEXT : CUSTOM_FIELD_VALUE_TYPE.NUMERIC;
+  const scope = field.scope === CUSTOM_FIELD_SCOPE.GLOBAL ? CUSTOM_FIELD_SCOPE.GLOBAL : CUSTOM_FIELD_SCOPE.CHARACTER;
   const rule = (field.rule || "").trim();
 
   if (field.id) {

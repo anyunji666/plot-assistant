@@ -27,7 +27,7 @@
 // （范围文件拿去全量覆盖，会把范围外的楼层全部冲掉）。
 // =====================================================================================
 
-import { confirmAction, getCtx } from "../core.js";
+import { CHAT_MIGRATION_IMPORT_MODE, CHAT_MIGRATION_TAG_MODE, confirmAction, getCtx } from "../core.js";
 import { getCurrentCharacterName } from "../worldinfo.js";
 import { rebuildStatusTableFromChat } from "../summary/status-table.js";
 import { buildBody, escapeForRegex, extractSummaryBlock, parseTagList } from "./parser.js";
@@ -49,7 +49,7 @@ function computeFloorsAndIssues(mode, tagNames, rangeStart, rangeEnd) {
   const end = Number.isFinite(rangeEnd) ? rangeEnd : chat.length - 1;
 
   const issues = [];
-  if (mode === "whitelist" && tagNames.length === 0) {
+  if (mode === CHAT_MIGRATION_TAG_MODE.WHITELIST && tagNames.length === 0) {
     issues.push(
       "保留标签列表是空的：所有非开场白/非用户楼层的正文都会导出为空（只保留摘要块），效果等同于「仅摘要块」模式。",
     );
@@ -83,7 +83,7 @@ function computeFloorsAndIssues(mode, tagNames, rangeStart, rangeEnd) {
           );
         }
       });
-      if (mode === "whitelist" && rest.trim() && !body) {
+      if (mode === CHAT_MIGRATION_TAG_MODE.WHITELIST && rest.trim() && !body) {
         issues.push(
           `第 ${index} 层：这层正文不是空的，但没有命中任何保留标签，导出后这层正文会变成空，建议检查标签名是否填对。`,
         );
@@ -298,7 +298,7 @@ async function importChatMigrationAsNewChat(data) {
 // === Function: 解析导入文件文本，按选定的导入方式处理，最后重建状态表 ===
 // 返回 {count, floorStart, floorEnd}（处理的楼层数/实际楼层区间）；
 // 用户在确认弹窗里点了"取消"则返回 null。
-export async function importChatMigrationFromText(rawText, importMode = "overwrite") {
+export async function importChatMigrationFromText(rawText, importMode = CHAT_MIGRATION_IMPORT_MODE.OVERWRITE) {
   let data;
   try {
     data = JSON.parse(rawText);
@@ -313,7 +313,7 @@ export async function importChatMigrationFromText(rawText, importMode = "overwri
   }
 
   const isRangeExport = Number.isFinite(data.rangeStart) || Number.isFinite(data.rangeEnd);
-  if (isRangeExport && importMode === "overwrite") {
+  if (isRangeExport && importMode === CHAT_MIGRATION_IMPORT_MODE.OVERWRITE) {
     const proceedAnyway = await confirmAction(
       "范围导出文件 · 全量覆盖警告",
       `这份文件只包含第 ${data.rangeStart ?? 0} - ${data.rangeEnd ?? "末尾"} 层（共 ${data.floors.length} 层），是"范围导出"生成的。<br><b>用它做全量覆盖会导致范围外的楼层全部丢失</b>。<br>建议改用「按楼层号合并更新」或「导入为新聊天」。仍要继续全量覆盖吗？`,
@@ -322,8 +322,8 @@ export async function importChatMigrationFromText(rawText, importMode = "overwri
   }
 
   let count;
-  if (importMode === "merge") count = await mergeChatMigrationFloors(data);
-  else if (importMode === "newchat") count = await importChatMigrationAsNewChat(data);
+  if (importMode === CHAT_MIGRATION_IMPORT_MODE.MERGE) count = await mergeChatMigrationFloors(data);
+  else if (importMode === CHAT_MIGRATION_IMPORT_MODE.NEWCHAT) count = await importChatMigrationAsNewChat(data);
   else count = await overwriteChatMigrationFloors(data);
   if (count === null) return null; // 确认弹窗里点了取消
 

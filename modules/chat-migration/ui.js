@@ -5,7 +5,7 @@
 // （常驻式，不一次性关闭）===
 // =====================================================================================
 
-import { confirmAction, errorCatched, escapeHtml, notify } from "../core.js";
+import { CHAT_MIGRATION_IMPORT_MODE, CHAT_MIGRATION_TAG_MODE, confirmAction, errorCatched, escapeHtml, notify } from "../core.js";
 import { parseFloorRangeInput } from "./parser.js";
 import { checkChatMigrationIssues, downloadChatMigrationExport, importChatMigrationFromText } from "./generator.js";
 import { loadLastExportRange, loadLastImportRange, saveLastExportRange, saveLastImportRange } from "./store.js";
@@ -132,11 +132,11 @@ export function openChatMigrationDialog() {
   const $modeGroup = buildRadioGroup(
     modeGroupName,
     [
-      ["summary_only", "仅摘要块 —— 正文整层留空"],
-      ["whitelist", "摘要块 + 保留标签块 —— 只保留下方标签命中的整段"],
-      ["exclude", "摘要块 + 其它（默认）—— 正文全保留，剔除下方标签命中的整段"],
+      [CHAT_MIGRATION_TAG_MODE.SUMMARY_ONLY, "仅摘要块 —— 正文整层留空"],
+      [CHAT_MIGRATION_TAG_MODE.WHITELIST, "摘要块 + 保留标签块 —— 只保留下方标签命中的整段"],
+      [CHAT_MIGRATION_TAG_MODE.EXCLUDE, "摘要块 + 其它（默认）—— 正文全保留，剔除下方标签命中的整段"],
     ],
-    "exclude",
+    CHAT_MIGRATION_TAG_MODE.EXCLUDE,
   );
 
   const $tagWrap = $("<div>").css({ display: "flex", flexDirection: "column", gap: "4px" });
@@ -146,9 +146,9 @@ export function openChatMigrationDialog() {
 
   function syncTagWrapToMode() {
     const mode = $modeGroup.find("input:checked").val();
-    if (mode === "summary_only") {
+    if (mode === CHAT_MIGRATION_TAG_MODE.SUMMARY_ONLY) {
       $tagWrap.css("display", "none");
-    } else if (mode === "whitelist") {
+    } else if (mode === CHAT_MIGRATION_TAG_MODE.WHITELIST) {
       $tagWrap.css("display", "flex");
       $tagLabel.text("保留标签（逗号分隔，只有命中的标签块会被保留为正文）");
     } else {
@@ -196,11 +196,11 @@ export function openChatMigrationDialog() {
   const $importModeGroup = buildRadioGroup(
     importModeGroupName,
     [
-      ["overwrite", "覆盖当前聊天（默认，整份替换，不可撤销）"],
-      ["merge", "按楼层号合并更新（推荐配合“导出楼层范围”做增量同步）"],
-      ["newchat", "导入为新聊天（新建一个聊天，不影响当前聊天）"],
+      [CHAT_MIGRATION_IMPORT_MODE.OVERWRITE, "覆盖当前聊天（默认，整份替换，不可撤销）"],
+      [CHAT_MIGRATION_IMPORT_MODE.MERGE, "按楼层号合并更新（推荐配合“导出楼层范围”做增量同步）"],
+      [CHAT_MIGRATION_IMPORT_MODE.NEWCHAT, "导入为新聊天（新建一个聊天，不影响当前聊天）"],
     ],
-    "overwrite",
+    CHAT_MIGRATION_IMPORT_MODE.OVERWRITE,
   );
 
   const $importBtn = $("<button>").text("导入").css({ ...btnCss, background: "#3a9d5a" });
@@ -284,9 +284,9 @@ export function openChatMigrationDialog() {
       }
       const isPeekRangeExport = peekData && (Number.isFinite(peekData.rangeStart) || Number.isFinite(peekData.rangeEnd));
       let importMode = $importModeGroup.find("input:checked").val();
-      if (isPeekRangeExport && importMode === "overwrite") {
-        importMode = "merge";
-        $importModeGroup.find('input[value="merge"]').prop("checked", true);
+      if (isPeekRangeExport && importMode === CHAT_MIGRATION_IMPORT_MODE.OVERWRITE) {
+        importMode = CHAT_MIGRATION_IMPORT_MODE.MERGE;
+        $importModeGroup.find(`input[value="${CHAT_MIGRATION_IMPORT_MODE.MERGE}"]`).prop("checked", true);
         notify("info", "检测到这是范围导出文件，已自动切换为「按楼层号合并更新」。");
       }
 

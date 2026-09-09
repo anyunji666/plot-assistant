@@ -1,6 +1,6 @@
 "use strict";
 
-import { escapeHtml } from "../core.js";
+import { MAP_FORM_CONTEXT_TYPE, escapeHtml } from "../core.js";
 import { colorForFaction, getActiveMap, getSettings, isBigMapActive, mapState, saveSettings } from "./store.js";
 import { scheduleMapInfoSync } from "./generator.js";
 import { beginRouteFromMarker, bindRouteActionsEvents, bindRouteFormEvents, handleRoutePointClick, renderAllRoutes, renderRouteList } from "./routes.js";
@@ -144,7 +144,7 @@ export function openMarkerForm(existingMarker, latlng) {
   // 新弹窗看起来打开了，实际上取消/保存全部失效，只能刷新页面重置状态才能恢复。
   mapState.map.closePopup();
 
-  mapState.pendingFormContext = { type: "marker", existingMarker, latlng, isEdit };
+  mapState.pendingFormContext = { type: MAP_FORM_CONTEXT_TYPE.MARKER, existingMarker, latlng, isEdit };
 
   const popupLatLng = isEdit
     ? [existingMarker.y, existingMarker.x]
@@ -174,12 +174,12 @@ export function bindPopupFormEvents() {
     const root = e.popup.getElement();
     if (!root) return;
 
-    if (ctx.type === "route") {
+    if (ctx.type === MAP_FORM_CONTEXT_TYPE.ROUTE) {
       bindRouteFormEvents(root, ctx);
       return;
     }
 
-    if (ctx.type === "route-actions") {
+    if (ctx.type === MAP_FORM_CONTEXT_TYPE.ROUTE_ACTIONS) {
       bindRouteActionsEvents(root, ctx);
       return;
     }

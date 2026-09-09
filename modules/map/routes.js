@@ -1,6 +1,6 @@
 "use strict";
 
-import { escapeHtml } from "../core.js";
+import { MAP_FORM_CONTEXT_TYPE, escapeHtml } from "../core.js";
 import { COMPASS_NAMES, colorForFaction, getActiveMap, isBigMapActive, mapState, saveSettings } from "./store.js";
 import { scheduleMapInfoSync } from "./generator.js";
 import { toggleMobileSidebar } from "./ui.js";
@@ -269,7 +269,7 @@ export function openRouteForm(fromMarker, toMarker) {
   // pendingFormContext 顺带清空成 null，导致这个新弹窗的取消/保存按钮绑不上事件。
   mapState.map.closePopup();
 
-  mapState.pendingFormContext = { type: "route", fromMarker, toMarker };
+  mapState.pendingFormContext = { type: MAP_FORM_CONTEXT_TYPE.ROUTE, fromMarker, toMarker };
 
   // 同上：限制最大高度，内容过长时弹层内部出滚动条，而不是溢出屏幕外划不到。
   const mapH2 = mapState.map.getContainer().clientHeight || window.innerHeight;
@@ -441,7 +441,7 @@ export function openRouteActionsPopup(route, from, to) {
   // pendingFormContext 清空。
   mapState.map.closePopup();
 
-  mapState.pendingFormContext = { type: "route-actions", route, from, to };
+  mapState.pendingFormContext = { type: MAP_FORM_CONTEXT_TYPE.ROUTE_ACTIONS, route, from, to };
 
   L.popup({
     closeButton: false,

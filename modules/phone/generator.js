@@ -1,6 +1,6 @@
 "use strict";
 
-import { PHONE_SLOT_PROMPT_KEY, getCtx, getLastAiFloor, notify, persistChatMetadata } from "../core.js";
+import { PHONE_MESSAGE_FROM, PHONE_SLOT_PROMPT_KEY, getCtx, getLastAiFloor, notify, persistChatMetadata } from "../core.js";
 import { appendPhoneMessage, getAllPhoneMessages, getPhoneChatState, getPhoneContactCardBody, getRelationshipStageForCharacter, loadPhonePresetContent, markPhoneUpdatedToday, splitStoryTime } from "./store.js";
 import { characterActiveInText, getCurrentStoryTime } from "./parser.js";
 import { refreshPhoneChatViewIfOpen, setPhoneTypingIndicator } from "./ui.js";
@@ -18,7 +18,7 @@ export async function buildPrivateLetterBody(characterName) {
   const flatMsgs = [];
   groups.forEach((g) => flatMsgs.push(...g.msgs));
   const relevant = flatMsgs.filter(
-    (m) => m.from === "user" || m.from === "character",
+    (m) => m.from === PHONE_MESSAGE_FROM.USER || m.from === PHONE_MESSAGE_FROM.CHARACTER,
   );
   if (relevant.length === 0) return "（还没有聊天记录）";
 
@@ -35,7 +35,7 @@ export async function buildPrivateLetterBody(characterName) {
       lines.push(`时间：${storyTime || "（未知）"}${stageSuffix}`);
       lastStoryTime = storyTime;
     }
-    lines.push(`${m.from === "user" ? "{{user}}" : characterName}: ${m.text}`);
+    lines.push(`${m.from === PHONE_MESSAGE_FROM.USER ? "{{user}}" : characterName}: ${m.text}`);
   });
   return lines.join("\n");
 }
@@ -137,7 +137,7 @@ export async function sendPhoneMessageToCharacter(characterName, payload) {
   if (!text) return null;
 
   await appendPhoneMessage(characterName, {
-    from: "user",
+    from: PHONE_MESSAGE_FROM.USER,
     text,
     stickerId: msg.stickerId || null,
     ts: Date.now(),
@@ -172,7 +172,7 @@ export async function sendPhoneMessageToCharacter(characterName, payload) {
         false,
       );
       await appendPhoneMessage(characterName, {
-        from: "character",
+        from: PHONE_MESSAGE_FROM.CHARACTER,
         text: reply || "（对方没有回复任何内容）",
         ts: Date.now(),
         storyTime: getCurrentStoryTime(),
@@ -204,7 +204,7 @@ export async function handleCharacterBecameFree(characterName) {
   try {
     const reply = await generateCharacterPhoneReply(characterName, null, true);
     await appendPhoneMessage(characterName, {
-      from: "character",
+      from: PHONE_MESSAGE_FROM.CHARACTER,
       text: reply || "（对方没有回复任何内容）",
       ts: Date.now(),
       storyTime: getCurrentStoryTime(),
@@ -245,7 +245,7 @@ async function buildPhoneLetterBlocksForNames(names) {
       .flatMap((g) => g.msgs)
       .filter(
         (m) =>
-          (m.from === "user" || m.from === "character") &&
+          (m.from === PHONE_MESSAGE_FROM.USER || m.from === PHONE_MESSAGE_FROM.CHARACTER) &&
           splitStoryTime(m.storyTime).date === currentStoryDate,
       );
     if (msgs.length === 0) continue; // 剧情日期暂时对不上，这轮跳过
@@ -255,7 +255,7 @@ async function buildPhoneLetterBlocksForNames(names) {
     const lines = [];
     let lastStoryTime = null;
     msgs.forEach((m) => {
-      const speaker = m.from === "user" ? "{{user}}" : name;
+      const speaker = m.from === PHONE_MESSAGE_FROM.USER ? "{{user}}" : name;
       if (m.storyTime && m.storyTime !== lastStoryTime) {
         lines.push(`时间：${m.storyTime}`);
         lastStoryTime = m.storyTime;

@@ -1,5 +1,7 @@
 "use strict";
 
+import { CUSTOM_FIELD_SCOPE, CUSTOM_FIELD_VALUE_TYPE } from "../../core.js";
+
 // =====================================================================================
 // === 状态表LLM 默认提示词 ===
 // 从原"对话前强调"协议里拆出来的 Inventory / Setups 两段判定规则，
@@ -65,8 +67,8 @@ function buildCustomFieldRuleBlock(field) {
     (field.rule || "").trim() ||
     "（未填写提取依据说明，请根据字段名自行判断本轮是否有相关变化）";
 
-  if (field.scope === "character") {
-    if (field.valueType === "numeric") {
+  if (field.scope === CUSTOM_FIELD_SCOPE.CHARACTER) {
+    if (field.valueType === CUSTOM_FIELD_VALUE_TYPE.NUMERIC) {
       return `**${field.name}**（角色维度·数值，只写本轮变化，多个角色分号分隔）
 \`\`\`
 for 角色 in 本轮${field.name}有变化的角色:
@@ -88,8 +90,8 @@ Step2 新增/更新：角色名: 新文本值（整条覆盖旧值，不是追�
 \`\`\``;
   }
 
-  // scope === "global"：不分角色，整个字段只有一个值，值本身就是内容（不需要 "key: value" 结构）
-  if (field.valueType === "numeric") {
+  // scope === CUSTOM_FIELD_SCOPE.GLOBAL：不分角色，整个字段只有一个值，值本身就是内容（不需要 "key: value" 结构）
+  if (field.valueType === CUSTOM_FIELD_VALUE_TYPE.NUMERIC) {
     return `**${field.name}**（全局·数值，不分角色，只有一个值）
 \`\`\`
 if 需要清除: 值 = [REMOVE]

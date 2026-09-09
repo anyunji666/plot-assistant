@@ -41,6 +41,15 @@ export const MAP_INFO_ENTRY_DEFAULTS = {
   probability: 100,
 };
 
+// 地图标记面板"待处理表单"的类型标记：新建/编辑一个标记点时是 "marker"，
+// 新建一条路线是 "route"，编辑一条已有路线的途经动作是 "route-actions"。
+// markers.js（设置+读取判断）和 routes.js（设置）两处共用这个约定。
+export const MAP_FORM_CONTEXT_TYPE = {
+  MARKER: "marker",
+  ROUTE: "route",
+  ROUTE_ACTIONS: "route-actions",
+};
+
 export const PHONE_PRESET_TITLE = "私信预设"; // 手机私信提示词预设的显示标题（弹窗标题/提示文案用）；内容存在 extension_settings 里，按当前角色卡分开存，不占世界书条目
 
 // "私信预设"首次使用前用于预填编辑框的默认内容——手机私信生成提示词里唯一可编辑的部分，
@@ -133,6 +142,39 @@ export const STATUS_TABLE_TITLE = "状态表"; // 结构化数据表世界书条
 // 三处都依赖这对标记，统一在这里定义，避免多处硬编码字符串不一致。
 export const STATUS_LLM_FIELDS_START = "<!-- status-llm-fields -->";
 export const STATUS_LLM_FIELDS_END = "<!-- /status-llm-fields -->";
+
+// 附加字段（自定义变量）的作用域取值："character"（分角色）/"global"（不分角色，整个字段共用一个值）。
+// summary/status-llm/store.js（定义/解析字段配置）和 beautify/render.js（按 scope 分流渲染）两边共用这个约定，
+// 收敛成常量后两边不会各写各的字符串。
+export const CUSTOM_FIELD_SCOPE = {
+  CHARACTER: "character",
+  GLOBAL: "global",
+};
+
+// 附加字段的取值方式（合并语义）："numeric"（+N/-N/=N/[REMOVE] 数值增减）/"text"（整条文本覆盖）。
+// 跟 CUSTOM_FIELD_SCOPE 是同一个"附加字段"概念的另一维度，summary/status-llm/{store,prompts}.js、
+// summary/status-table.js、summary/ui.js 四处共用这个约定。
+export const CUSTOM_FIELD_VALUE_TYPE = {
+  NUMERIC: "numeric",
+  TEXT: "text",
+};
+
+// 聊天记录迁移·导出时"正文怎么截取"的模式："summary_only"（只留摘要块，正文整层留空）/
+// "whitelist"（摘要块+下方标签命中的整段）/"exclude"（默认，摘要块+其它，剔除标签命中的整段）。
+// chat-migration/{generator,parser,ui}.js 三处共用。
+export const CHAT_MIGRATION_TAG_MODE = {
+  SUMMARY_ONLY: "summary_only",
+  WHITELIST: "whitelist",
+  EXCLUDE: "exclude",
+};
+
+// 聊天记录迁移·导入时的处理方式："overwrite"（默认，整份替换当前聊天）/"merge"（按楼层号合并更新）/
+// "newchat"（导入为新聊天）。chat-migration/{generator,ui}.js 两处共用。
+export const CHAT_MIGRATION_IMPORT_MODE = {
+  OVERWRITE: "overwrite",
+  MERGE: "merge",
+  NEWCHAT: "newchat",
+};
 
 // 状态表要让AI记住"当前"状态，离最新消息越近权重越高，所以创建时用"@D 在深度"而不是小总结/状态存档默认的"角色定义之前"。
 // 对应你在世界书面板里手动设置好的参照值：@D 在深度0、[系统]角色、order 666、概率100%。
@@ -229,6 +271,14 @@ export const PHONE_CHAT_META_KEY = "plotAssistant_phoneChatState";
 export const PHONE_IDB_NAME = "plot_assistant_phone_db";
 
 export const PHONE_IDB_STORE = "messages";
+
+// 私信消息 from 字段的约定取值（发送方是谁）。之前是各文件里裸写 "user"/"character"/"system" 字符串，
+// 收敛成常量后，改动/排查这个约定时可以直接搜 PHONE_MESSAGE_FROM，不用再搜三个独立的字符串字面量。
+export const PHONE_MESSAGE_FROM = {
+  USER: "user",
+  CHARACTER: "character",
+  SYSTEM: "system",
+};
 
 // 头像库：key 按"当前角色卡::联系人名"存一张压缩后的 dataURL，换角色卡不互相影响。
 export const PHONE_AVATAR_STORE = "avatars";
