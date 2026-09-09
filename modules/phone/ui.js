@@ -3,8 +3,8 @@
 import { openCreateCharacterDialog } from "../character.js";
 import { PHONE_PRESET_TITLE, errorCatched, escapeHtml, getCtx, notify } from "../core.js";
 import { sendPhoneMessageToCharacter } from "./generator.js";
-import { PHONE_INVENTORY_SELF_KEY, addPhoneStickers, cancelPendingInventoryChange, clearPhoneMessages, deletePhoneChatBackground, deletePhoneGlobalBackground, deletePhoneMessage, deletePhoneSticker, deletePhoneInventoryItem, getAllPhoneAvatarsForCurrentCharacter, getAllPhoneMessages, getPhoneChatBackground, getPhoneChatState, getPhoneContactsList, getPhoneFabVisible, getPhoneGlobalBackground, getPhoneInventoryMap, getPhoneStickerList, groupPhoneInventoryByOwner, loadPhonePresetContent, parsePhoneStickerImportText, readImageFileCompressed, renamePhoneSticker, savePhoneAvatar, savePhoneChatBackground, savePhoneGlobalBackground, savePhonePresetContent, splitStoryTime, updatePhoneMessageText, upsertPhoneInventoryItem } from "./store.js";
-import { parseContactExtra } from "./parser.js";
+import { PHONE_INVENTORY_SELF_KEY, addPhoneStickers, appendPhoneMessage, cancelPendingInventoryChange, clearPhoneMessages, deletePhoneChatBackground, deletePhoneGlobalBackground, deletePhoneMessage, deletePhoneSticker, deletePhoneInventoryItem, getAllPhoneAvatarsForCurrentCharacter, getAllPhoneMessages, getPhoneChatBackground, getPhoneChatState, getPhoneContactsList, getPhoneFabVisible, getPhoneGlobalBackground, getPhoneInventoryMap, getPhoneStickerList, groupPhoneInventoryByOwner, loadPhonePresetContent, parsePhoneStickerImportText, readImageFileCompressed, renamePhoneSticker, savePhoneAvatar, savePhoneChatBackground, savePhoneGlobalBackground, savePhonePresetContent, splitStoryTime, updatePhoneMessageText, upsertPhoneInventoryItem } from "./store.js";
+import { parseContactExtra, getCurrentStoryTime } from "./parser.js";
 
 
 // === Function: 打开"私信预设"编辑框（纯文本，取消/保存，样式对齐"对话前强调"弹窗）===
@@ -145,6 +145,161 @@ export async function openPhonePresetDialog() {
     console.error("[剧情助手] 保存私信预设失败:", error);
     notify("error", `保存私信预设失败：${error.message || error}`);
   }
+}
+
+
+// === Function: 打开"私信插入"弹窗——手动补一条消息（对方说的话/我方说的话），
+// 用于正文里角色/用户已经发过、但手机没同步到的私信。样式仿 openHideFloorDialog（右上角×常驻关闭）。
+// 时间统一取 getCurrentStoryTime()（最后一层AI摘要的Time字段），跟AI自动回复私信用的时间来源一致。===
+export function openPhoneInsertMessageDialog(characterName) {
+  const $bodyEl = $("body");
+  const prevBodyOverflow = $bodyEl.css("overflow");
+  $bodyEl.css("overflow", "hidden");
+
+  const $overlay = $("<div>").css({
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: "rgba(0,0,0,0.72)",
+    zIndex: 99999,
+    boxSizing: "border-box",
+  });
+
+  const $box = $("<div>").css({
+    position: "fixed",
+    top: "12px",
+    left: "50%",
+    transform: "translateX(-50%)",
+    background: "#252525",
+    border: "1px solid #3a3a3a",
+    borderRadius: "10px",
+    padding: "clamp(16px, 4vw, 24px)",
+    width: "min(420px, calc(100% - 24px))",
+    maxHeight: "min(85vh, calc(100dvh - 24px))",
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+    color: "#e8e8e8",
+    fontFamily: "inherit",
+    boxSizing: "border-box",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.55)",
+    overflowY: "auto",
+    WebkitOverflowScrolling: "touch",
+  });
+
+  const $titleRow = $("<div>").css({
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+  });
+  const $title = $("<div>").text("私信插入").css({
+    fontSize: "1.05em",
+    fontWeight: "600",
+    color: "#f0f0f0",
+    letterSpacing: "0.01em",
+  });
+  const $closeBtn = $("<button>").html("&times;").css({
+    background: "transparent",
+    border: "none",
+    color: "#aaa",
+    cursor: "pointer",
+    fontSize: "20px",
+    padding: "0",
+    margin: "0",
+    lineHeight: "1",
+    transition: "color 0.2s",
+  });
+  $titleRow.append($title, $closeBtn);
+
+  const $hint = $("<div>")
+    .text("直接填文字描述即可，例如：好呀，那我们下午两点见。")
+    .css({ fontSize: "0.8em", color: "#999", lineHeight: 1.5 });
+
+  const $textarea = $("<textarea>").css({
+    width: "100%",
+    boxSizing: "border-box",
+    minHeight: "120px",
+    padding: "10px",
+    borderRadius: "6px",
+    border: "1px solid #3a3a3a",
+    background: "#ffffff",
+    color: "#000000",
+    fontSize: "max(0.95em, 16px)",
+    fontFamily: "inherit",
+    outline: "none",
+    resize: "vertical",
+  });
+
+  const $btnRow = $("<div>").css({
+    display: "flex",
+    gap: "10px",
+    justifyContent: "flex-end",
+    marginTop: "4px",
+  });
+  const btnCss = {
+    padding: "6px 12px",
+    borderRadius: "6px",
+    boxSizing: "border-box",
+    border: "none",
+    cursor: "pointer",
+    fontSize: "0.8em",
+    fontWeight: "600",
+    color: "#ffffff",
+    touchAction: "manipulation",
+  };
+  const $sendAsUser = $("<button>")
+    .text("接续我方发送")
+    .css({ ...btnCss, background: "#4caf50" });
+  const $sendAsCharacter = $("<button>")
+    .text("补充对方私信")
+    .css({ ...btnCss, background: "#5b9cf6" });
+  $btnRow.append($sendAsUser, $sendAsCharacter);
+
+  $box.append($titleRow, $hint, $textarea, $btnRow);
+  $overlay.append($box);
+  $("body").append($overlay);
+  setTimeout(() => $textarea.trigger("focus"), 50);
+
+  const close = () => {
+    $(document).off("keydown.phoneInsertMessageDialog");
+    $overlay.remove();
+    $bodyEl.css("overflow", prevBodyOverflow || "");
+  };
+
+  const submit = errorCatched(async (from) => {
+    const text = $textarea.val().trim();
+    if (!text) {
+      notify("warning", "私信内容不能为空。");
+      return;
+    }
+    await appendPhoneMessage(characterName, {
+      from,
+      text,
+      storyTime: getCurrentStoryTime(),
+    });
+    close();
+    if (phoneUIState.activeChatCharacter === characterName) {
+      await renderPhoneChatMessages(characterName);
+    }
+  });
+
+  $sendAsUser.on("click", () => submit("user"));
+  $sendAsCharacter.on("click", () => submit("character"));
+  $closeBtn.on("click", close);
+
+  let overlayPointerDownOnSelf = false;
+  $overlay.on("mousedown touchstart", (e) => {
+    overlayPointerDownOnSelf = $(e.target).is($overlay);
+  });
+  $overlay.on("mouseup touchend", (e) => {
+    if (overlayPointerDownOnSelf && $(e.target).is($overlay)) close();
+    overlayPointerDownOnSelf = false;
+  });
+  $(document).on("keydown.phoneInsertMessageDialog", (e) => {
+    if (e.key === "Escape") close();
+  });
 }
 
 
@@ -633,6 +788,7 @@ export function buildPhoneModalSkeleton() {
                 <span id="pa-phone-header-title">通讯录</span>
                 <button id="pa-phone-action-btn" class="pa-phone-hidden" style="-webkit-appearance:none;appearance:none;"></button>
                 <div id="pa-phone-action-menu" class="pa-phone-hidden">
+                    <button id="pa-phone-action-menu-insert">私信插入</button>
                     <button id="pa-phone-action-menu-clear">清空对话</button>
                     <button id="pa-phone-action-menu-avatar">上传头像</button>
                     <button id="pa-phone-action-menu-bg">上传背景</button>
@@ -691,6 +847,15 @@ export function buildPhoneModalSkeleton() {
         togglePhoneActionMenu();
       }
     }),
+  );
+  document.getElementById("pa-phone-action-menu-insert").addEventListener(
+    "click",
+    () => {
+      closePhoneActionMenu();
+      const name = phoneUIState.activeChatCharacter;
+      if (!name) return;
+      openPhoneInsertMessageDialog(name);
+    },
   );
   document.getElementById("pa-phone-action-menu-clear").addEventListener(
     "click",
