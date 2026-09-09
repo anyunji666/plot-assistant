@@ -831,6 +831,18 @@ export function buildPhoneModalSkeleton() {
       ) {
         menu.classList.add("pa-phone-hidden");
       }
+      // 同理，点某条消息的"···"编辑/删除按钮以外的地方，把当前展开的那一行收起来
+      // （不用再点一次"···"才能收起）；点"···"本身交给它自己的 toggle 逻辑处理，这里跳过。
+      document
+        .querySelectorAll(".pa-phone-msg-actions:not(.pa-phone-hidden)")
+        .forEach((actions) => {
+          const moreBtn = actions
+            .closest(".pa-phone-msg-row")
+            ?.querySelector(".pa-phone-msg-more-btn");
+          if (e.target !== moreBtn && !actions.contains(e.target)) {
+            actions.classList.add("pa-phone-hidden");
+          }
+        });
     });
   document.getElementById("pa-phone-action-btn").addEventListener(
     "click",
