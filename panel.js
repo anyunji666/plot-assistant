@@ -13,6 +13,7 @@ import { LOCAL_CHAT_STORE_KEY, NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY, NOVEL_AUTO_JUM
 import { IDB_NAME, MAP_MODULE_NAME, getFabVisible, setFabVisibleSetting } from "./modules/map/store.js";
 import { FAB_POS_KEY, applyFabVisibility, openModal, resetFabPos } from "./modules/map/ui.js";
 import { MOBILE_OPT_SETTINGS_KEY, disableLazyLoadGroup, disableRenderOptimizeGroup, enableLazyLoadGroup, enableRenderOptimizeGroup, getMobileOptSettings } from "./modules/mobile-opt.js";
+import { getSummaryBeautifyEnabled, initSummaryBeautify, setSummaryBeautifyEnabled, stopSummaryBeautify, SUMMARY_BEAUTIFY_SETTINGS_KEY } from "./modules/beautify/render.js";
 import { PHONE_MODULE_NAME, getPhoneFabVisible, setPhoneFabVisibleSetting } from "./modules/phone/store.js";
 import { HOLIDAY_SETTINGS_KEY, getHolidayEnabled, setHolidayEnabledSetting } from "./modules/holiday/settings.js";
 import { openRestPresetDialog, openCustomHolidaysDialog } from "./modules/holiday/ui.js";
@@ -129,6 +130,8 @@ export async function clearAllPluginLocalData() {
     delete extension_settings[PHONE_MODULE_NAME];
     delete extension_settings[MAP_MODULE_NAME];
     delete extension_settings[MOBILE_OPT_SETTINGS_KEY];
+    delete extension_settings[SUMMARY_BEAUTIFY_SETTINGS_KEY];
+    stopSummaryBeautify(); // 停止已启动的扫描，跟设置值一起还原成默认关闭状态
     delete extension_settings[NOVEL_AUTO_JUMP_SETTINGS_KEY];
     delete extension_settings[NOVEL_ACTIVE_CHAPTER_SETTINGS_KEY];
     delete extension_settings[HOLIDAY_SETTINGS_KEY];
@@ -218,11 +221,12 @@ export async function showSummaryPopup() {
             <p style="color: #72b1e8; font-weight: 500; margin: 0;">摘要配置</p>
             <button id="${POPUP_ID}-status-llm-reanalyze" title="开启后，每层AI消息渲染完会自动调用状态表LLM提取Inventory/Setups；关闭（默认）则不发送任何信息给状态表LLM" style="border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
           </div>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
             <button id="${POPUP_ID}-status-llm-config" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">API配置</button>
             <button id="${POPUP_ID}-pre-emphasis" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">对话前强调</button>
             <button id="${POPUP_ID}-field-meta-instruction" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">字段修改</button>
             <button id="${POPUP_ID}-custom-fields" style="background: #3a7bd5; border: none; color: #fff; cursor: pointer; font-size: 13px; padding: 8px 12px; border-radius: 4px; transition: background-color 0.2s;">附加字段</button>
+            <button id="${POPUP_ID}-summary-beautify" title="把楼层摘要块渲染成折叠卡片样式；长对话/移动端可能略卡，可关闭改回原始文字（关闭后已生成的卡片需刷新页面才会恢复）" style="margin-left: auto; border: none; color: #fff; cursor: pointer; font-size: 12px; padding: 6px 10px; border-radius: 4px; white-space: nowrap; transition: background-color 0.2s;"></button>
           </div>
         </div>
 
@@ -581,6 +585,32 @@ export async function showSummaryPopup() {
       renderStatusLlmReanalyzeButton($statusLlmReanalyzeBtn, s.reanalyzeEnabled);
     });
 
+    // 摘要美化开关：默认关闭。开启时启动 MutationObserver 开始扫描并立即跑一次；
+    // 关闭时只 disconnect 停止继续扫描，已经生成的卡片不做复原，提示刷新页面即可恢复原始文本。
+    const $summaryBeautifyBtn = $(`#${POPUP_ID}-summary-beautify`);
+    function renderSummaryBeautifyButton($btn, isOn) {
+      $btn
+        .text(isOn ? "美化摘要" : "原始摘要")
+        .css(isOn ? TOGGLE_ON_STYLE : TOGGLE_OFF_STYLE);
+    }
+    renderSummaryBeautifyButton($summaryBeautifyBtn, getSummaryBeautifyEnabled());
+    $summaryBeautifyBtn.on("click", () => {
+      const next = !getSummaryBeautifyEnabled();
+      setSummaryBeautifyEnabled(next);
+      saveSettingsDebounced();
+      if (next) {
+        initSummaryBeautify();
+        notify("success", "已开启摘要美化。");
+      } else {
+        stopSummaryBeautify();
+        notify(
+          "info",
+          "已关闭摘要美化，已生成的卡片刷新页面后会恢复显示原始文本。",
+        );
+      }
+      renderSummaryBeautifyButton($summaryBeautifyBtn, next);
+    });
+
     $(`#${POPUP_ID}-pre-emphasis`)
       .on("click", () => {
         closePopup();
@@ -799,6 +829,7 @@ export async function showSummaryPopup() {
       const mobileOptSettingsNow = getMobileOptSettings();
       renderMobileOptButton($mobileOptRenderBtn, mobileOptSettingsNow.renderOptimize);
       renderMobileOptButton($mobileOptLazyBtn, mobileOptSettingsNow.lazyLoad);
+      renderSummaryBeautifyButton($summaryBeautifyBtn, getSummaryBeautifyEnabled());
       renderStatusLlmReanalyzeButton(
         $statusLlmReanalyzeBtn,
         getStatusLlmSettings().reanalyzeEnabled,

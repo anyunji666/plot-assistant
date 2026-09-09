@@ -18,6 +18,23 @@ import { getLorebookEntriesArray, getOrCreateSummaryLorebook } from "../worldinf
 import { getCustomFields } from "../summary/status-llm/store.js";
 import { classifyRelationshipValue } from "./badges.js";
 
+// === 面板"美化摘要/原始摘要"开关：默认关闭（保持跟其余"移动端优化"类开关一致的默认策略），
+// 关掉之后只是让 initSummaryBeautify 不再启动扫描，已经生成的卡片不会被实时改回原文，
+// 需要刷新页面才会恢复显示原始 <details> 文本——跟本插件其余同类开关的一贯做法保持一致。===
+export const SUMMARY_BEAUTIFY_SETTINGS_KEY = "plot_assistant_summary_beautify";
+
+export function getSummaryBeautifyEnabled() {
+  const s = extension_settings[SUMMARY_BEAUTIFY_SETTINGS_KEY];
+  return !!(s && s.enabled === true);
+}
+
+export function setSummaryBeautifyEnabled(enabled) {
+  if (!extension_settings[SUMMARY_BEAUTIFY_SETTINGS_KEY]) {
+    extension_settings[SUMMARY_BEAUTIFY_SETTINGS_KEY] = {};
+  }
+  extension_settings[SUMMARY_BEAUTIFY_SETTINGS_KEY].enabled = !!enabled;
+}
+
 // =====================================================================================
 // 摘要卡片美化模块：把楼层摘要模块 / 状态存档消息里原生的
 // <details><summary>摘要</summary>...</details> 折叠块，替换成统一风格的可视化卡片。
@@ -472,6 +489,7 @@ export function hideStatusLlmIndicator() {
 
 // === 对外入口：注册 MutationObserver，随聊天区域任意变化（新消息/编辑/滑动/切换对话）自动重新扫描 ===
 export function initSummaryBeautify() {
+  if (!getSummaryBeautifyEnabled()) return; // 面板开关关闭（默认），不启用美化，维持原始 <details> 文本
   const chatEl = document.getElementById("chat");
   if (!chatEl) {
     console.warn("[剧情助手] 未找到 #chat 容器，摘要卡片美化未启用。");
@@ -503,4 +521,14 @@ export function initSummaryBeautify() {
 
   // 插件加载/切换到已有聊天时，先手动跑一次，不用等下一次 DOM 变化才触发
   scanAndBeautifyAll();
+}
+
+// === 对外入口：面板开关关闭时调用，停止继续扫描新出现的消息。
+// 已经生成的卡片不做复原（避免复杂的DOM回退逻辑），提示用户刷新页面即可恢复显示原始文本，
+// 跟本插件其余"移动端优化"类开关关闭时的处理方式保持一致。===
+export function stopSummaryBeautify() {
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
 }
