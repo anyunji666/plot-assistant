@@ -152,6 +152,7 @@ export async function openPhonePresetDialog() {
 // 用于正文里角色/用户已经发过、但手机没同步到的私信。样式仿 openHideFloorDialog（右上角×常驻关闭）。
 // 时间统一取 getCurrentStoryTime()（最后一层AI摘要的Time字段），跟AI自动回复私信用的时间来源一致。===
 export function openPhoneInsertMessageDialog(characterName) {
+  return new Promise((resolve) => {
   const $bodyEl = $("body");
   const prevBodyOverflow = $bodyEl.css("overflow");
   $bodyEl.css("overflow", "hidden");
@@ -214,7 +215,9 @@ export function openPhoneInsertMessageDialog(characterName) {
   $titleRow.append($title, $closeBtn);
 
   const $hint = $("<div>")
-    .text("直接填文字描述即可，例如：好呀，那我们下午两点见。")
+    .text(
+      "由于私信功能只有在发送信息时才读取最新正文内容，不会主动读取正文更新对方私信。所以增加手动补充对方私信的功能。直接输入或粘贴文本，选择信息归属方即可。",
+    )
     .css({ fontSize: "0.8em", color: "#999", lineHeight: 1.5 });
 
   const $textarea = $("<textarea>").css({
@@ -266,6 +269,7 @@ export function openPhoneInsertMessageDialog(characterName) {
     $(document).off("keydown.phoneInsertMessageDialog");
     $overlay.remove();
     $bodyEl.css("overflow", prevBodyOverflow || "");
+    resolve();
   };
 
   const submit = errorCatched(async (from) => {
@@ -280,9 +284,6 @@ export function openPhoneInsertMessageDialog(characterName) {
       storyTime: getCurrentStoryTime(),
     });
     close();
-    if (phoneUIState.activeChatCharacter === characterName) {
-      await renderPhoneChatMessages(characterName);
-    }
   });
 
   $sendAsUser.on("click", () => submit("user"));
@@ -299,6 +300,7 @@ export function openPhoneInsertMessageDialog(characterName) {
   });
   $(document).on("keydown.phoneInsertMessageDialog", (e) => {
     if (e.key === "Escape") close();
+  });
   });
 }
 
@@ -850,12 +852,18 @@ export function buildPhoneModalSkeleton() {
   );
   document.getElementById("pa-phone-action-menu-insert").addEventListener(
     "click",
-    () => {
+    errorCatched(async () => {
       closePhoneActionMenu();
       const name = phoneUIState.activeChatCharacter;
       if (!name) return;
-      openPhoneInsertMessageDialog(name);
-    },
+      const overlay = document.getElementById("pa-phone-modal-overlay");
+      if (overlay && overlay.open) overlay.close();
+      await openPhoneInsertMessageDialog(name);
+      if (overlay) overlay.showModal();
+      if (phoneUIState.activeChatCharacter === name) {
+        await renderPhoneChatMessages(name);
+      }
+    }),
   );
   document.getElementById("pa-phone-action-menu-clear").addEventListener(
     "click",
