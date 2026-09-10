@@ -249,7 +249,7 @@
     top: 100%;
     right: 8px;
     margin-top: 4px;
-    background: #6bc93f;
+    background: rgba(46, 139, 87, 0.96);
     border: 0.5px solid rgba(255,255,255,0.35);
     border-radius: 8px;
     overflow: hidden;
@@ -263,7 +263,7 @@
 #pa-phone-action-menu button {
     background: none;
     border: none;
-    color: #000;
+    color: #fff;
     font-size: 12px;
     padding: 9px 12px;
     text-align: left;
@@ -754,8 +754,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #6bc93f;
-    color: #054d05;
+    background: rgba(46, 139, 87, 0.96);
+    color: #fff;
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
