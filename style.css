@@ -249,7 +249,7 @@
     top: 100%;
     right: 8px;
     margin-top: 4px;
-    background: rgba(46, 139, 87, 0.96);
+    background: #95ec69;
     border: 0.5px solid rgba(255,255,255,0.35);
     border-radius: 8px;
     overflow: hidden;
@@ -759,7 +759,7 @@
     align-items: center;
     justify-content: center;
     background: #95ec69;
-    color: #054d05;
+    color: #fff;
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
