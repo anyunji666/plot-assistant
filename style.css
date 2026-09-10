@@ -263,7 +263,7 @@
 #pa-phone-action-menu button {
     background: none;
     border: none;
-    color: #054d05;
+    color: #000;
     font-size: 12px;
     padding: 9px 12px;
     text-align: left;
@@ -755,7 +755,7 @@
     align-items: center;
     justify-content: center;
     background: #6bc93f;
-    color: #054d05;
+    color: #000;
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
