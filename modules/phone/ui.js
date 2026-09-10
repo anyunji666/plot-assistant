@@ -253,7 +253,7 @@ export function openPhoneInsertMessageDialog(characterName) {
     touchAction: "manipulation",
   };
   const $sendAsUser = $("<button>")
-    .text("接续我方发送")
+    .text("连续我方发送")
     .css({ ...btnCss, background: "#4caf50" });
   const $sendAsCharacter = $("<button>")
     .text("补充对方私信")

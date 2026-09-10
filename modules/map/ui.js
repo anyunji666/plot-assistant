@@ -275,13 +275,13 @@ export function buildModalSkeleton() {
                 </label>
                 <button id="mm-new-smallmap-btn">新建小地图</button>
 
+                <button id="mm-manage-factions-btn">管理势力</button>
                 <button id="mm-add-route-btn">添加路线</button>
                 <button id="mm-export-btn" title="导出的文件包含标记点位和当前底图图片，一次导入即可全部恢复">导出地图数据</button>
                 <label class="mm-file-btn">
                     导入地图数据
                     <input type="file" id="mm-import-json" accept="application/json" style="display:none;">
                 </label>
-                <button id="mm-manage-factions-btn">管理势力</button>
                 <button id="mm-npc-schedule-btn">📜 NPC行程</button>
                 <button id="mm-npc-llm-config-btn" title="配置NPC行程LLM连接与「启用AI调度」开关">⚙️NPC模型</button>
                 <button id="mm-clear-all-btn" class="mm-danger">清除当前角色的地图数据</button>
