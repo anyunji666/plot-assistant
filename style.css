@@ -824,7 +824,7 @@
 }
 
 .pa-phone-bg-preview {
-    width: 100%;
+    width: 50%;
     aspect-ratio: 360 / 550;
     border-radius: 10px;
     border: 0.5px solid rgba(255,255,255,0.3);
