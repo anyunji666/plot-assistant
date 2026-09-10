@@ -810,9 +810,9 @@
 }
 
 .pa-phone-bg-reset-btn {
-    border: 1px solid rgba(255,255,255,0.35);
-    background: rgba(255,255,255,0.1);
-    color: rgba(255,255,255,0.85);
+    border: none;
+    background: #b33a3a;
+    color: #fff;
     border-radius: 6px;
     padding: 5px 10px;
     font-size: 12px;
@@ -820,7 +820,7 @@
 }
 
 .pa-phone-bg-reset-btn:hover {
-    background: rgba(255,255,255,0.2);
+    background: #c94747;
 }
 
 .pa-phone-bg-preview {
@@ -845,9 +845,9 @@
 }
 
 .pa-phone-sticker-add-btn {
-    border: 1px solid rgba(149,236,105,0.6);
-    background: rgba(149,236,105,0.18);
-    color: #b6ffa0;
+    border: none;
+    background: #2e8b57;
+    color: #fff;
     border-radius: 6px;
     padding: 5px 10px;
     font-size: 12px;
@@ -855,7 +855,7 @@
 }
 
 .pa-phone-sticker-add-btn:hover {
-    background: rgba(149,236,105,0.3);
+    background: #37a066;
 }
 
 .pa-phone-sticker-manage-grid {
