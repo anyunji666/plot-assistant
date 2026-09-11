@@ -344,7 +344,7 @@ export async function openPreEmphasisDialog() {
 
 
 // === Function: 打开"字段修改"弹窗——面板"摘要配置"区新增按钮，让用户直接向状态表LLM
-// 发一条自然语言的一次性修改指令（Inventory/Setups/附加字段），不用理解字段格式规则，
+// 发一条自然语言的一次性修改指令（Inventory/Agreements/附加字段），不用理解字段格式规则，
 // 由AI自己按现有协议算出增量。指令只存一份，拼进下一次实际调用状态表LLM的请求末尾后立即清空——
 // 不是常驻配置，跟"对话前强调"/"状态表配置"这类持久化设置性质不同，所以弹窗骨架照抄后者，
 // 但保存目标是 pendingMetaInstruction 而不是长期生效的字段。===
@@ -399,7 +399,7 @@ export async function openFieldMetaInstructionDialog() {
 
     const $desc = $("<div>")
       .text(
-        "对状态表LLM维护的字段向AI发送修改要求，有Inventory（物品）、Setups（伏笔/线索/约定）及“附加字段”。指令为单次指令，只拼接发送在下一次对话中。",
+        "对状态表LLM维护的字段向AI发送修改要求，有Inventory（物品）、Agreements（约定）及“附加字段”。指令为单次指令，只拼接发送在下一次对话中。",
       )
       .css({ fontSize: "0.8em", color: "#999", lineHeight: 1.5 });
 
@@ -426,7 +426,7 @@ export async function openFieldMetaInstructionDialog() {
       $("<label>").text("修改指令").css({ fontSize: "0.82em", color: "#999" }),
     );
     const $textInput = $("<textarea>")
-      .attr({ rows: 6, placeholder: "例如：把{{user}}的玉佩数量改成3；清除角色A的“旧日承诺”这条伏笔" })
+      .attr({ rows: 6, placeholder: "例如：把{{user}}的玉佩数量改成3；清除角色A的“旧日承诺”这条约定" })
       .css({
         ...inputCss,
         resize: "vertical",
@@ -804,7 +804,7 @@ export function openHideFloorDialog() {
 // === 附加字段管理弹窗（面板"附加字段"按钮） ===
 // 让使用者自己起字段名+写提取规则，新增/编辑/删除后立即触发一次状态表全量重放
 // （rebuildStatusTableFromChat），把最新的字段结构写回世界书"状态表"条目，不用等下一层楼才生效。
-// 提取本身仍走状态表LLM那一路 API 调用（跟 Inventory/Setups 共用同一次请求），
+// 提取本身仍走状态表LLM那一路 API 调用（跟 Inventory/Agreements 共用同一次请求），
 // 弹窗只负责维护字段定义，不在这里发起AI调用。
 // =====================================================================================
 
@@ -1303,7 +1303,7 @@ export function openCustomFieldsDialog() {
 
 // =====================================================================================
 // === 状态表LLM配置弹窗 ===
-// Inventory/Setups 两个字段独立于剧情LLM之外的一路可选配置：apiUrl 留空 = 跟随酒馆当前连接
+// Inventory/Agreements 两个字段独立于剧情LLM之外的一路可选配置：apiUrl 留空 = 跟随酒馆当前连接
 // （与"自动小总结"/"摘要提取"未配置时的行为一致），非空 = 走这里填写的自定义反代。
 // 提示词默认值 = DEFAULT_STATUS_LLM_PROMPT，可在这里自定义（遇到截断/拒绝时常见的调整点）。
 // =====================================================================================
@@ -1357,7 +1357,7 @@ export async function openStatusLlmConfigDialog() {
 
     const $desc = $("<div>")
       .text(
-        "独立于剧情LLM之外，专门用于从每层正文提取 Inventory/Setups 两个字段。API地址留空则跟随酒馆当前对话连接（同自动小总结）。",
+        "独立于剧情LLM之外，专门用于从每层正文提取 Inventory/Agreements 两个字段。API地址留空则跟随酒馆当前对话连接（同自动小总结）。",
       )
       .css({ fontSize: "0.8em", color: "#999", lineHeight: 1.5 });
 
@@ -1466,7 +1466,7 @@ export async function openStatusLlmConfigDialog() {
       alignItems: "center",
     });
     $promptHeader.append(
-      $("<label>").text("提示词（Inventory/Setups 提取规则）").css({
+      $("<label>").text("提示词（Inventory/Agreements 提取规则）").css({
         fontSize: "0.82em",
         color: "#999",
       }),

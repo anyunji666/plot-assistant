@@ -207,8 +207,8 @@ export async function getRelationshipStageForCharacter(characterName) {
 
 // ==== 手机「背包」页：携带物品 ====
 // 状态表 Inventory 字段现在的书写入口是"状态表LLM"（见 summary/generator.js 的
-// extractInventorySetupsForLatestFloor），不再是正文AI自己的摘要输出——正文AI只管写故事，
-// 每层渲染完成后由状态表LLM单独提取本轮 Inventory/Setups 变化。
+// extractInventoryAgreementsForLatestFloor），不再是正文AI自己的摘要输出——正文AI只管写故事，
+// 每层渲染完成后由状态表LLM单独提取本轮 Inventory/Agreements 变化。
 // 背包页只读这份数据，不直接抢着写世界书：编辑（增/删/改）一律先记成"待生效改动"存在本地对话状态里，
 // 下一层AI楼层渲染完成时，由 peekPendingInventoryChangeSegments 只读拼进状态表LLM本轮的提取结果里
 // （不经过任何AI转述），再经既有的 mergeFloorIntoStatusTable 合并、变成"历史"的一部分，全量重放也不会被冲掉。

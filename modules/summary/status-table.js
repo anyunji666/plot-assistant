@@ -22,21 +22,21 @@ import { getCustomFields } from "./status-llm/store.js";
 // =====================================================================================
 // === 摘要模块解析 & 结构化数据表（状态表）===
 // 对应酒馆预设里每层输出的 <details><summary>摘要</summary>...</details> 模块，
-// 每层摘要模块字段并列为 Time / Location / Relationships / Inventory / Setups / Overview；
-// 但持久化进"状态表"世界书条目的只有 Relationships / Inventory / Setups 三项——
+// 每层摘要模块字段并列为 Time / Location / Relationships / Inventory / Agreements / Overview；
+// 但持久化进"状态表"世界书条目的只有 Relationships / Inventory / Agreements 三项——
 // Time / Location / Overview 只存在于每层楼的摘要模块原文里（Overview 另外供小总结提取用），不写入状态表。
 // Inventory 的 value 支持 +N/-N/=N 三种符号触发数值增减/覆盖（见 applyNumericMapUpdates），
 // 其他格式（裸数字、带单位、纯文字）一律按普通文字整体覆盖。
 // Relationships 的 value 允许两种合法形式：(a) 纯裸词（阶段词/身份词/血亲词表里的某一个词，原样写）；
 // (b) 身份/血亲词后面用括号附带一个阶段词，如"师徒(朋友)"（全角/半角括号都兼容）。
 // 状态表合并时会用 isValidRelationshipWord 校验，两种形式都不合规的值会被跳过并提示，不会写入状态表。
-// Setups 仍是自由文本；对代码而言只是不透明字符串，按 key 整体覆盖，内容格式不影响解析逻辑。
+// Agreements 仍是自由文本；对代码而言只是不透明字符串，按 key 整体覆盖，内容格式不影响解析逻辑。
 // =====================================================================================
 
 // === Helper: 从 inner 全文里切出 <!-- status-llm-fields -->...<!-- /status-llm-fields --> 包裹的子串
-// （状态表LLM独立提取的 Inventory/Setups/附加字段 结果只会出现在这个标记块里，见 status-llm/extract.js）。
-// 找不到标记时返回空字符串——此时 Inventory/Setups/custom 一律解析为空，不会退回整个 inner 兜底：
-// 剧情LLM在协议外手滑写的裸 Inventory/Setups 文本正是"没有标记"的情况，必须被自然忽略，
+// （状态表LLM独立提取的 Inventory/Agreements/附加字段 结果只会出现在这个标记块里，见 status-llm/extract.js）。
+// 找不到标记时返回空字符串——此时 Inventory/Agreements/custom 一律解析为空，不会退回整个 inner 兜底：
+// 剧情LLM在协议外手滑写的裸 Inventory/Agreements 文本正是"没有标记"的情况，必须被自然忽略，
 // 不能被误当成状态表LLM的正式结果合并进状态表。===
 function extractStatusLlmFieldsBlock(inner) {
   const startIdx = inner.indexOf(STATUS_LLM_FIELDS_START);
@@ -62,7 +62,7 @@ export function parseFloorSummaryFields(mesText) {
 
   // 附加字段（面板"附加字段"里配置的自定义变量）：按当前已配置的字段名逐个提取，
   // 未配置任何附加字段时 custom 为空对象，不影响原有解析结果。
-  // 跟 Inventory/Setups 一样只在状态表LLM标记块子串里提取，不信任剧情LLM协议外写的裸文本。
+  // 跟 Inventory/Agreements 一样只在状态表LLM标记块子串里提取，不信任剧情LLM协议外写的裸文本。
   const custom = {};
   getCustomFields().forEach((field) => {
     custom[field.name] = extractLabelLine(statusLlmFieldsBlock, field.name);
@@ -73,8 +73,8 @@ export function parseFloorSummaryFields(mesText) {
     location: extractLabelLine(inner, "Location"),
     relationships: extractLabelLine(inner, "Relationships"),
     inventory: extractLabelLine(statusLlmFieldsBlock, "Inventory"),
-    setups: extractLabelLine(statusLlmFieldsBlock, "Setups"),
-    busy: extractLabelLine(inner, "Busy"), // 仅供手机私信插件读取"角色: [REMOVE]"信号，不参与状态表 Relationships/Inventory/Setups 的常规合并
+    agreements: extractLabelLine(statusLlmFieldsBlock, "Agreements"),
+    busy: extractLabelLine(inner, "Busy"), // 仅供手机私信插件读取"角色: [REMOVE]"信号，不参与状态表 Relationships/Inventory/Agreements 的常规合并
     expiredChapter: extractLabelLine(inner, "ExpiredChapter"), // 仅供剧情录入模块读取"章节名已演绎完"信号，同样不参与状态表合并
     overview: overviewMatch ? overviewMatch[1].trim() : "",
     custom, // { 附加字段名: 本轮变化文本 }
@@ -496,12 +496,12 @@ export function applyNumericMapUpdates(
 
 // === Helper: 把楼层摘要文本里等于"当前人格名"的整词换回状态表统一约定的字面量 {{user}} ===
 // "对话前强调"提示词注入给正文AI之前，酒馆会先把其中的 {{user}} 宏替换成真实人格名，
-// 正文AI从始至终都没见过字面量 {{user}}，它在 Relationships/Inventory/Setups 里写"自己"这一方时，
+// 正文AI从始至终都没见过字面量 {{user}}，它在 Relationships/Inventory/Agreements 里写"自己"这一方时，
 // 写的必然是当前人格名。这里在合并进状态表前统一转换回 {{user}}，让状态表内部数据保持
 // extractOtherPartyName / 背包页 PHONE_INVENTORY_SELF_KEY 等下游代码一直依赖的那个约定，
 // 不用在每处消费逻辑里都重新适配"真实人格名"。
-// 只在紧跟着 "·"（Inventory/Setups 的 owner 分隔符）或 "→"（Relationships 的关系箭头）时才替换，
-// 避免误伤人格名恰好出现在物品名、Setups 简介等自由文本内容里的情况。
+// 只在紧跟着 "·"（Inventory/Agreements 的 owner 分隔符）或 "→"（Relationships 的关系箭头）时才替换，
+// 避免误伤人格名恰好出现在物品名、Agreements 简介等自由文本内容里的情况。
 export function normalizeSelfNameToLiteral(text) {
   if (!text) return text;
   const personaName = getCtx().name1;
@@ -546,7 +546,7 @@ export function extractOtherPartyName(relationshipKey) {
 }
 
 
-// === Helper: 全局标量型附加字段（scope=global）的合并——不像 Inventory/Setups 那样是 key:value 列表，
+// === Helper: 全局标量型附加字段（scope=global）的合并——不像 Inventory/Agreements 那样是 key:value 列表，
 // 整个字段只有一个值，rawValue 本身就是内容，[REMOVE] 表示清空，其余按 valueType 决定数值增减还是整条覆盖。
 // warnings/fieldLabel 可选，用于收集格式问题提示；返回值为合并后的新值（当前值原样返回代表本轮不变）。===
 export function mergeGlobalScalarValue(currentValue, rawValue, valueType, warnings, fieldLabel) {
@@ -599,11 +599,11 @@ export function mergeGlobalScalarValue(currentValue, rawValue, valueType, warnin
 
 // === Helper: 把状态表结构化对象序列化回世界书条目文本 ===
 // busyMap 为可选参数：手机私信插件维护的"当前忙碌角色"表（{角色名: true, ...}），
-// 不来自聊天记录全量重放（跟 Relationships/Inventory/Setups 不同源），只在序列化这一步拼进状态表末尾，
+// 不来自聊天记录全量重放（跟 Relationships/Inventory/Agreements 不同源），只在序列化这一步拼进状态表末尾，
 // 让正文 AI 每轮都能看到"谁正忙"，从而在这些角色不再登场时输出 Busy: 角色名: [REMOVE] 清除标记。
-// <snapshot_table> 开头固定拼一条总纲提醒（不受 Setups/Busy 是否为空影响，每次都输出）：
+// <snapshot_table> 开头固定拼一条总纲提醒（不受 Agreements/Busy 是否为空影响，每次都输出）：
 // 告知剧情LLM这是"上一轮"的快照数据、仅供参考，不是本轮剧情必须遵照或复述的脚本，也不需要输出这个标签本身——
-// 跟下面两条只在 Setups/Busy 非空时才附加的"字段专属提醒"是不同用途，这条是给"怎么理解这份数据"用的，
+// 跟下面两条只在 Agreements/Busy 非空时才附加的"字段专属提醒"是不同用途，这条是给"怎么理解这份数据"用的，
 // 那两条是给"AI写摘要块时该怎么判断过期"用的。这条写死在代码里、不随"对话前强调"世界书条目被自定义改写而丢失。
 export function serializeStatusTableContent(state, busyMap) {
   const lines = [
@@ -611,7 +611,7 @@ export function serializeStatusTableContent(state, busyMap) {
     "（提醒：该表内容是故事历程的总结快照，为故事上一轮的数据，仅供参考，不要在回复中输出该表）",
     `Relationships: ${serializeKeyValueList(state.relationships)}`,
     `Inventory: ${serializeKeyValueList(state.inventory)}`,
-    `Setups: ${serializeKeyValueList(state.setups)}`,
+    `Agreements: ${serializeKeyValueList(state.agreements)}`,
   ];
   // 附加字段（面板"附加字段"配置）：角色维度的按 key:value 列表序列化，全局维度的直接写值（空值跳过不写）。
   if (state.customChar) {
@@ -629,12 +629,12 @@ export function serializeStatusTableContent(state, busyMap) {
     : [];
   lines.push(`Busy: ${busyNames.map((name) => `${name}: 忙`).join("; ")}`);
   // 固定提醒行：每次序列化都重新生成，不写进任何 Map、不参与解析（不匹配任何字段标签的正则），
-  // 纯粹是"贴在状态表末尾、每轮都会被 AI 看到"的说明性提示，告知 Setups 条目的性质（伏笔/线索/约定），
-  // 便于剧情LLM理解上下文；Setups 的存量清理（[REMOVE]）已由状态表LLM独立负责，见 status-llm/prompts.js。
-  // 只在 Setups 非空时附加，避免空列表时提醒显得多余。
-  if (state.setups && state.setups.size > 0) {
+  // 纯粹是"贴在状态表末尾、每轮都会被 AI 看到"的说明性提示，告知 Agreements 条目的性质（约定），
+  // 便于剧情LLM理解上下文；Agreements 的存量清理（[REMOVE]）已由状态表LLM独立负责，见 status-llm/prompts.js。
+  // 只在 Agreements 非空时附加，避免空列表时提醒显得多余。
+  if (state.agreements && state.agreements.size > 0) {
     lines.push(
-      "（提醒：以上 Setups 为故事发展过程中的伏笔/线索/约定）",
+      "（提醒：以上 Agreements 为角色间已达成、尚未兑现的约定）",
     );
   }
   if (busyNames.length > 0) {
@@ -647,8 +647,8 @@ export function serializeStatusTableContent(state, busyMap) {
 }
 
 
-// === Helper: 把某一层解析出的摘要字段合并进状态表（Relationships/Inventory/Setups 按 key 增删改；Time/Location 不写入状态表；
-// 角色在 Relationships 里被 [REMOVE]（死亡/永久退场）时，联动清理 Inventory/Setups 中"角色名·xxx"格式的相关条目）===
+// === Helper: 把某一层解析出的摘要字段合并进状态表（Relationships/Inventory/Agreements 按 key 增删改；Time/Location 不写入状态表；
+// 角色在 Relationships 里被 [REMOVE]（死亡/永久退场）时，联动清理 Inventory/Agreements 中"角色名·xxx"格式的相关条目）===
 // warnings 为可选的数组，传入时会收集本次合并中发现的所有格式问题（不合规的部分会被跳过、不写入状态表，
 // 但不会阻断其余合法字段的正常合并）。不传 warnings 时行为与之前完全一致，仅静默跳过不合规内容。
 // removedOut 为可选的数组，传入时会把本层新death/离场（Relationships被标[REMOVE]）的角色名追加进去，
@@ -656,7 +656,7 @@ export function serializeStatusTableContent(state, busyMap) {
 export function mergeFloorIntoStatusTable(state, floorFields, warnings, removedOut) {
   const relationshipsText = normalizeSelfNameToLiteral(floorFields.relationships);
   const inventoryText = normalizeSelfNameToLiteral(floorFields.inventory);
-  const setupsText = normalizeSelfNameToLiteral(floorFields.setups);
+  const agreementsText = normalizeSelfNameToLiteral(floorFields.agreements);
 
   const relParsed = parseKeyValueListWithSkipped(relationshipsText);
   if (warnings) {
@@ -689,7 +689,7 @@ export function mergeFloorIntoStatusTable(state, floorFields, warnings, removedO
   });
 
   const inventoryParsed = parseKeyValueListWithSkipped(inventoryText);
-  const setupsParsed = parseKeyValueListWithSkipped(setupsText);
+  const agreementsParsed = parseKeyValueListWithSkipped(agreementsText);
   if (warnings) {
     inventoryParsed.skipped.forEach((fragment) =>
       warnings.push(
@@ -699,12 +699,12 @@ export function mergeFloorIntoStatusTable(state, floorFields, warnings, removedO
     inventoryParsed.corrected.forEach((msg) =>
       warnings.push(`Inventory：${msg}`),
     );
-    setupsParsed.skipped.forEach((fragment) =>
+    agreementsParsed.skipped.forEach((fragment) =>
       warnings.push(
-        `Setups 中的片段 "${fragment}" 无法解析出 key:value 结构，已跳过`,
+        `Agreements 中的片段 "${fragment}" 无法解析出 key:value 结构，已跳过`,
       ),
     );
-    setupsParsed.corrected.forEach((msg) => warnings.push(`Setups：${msg}`));
+    agreementsParsed.corrected.forEach((msg) => warnings.push(`Agreements：${msg}`));
   }
 
   applyNumericMapUpdates(
@@ -714,7 +714,7 @@ export function mergeFloorIntoStatusTable(state, floorFields, warnings, removedO
     "Inventory",
     false,
   );
-  applyMapUpdates(state.setups, setupsParsed.map, warnings, "Setups");
+  applyMapUpdates(state.agreements, agreementsParsed.map, warnings, "Agreements");
 
   // 附加字段合并：character 维度按"角色名: 值"key:value 列表合并（复用 applyNumericMapUpdates/applyMapUpdates，
   // key 直接是角色名，不带"·"分隔符——每个角色在该字段下只有一份值，不像 Inventory 那样按物品名再细分）；
@@ -763,8 +763,8 @@ export function mergeFloorIntoStatusTable(state, floorFields, warnings, removedO
     Array.from(state.inventory.keys()).forEach((key) => {
       if (key.startsWith(prefix)) state.inventory.delete(key);
     });
-    Array.from(state.setups.keys()).forEach((key) => {
-      if (key.startsWith(prefix)) state.setups.delete(key);
+    Array.from(state.agreements.keys()).forEach((key) => {
+      if (key.startsWith(prefix)) state.agreements.delete(key);
     });
     // 角色维度的附加字段也联动清理：key 就是角色名本身，精确匹配删除（不是前缀匹配）。
     Object.values(state.customChar).forEach((map) => {
@@ -793,7 +793,7 @@ export async function rebuildStatusTableFromChat() {
   const state = {
     relationships: new Map(),
     inventory: new Map(),
-    setups: new Map(),
+    agreements: new Map(),
     customChar: {},
     customGlobal: {},
   };

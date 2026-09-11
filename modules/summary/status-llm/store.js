@@ -6,7 +6,7 @@ import { CUSTOM_FIELD_SCOPE, CUSTOM_FIELD_VALUE_TYPE, getCtx } from "../../core.
 
 // =====================================================================================
 // === 状态表LLM：设置层 ===
-// 独立于剧情LLM（酒馆当前连接）之外，专门跑 Inventory/Setups 提取的一路可选配置。
+// 独立于剧情LLM（酒馆当前连接）之外，专门跑 Inventory/Agreements 提取的一路可选配置。
 // 跟"摘要提取"（novel-summary）同一套思路：apiUrl 留空 = 跟随酒馆当前连接
 // （context.generateRaw），非空 = 走本模块自己的 chat/completions 反代请求。
 // 明文保存在插件设置里，不做额外加密。
@@ -26,7 +26,7 @@ const DEFAULT_STATUS_LLM_SETTINGS = {
   stream: false,
   apiTimeoutMin: 15,
   customPrompt: "", // 空 = 使用 DEFAULT_STATUS_LLM_PROMPT
-  reanalyzeEnabled: true, // 面板"再分析"开关：默认开启，Inventory/Setups 完全依赖这次AI提取才能进状态表，关掉的话这两项永远不会更新，属于影响最大的开关，所以默认打开
+  reanalyzeEnabled: true, // 面板"再分析"开关：默认开启，Inventory/Agreements 完全依赖这次AI提取才能进状态表，关掉的话这两项永远不会更新，属于影响最大的开关，所以默认打开
   pendingMetaInstruction: "", // 面板"字段修改"弹窗提交的一次性元指令：只在下一次实际调用状态表LLM时拼进请求末尾，发出后（无论调用成功与否）立即清空，不重复发送
 };
 
@@ -66,7 +66,7 @@ export const RESERVED_FIELD_NAMES = new Set([
   "Location",
   "Relationships",
   "Inventory",
-  "Setups",
+  "Agreements",
   "Busy",
   "ExpiredChapter",
   "Overview",

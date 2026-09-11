@@ -316,7 +316,7 @@ export async function handleCharacterBecameFree(characterName) {
 
 // === Helper: 给定一批角色名，拼出他们"剧情当日"私信的 <private_letter> 文本块。
 // 剧情LLM（buildPhoneSlotContent）和状态表LLM（buildPhoneLetterContentForStatusLlm）
-// 都靠这份文本判断当天私信里的关系变化/伏笔，两边内容必须一致，所以抽成同一份实现，不各写一套。===
+// 都靠这份文本判断当天私信里的关系变化/约定，两边内容必须一致，所以抽成同一份实现，不各写一套。===
 async function buildPhoneLetterBlocksForNames(names) {
   if (!names || names.length === 0) return { content: "", injectedNames: [] };
 
@@ -373,8 +373,8 @@ export async function buildPhoneSlotContent() {
 }
 
 
-// 供状态表LLM复用：拼出"这一轮实际注入给剧情LLM看过"的私信内容，供状态表LLM判断 Setups（伏笔/线索）
-// 时也能看到同一批私信——不这样做的话，私信里提到的约定/线索状态表LLM完全看不到，会漏记。
+// 供状态表LLM复用：拼出"这一轮实际注入给剧情LLM看过"的私信内容，供状态表LLM判断 Agreements（约定）
+// 时也能看到同一批私信——不这样做的话，私信里提到的约定状态表LLM完全看不到，会漏记。
 // 故意不依赖 pendingInjection 标记：那个标记在 clearPhoneSlotPromptAfterRound 里会被清掉，
 // 而"状态表LLM提取"和"清空私信槽位"绑在同一个渲染事件上，谁先跑不可控，依赖它会有时序竞争；
 // lastInjectedPhoneNames 只是"这一轮实际注入过谁"的只读记录，不受清空动作影响，读到的永远是这一轮的真实名单。

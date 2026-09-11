@@ -29,12 +29,12 @@ import {
 } from "../../beautify/render.js";
 
 // =====================================================================================
-// === 状态表LLM：独立提取 Inventory / Setups ===
-// 剧情LLM的摘要块协议里不再包含 Inventory/Setups 两个字段（改由本模块单独调用一次AI提取），
+// === 状态表LLM：独立提取 Inventory / Agreements ===
+// 剧情LLM的摘要块协议里不再包含 Inventory/Agreements 两个字段（改由本模块单独调用一次AI提取），
 // 流程：读取最新一层AI原文 + 当前状态表快照 → 调用状态表LLM → 把返回的两行结果拼回这一层消息正文。
 // 拼回正文（而不是另存一份按楼层索引的旁路数据）是为了跟"状态表全量重放"（rebuildStatusTableFromChat）
 // 共用同一套解析/合并逻辑——重放是按当前 chat 数组内容重新推导，楼层被删除/回退时天然跟着收窄，
-// 如果 Inventory/Setups 存在独立于正文之外的旁路存储里，楼层增删后旁路数据的楼层号就可能跟实际错位。
+// 如果 Inventory/Agreements 存在独立于正文之外的旁路存储里，楼层增删后旁路数据的楼层号就可能跟实际错位。
 // =====================================================================================
 
 // === Helper: 判断某一层是否已经处理过（正文里已出现 <!-- status-llm-fields --> 包裹标记，不管值是否为空），
@@ -46,7 +46,7 @@ function hasStatusLlmFieldsMarker(mesText) {
 }
 
 
-// === Helper: 把状态表LLM返回的 Inventory/Setups（以及已配置的附加字段）结果拼进这一层摘要块正文里
+// === Helper: 把状态表LLM返回的 Inventory/Agreements（以及已配置的附加字段）结果拼进这一层摘要块正文里
 // （插在 Relationships 行之后——必须早于 Overview 行，否则会被 Overview 的贪婪正则一起吞掉）===
 // customFieldTexts: { 字段名: 提取到的本轮变化文本 }，来自面板"附加字段"里配置的定义，可为空对象。
 // 覆盖式：先整体删掉已存在的 <!-- status-llm-fields -->...<!-- /status-llm-fields --> 区块（如果有），
@@ -54,13 +54,13 @@ function hasStatusLlmFieldsMarker(mesText) {
 export function spliceExtractedFieldsIntoMes(
   mesText,
   inventoryText,
-  setupsText,
+  agreementsText,
   customFieldTexts = {},
 ) {
   const customLines = Object.entries(customFieldTexts)
     .map(([name, value]) => `${name}: ${value || ""}\n`)
     .join("");
-  const fieldsBlock = `Inventory: ${inventoryText || ""}\nSetups: ${setupsText || ""}\n${customLines}`;
+  const fieldsBlock = `Inventory: ${inventoryText || ""}\nAgreements: ${agreementsText || ""}\n${customLines}`;
   const insertion = `${STATUS_LLM_FIELDS_START}\n${fieldsBlock}${STATUS_LLM_FIELDS_END}\n`;
 
   const existingBlockRe = new RegExp(
@@ -85,8 +85,8 @@ export function spliceExtractedFieldsIntoMes(
 
 // === Helper: 读取"状态表"世界书条目当前内容（供拼装状态表LLM的上下文用）===
 // Busy 数据行（手机私信插件维护，仅剧情LLM需要据此输出 [REMOVE]）以及两条固定的
-// "（提醒：...）"说明/提示行（分别针对 Setups 说明和 Busy 清理提示，仅剧情LLM需要），
-// 均与状态表LLM只负责的 Inventory/Setups 提取无关，过滤掉以减少无关上下文。
+// "（提醒：...）"说明/提示行（分别针对 Agreements 说明和 Busy 清理提示，仅剧情LLM需要），
+// 均与状态表LLM只负责的 Inventory/Agreements 提取无关，过滤掉以减少无关上下文。
 function stripBusyAndReminderLines(text) {
   return text
     .split("\n")
@@ -114,7 +114,7 @@ async function getStatusTableSnapshotText(lorebookName) {
 // 除了改 .mes，还要同步写回 .swipes[swipe_id]（如果这条消息有swipes数组的话）——
 // 酒馆自己只在流式生成结束时调用一次 syncMesToSwipe 做这层同步，我们这里是生成完全结束之后
 // 才异步回来改 .mes（等状态表LLM调用完才拼回去），时机已经晚于酒馆那次同步，
-// 不主动补一次的话，Inventory/Setups这两行就只留在 .mes 上、没进 swipes 数据结构，
+// 不主动补一次的话，Inventory/Agreements这两行就只留在 .mes 上、没进 swipes 数据结构，
 // 后续任何依赖 swipes 数组重建/导出 mes 的场景都可能把这次拼接结果冲掉。
 async function persistMesEdit(context, idx, newMes) {
   if (!Array.isArray(context.chat) || !context.chat[idx]) return;
@@ -147,10 +147,10 @@ async function persistMesEdit(context, idx, newMes) {
 
 // === Function: 对"最新一层AI楼层"跑一次状态表LLM提取，把结果写回该层正文 ===
 // 静默失败：调用失败/超时（很多情况是模型截断）只打印控制台，不弹窗打断阅读体验，
-// 这一层的 Inventory/Setups 暂时不更新，等下一层生成完 getLastAiFloor 指向新的最新层再自然重试。
+// 这一层的 Inventory/Agreements 暂时不更新，等下一层生成完 getLastAiFloor 指向新的最新层再自然重试。
 // 不在这里触发状态表重放——统一交给调用方（registerStatusTableAutoUpdate 的渲染事件处理器）
 // 在这之后固定跑一次 handleMessageForStatusTable，覆盖"提取失败但 Relationships/Busy 仍要正常更新"的情况。
-export async function extractInventorySetupsForLatestFloor() {
+export async function extractInventoryAgreementsForLatestFloor() {
   try {
     const context = getCtx();
     const { idx, mes } = getLastAiFloor();
@@ -194,10 +194,10 @@ export async function extractInventorySetupsForLatestFloor() {
     // AI调用单独 try/catch：失败（很多情况是模型截断）只跳过"AI从正文里判断的那部分变化"，
     // 不影响下面背包页手动改动的合并——两者来源独立，不该互相拖累。
     let inventoryText = "";
-    let setupsText = "";
+    let agreementsText = "";
     let customFieldTexts = {};
     // 面板"再分析"开关默认关闭：关闭时完全不调用状态表LLM（不发请求、不产生token消耗），
-    // Inventory/Setups/附加字段的AI提取部分保持为空，跟下面调用失败时的兜底行为一致，
+    // Inventory/Agreements/附加字段的AI提取部分保持为空，跟下面调用失败时的兜底行为一致，
     // 不影响背包页手动改动的合并——两者走的是独立分支。
     if (getStatusLlmSettings().reanalyzeEnabled) {
       try {
@@ -215,7 +215,7 @@ export async function extractInventorySetupsForLatestFloor() {
           const letterResult = await buildPhoneLetterContentForStatusLlm();
           letterContent = letterResult.content || "";
         } catch (error) {
-          console.error("[剧情助手] 读取本轮私信内容失败（Setups判断可能漏看私信）:", error);
+          console.error("[剧情助手] 读取本轮私信内容失败（Agreements判断可能漏看私信）:", error);
         }
 
         // "字段修改"弹窗提交的一次性元指令：读到就立即清空（无论下面的AI调用最终是否成功），
@@ -237,13 +237,13 @@ export async function extractInventorySetupsForLatestFloor() {
         ]);
 
         inventoryText = extractLabelLine(rawResult, "Inventory");
-        setupsText = extractLabelLine(rawResult, "Setups");
+        agreementsText = extractLabelLine(rawResult, "Agreements");
         customFields.forEach((field) => {
           customFieldTexts[field.name] = extractLabelLine(rawResult, field.name);
         });
       } catch (error) {
         console.error(
-          "[剧情助手] 状态表LLM调用失败，本层Inventory/Setups/附加字段的AI提取部分已跳过（很多情况是模型截断，可在「状态表配置」弹窗调整提示词后重试）:",
+          "[剧情助手] 状态表LLM调用失败，本层Inventory/Agreements/附加字段的AI提取部分已跳过（很多情况是模型截断，可在「状态表配置」弹窗调整提示词后重试）:",
           error,
         );
       }
@@ -269,7 +269,7 @@ export async function extractInventorySetupsForLatestFloor() {
     const hasAnyCustomFieldValue = Object.values(customFieldTexts).some(
       (v) => v && v.trim(),
     );
-    const noFieldChange = !combinedInventoryText && !setupsText && !hasAnyCustomFieldValue;
+    const noFieldChange = !combinedInventoryText && !agreementsText && !hasAnyCustomFieldValue;
     // "再分析"开关关闭、且没有背包页待生效改动时，本来就没发起过状态表LLM调用，
     // 不写标记，保留"开关重新打开后、只要这层楼还是最新层就能自然重试"的能力。
     if (noFieldChange && !getStatusLlmSettings().reanalyzeEnabled) return;
@@ -281,7 +281,7 @@ export async function extractInventorySetupsForLatestFloor() {
     const newMes = spliceExtractedFieldsIntoMes(
       mes,
       combinedInventoryText,
-      setupsText,
+      agreementsText,
       customFieldTexts,
     );
     if (newMes === mes) return; // 拼装失败（没找到可插入的位置），跳过——pending未被清空，下次还有机会重试
@@ -296,7 +296,7 @@ export async function extractInventorySetupsForLatestFloor() {
       await persistChatMetadata();
     }
   } catch (error) {
-    console.error("[剧情助手] 状态表LLM提取 Inventory/Setups 时出错:", error);
+    console.error("[剧情助手] 状态表LLM提取 Inventory/Agreements 时出错:", error);
   }
 }
 
@@ -325,7 +325,7 @@ async function runStatusTableRenderCycle() {
     // 先跑状态表LLM提取（同步等待，剧情LLM生成下一层前状态表已是最新）；
     // 提取内部静默失败不抛出，这里始终固定接一次全量重放，
     // 覆盖"提取失败/跳过，但 Relationships/Busy 仍要正常从正文解析更新"的情况。
-    await extractInventorySetupsForLatestFloor();
+    await extractInventoryAgreementsForLatestFloor();
     // 必须等这次全量重放（写入世界书「状态表」条目）真正完成，下面强制刷新卡片时
     // fetchStatusTableSnapshot 读到的才是这一轮的最新值，不然会读到刷新前的旧快照。
     await handleMessageForStatusTable();
@@ -333,7 +333,7 @@ async function runStatusTableRenderCycle() {
     // 其余历史楼层不受影响（见 rerenderLatestSummaryCard 的说明）。
     await rerenderLatestSummaryCard();
   } finally {
-    // extractInventorySetupsForLatestFloor / handleMessageForStatusTable 内部各自已经
+    // extractInventoryAgreementsForLatestFloor / handleMessageForStatusTable 内部各自已经
     // try/catch 吞掉了失败，理论上走不到这个 finally 是因为异常；这里用 finally 只是
     // 兜底保证任何将来的改动即便抛错，提示也一定会消失，不会卡在屏幕上关不掉。
     hideStatusLlmIndicator();

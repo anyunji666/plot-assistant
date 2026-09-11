@@ -23,7 +23,7 @@ export const AUTO_BATCH_SIZE = 30; // 自动小总结每批楼层数
 
 export const SMALL_SUMMARY_TITLE_PREFIX = "小总结："; // 小总结世界书条目标题前缀，后面拼接"起-止"楼层号
 
-export const LARGE_SUMMARY_TITLE = "状态存档"; // 状态存档世界书条目固定标题：状态表快照（Relationships/Inventory/Setups，不调用AI）+ Time（本地拼接已有小总结的时间头尾，不调用AI）+ Overview（调用AI对已有小总结做二次总结，不超1000字）
+export const LARGE_SUMMARY_TITLE = "状态存档"; // 状态存档世界书条目固定标题：状态表快照（Relationships/Inventory/Agreements，不调用AI）+ Time（本地拼接已有小总结的时间头尾，不调用AI）+ Overview（调用AI对已有小总结做二次总结，不超1000字）
 
 export const PRE_EMPHASIS_TITLE = "对话前强调"; // 对话前强调世界书条目固定标题
 
@@ -137,7 +137,7 @@ export const STEP_DELAY = 300; // 批次之间的延迟（毫秒）
 
 export const STATUS_TABLE_TITLE = "状态表"; // 结构化数据表世界书条目固定标题，与"小总结：起-止""状态存档"同级存在
 
-// 状态表LLM独立提取的 Inventory/Setups/附加字段 结果，拼进摘要块正文时用这对注释包裹标记边界——
+// 状态表LLM独立提取的 Inventory/Agreements/附加字段 结果，拼进摘要块正文时用这对注释包裹标记边界——
 // 判重（这层是否已处理过）、覆盖式重新拼接、以及解析时只信任标记内内容（过滤剧情LLM协议外手滑写的裸文本），
 // 三处都依赖这对标记，统一在这里定义，避免多处硬编码字符串不一致。
 export const STATUS_LLM_FIELDS_START = "<!-- status-llm-fields -->";

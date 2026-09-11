@@ -8,7 +8,7 @@ import { parseFloorSummaryFields } from "./status-table.js";
 // === 楼层还原 / 小总结进度扫描 ===
 // 负责"小总结：起-止"世界书条目的进度扫描，以及缺失摘要模块的楼层区间
 // 用AI逐层还原 Time/Location/Overview（不合并、不压缩条数）。
-// 跟状态表（Relationships/Inventory/Setups）的解析合并逻辑（见 status-table.js）是两回事——
+// 跟状态表（Relationships/Inventory/Agreements）的解析合并逻辑（见 status-table.js）是两回事——
 // 这里只关心"楼层本身的摘要文本"，不涉及状态表的增删改与校验。
 // =====================================================================================
 

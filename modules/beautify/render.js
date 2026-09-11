@@ -43,9 +43,9 @@ export function setSummaryBeautifyEnabled(enabled) {
 // - 只改"显示"，不改楼层原文。所有解析都直接读 context.chat[idx].mes（原文），
 //   不依赖也不修改 DOM 里已渲染的文本，保证 status-table.js 那一整套正则解析逻辑完全不受影响。
 // - 普通楼层摘要（Time/Location/Relationships/Busy/ExpiredChapter/Overview）和
-//   状态存档消息（Time/Relationships/Inventory/Setups/Overview）复用同一套模板，
+//   状态存档消息（Time/Relationships/Inventory/Agreements/Overview）复用同一套模板，
 //   缺字段的行直接不渲染。
-// - Relationships/Inventory/Setups/Busy 这四项在"最新一层AI楼层"的卡片上，展示的都是世界书
+// - Relationships/Inventory/Agreements/Busy 这四项在"最新一层AI楼层"的卡片上，展示的都是世界书
 //   「状态表」条目里合并后的当前完整状态，而不是这一层楼原文自己写的增量变化——语义对齐 Busy
 //   一贯的做法。其余历史楼层的卡片，这几项仍然按各自楼层原文解析展示（当层增量），
 //   保留"逐层回看变化"的历史价值，两者互不影响。
@@ -96,7 +96,7 @@ function setSummaryCardCollapsed(collapsed) {
 }
 
 // === Helper: 字段列表内相邻条目之间的分隔符——同一行内横向流式排列时用来隔开条目，
-// Relationships/Inventory/Setups 这类"逐条列出"的字段统一复用，保持视觉风格一致 ===
+// Relationships/Inventory/Agreements 这类"逐条列出"的字段统一复用，保持视觉风格一致 ===
 const ITEM_SEPARATOR_HTML = `<span class="pa-item-sep">|</span>`;
 
 let debounceTimer = null;
@@ -199,12 +199,12 @@ function buildRelationshipsRowsHtml(relationshipsText) {
     .filter(Boolean);
   if (badges.length === 0) return "";
   return `<div class="pa-field-block">
-    <div class="pa-field-block-title"><span class="pa-field-icon">🤝</span>人物关系</div>
+    <div class="pa-field-block-title"><span class="pa-field-icon">👫</span>人物关系</div>
     <div class="pa-relationship-list">${badges.join(ITEM_SEPARATOR_HTML)}</div>
   </div>`;
 }
 
-// === Helper: 一次性读取"状态表"世界书条目里的当前完整状态快照——Relationships/Inventory/Setups
+// === Helper: 一次性读取"状态表"世界书条目里的当前完整状态快照——Relationships/Inventory/Agreements
 // 三项合并后的原始行文本，以及 Busy 忙碌名单（手机私信模块判定并写入，正文AI只负责用 [REMOVE] 清除，
 // 不负责标记"忙"）。四项都只反映"当前"这一个全局状态，不属于任何具体某一层楼的历史信息，
 // 只应用在最新一层AI楼层的卡片上（见 scanAndBeautifyAll / beautifyOneMessageEl）。
@@ -225,7 +225,7 @@ async function fetchStatusTableSnapshot() {
     return {
       relationships: extractLabelLine(content, "Relationships"),
       inventory: extractLabelLine(content, "Inventory"),
-      setups: extractLabelLine(content, "Setups"),
+      agreements: extractLabelLine(content, "Agreements"),
       custom, // { 附加字段名: 状态表当前值（角色维度是"角色A: 值；角色B: 值"，全局维度是单个值） }
       // 格式固定是 "角色A: 忙; 角色B: 忙"（见 status-table.js serializeStatusTableContent），只取角色名，值恒为"忙"不用管
       busyNames: busyLine
@@ -251,11 +251,11 @@ function buildBusyRowsHtml(busyNames) {
 }
 
 // === Helper: 字段列表内相邻条目之间的分隔符——同一行内横向流式排列时用来隔开条目，
-// Relationships/Inventory/Setups 这类"逐条列出"的字段统一复用，保持视觉风格一致 ===
+// Relationships/Inventory/Agreements 这类"逐条列出"的字段统一复用，保持视觉风格一致 ===
 
-// === Helper: 构造 Inventory / Setups 这类 key:value 列表字段的通用渲染（图标+标题+逐条列出）
+// === Helper: 构造 Inventory / Agreements 这类 key:value 列表字段的通用渲染（图标+标题+逐条列出）
 // emphasizeValue：true 时 value 用强调样式（加粗徽标，视觉呼应人物关系的 badge），key 转为淡色——
-// 目前只有 Inventory（物品名淡、数量显眼）传 true；Setups 的 value 是自由描述文本，不适合套徽标，维持原样。===
+// 目前只有 Inventory（物品名淡、数量显眼）传 true；Agreements 的 value 是自由描述文本，不适合套徽标，维持原样。===
 function buildKeyValueBlockHtml(icon, title, text, emphasizeValue = false) {
   const pairs = splitKeyValuePairs(text);
   if (pairs.length === 0) return "";
@@ -296,7 +296,7 @@ function buildCustomGlobalFieldHtml(icon, title, value) {
 }
 
 // === Helper: 附加字段整体渲染——遍历已配置字段，按维度分流到对应样式，某个字段本轮/当前无值时该字段跳过不渲染。
-// icon 固定用⭐（附加字段是用户自定义的通用变量，不像 Inventory/Setups 有明确语义，不单独为每个字段做图标选择）。===
+// icon 固定用⭐（附加字段是用户自定义的通用变量，不像 Inventory/Agreements 有明确语义，不单独为每个字段做图标选择）。===
 function buildCustomFieldsHtml(customFields, customValues, scope) {
   const CUSTOM_FIELD_ICON = "⭐";
   return customFields
@@ -313,7 +313,7 @@ function buildCustomFieldsHtml(customFields, customValues, scope) {
 }
 
 // === 主函数：字段对象 → 完整卡片 HTML 字符串。
-// fields.relationships/inventory/setups：调用方按需传入——最新一层楼传状态表当前完整状态，
+// fields.relationships/inventory/agreements：调用方按需传入——最新一层楼传状态表当前完整状态，
 // 其余楼层传该层原文自己的增量变化，本函数不关心来源，只负责渲染。
 // busyNames 是可选的"当前忙碌名单"（只有最新一层楼的卡片会传入非空值，见 beautifyOneMessageEl），
 // 不来自 fields.busy——楼层原文里的 Busy 字段只会是正文AI写的 [REMOVE] 清除信号，没有展示价值。===
@@ -333,7 +333,7 @@ export function buildSummaryCardHtml(fields, busyNames = []) {
   if (fields.relationships) parts.push(buildRelationshipsRowsHtml(fields.relationships));
   if (fields.inventory) parts.push(buildKeyValueBlockHtml("🎒", "物品", fields.inventory, true));
   parts.push(buildCustomFieldsHtml(customFields, fields.custom, CUSTOM_FIELD_SCOPE.CHARACTER));
-  if (fields.setups) parts.push(buildKeyValueBlockHtml("🧩", "伏笔", fields.setups));
+  if (fields.agreements) parts.push(buildKeyValueBlockHtml("🤞", "约定", fields.agreements));
 
   const busyHtml = buildBusyRowsHtml(busyNames);
   if (busyHtml) parts.push(busyHtml);
@@ -366,7 +366,7 @@ function findSummaryDetailsEl(mesTextEl) {
 }
 
 // === 处理单条消息：原文能解析出摘要字段 且 DOM 里还存在原生 <details> 时，替换成卡片。
-// lastAiIdx：当前聊天里最新一层AI楼层的下标。只有这一层的卡片，Relationships/Inventory/Setups/Busy
+// lastAiIdx：当前聊天里最新一层AI楼层的下标。只有这一层的卡片，Relationships/Inventory/Agreements/Busy
 // 四项才会换成 snapshot（状态表当前完整状态），其余历史楼层这几项仍展示该层原文自己的增量变化。
 // snapshot 为 null（世界书还没创建/条目不存在）时，最新层也照常回退到该层原文的解析结果。
 //
@@ -410,7 +410,7 @@ function beautifyOneMessageEl(mesEl, lastAiIdx, snapshot, force = false) {
           ...fields,
           relationships: snapshot.relationships,
           inventory: snapshot.inventory,
-          setups: snapshot.setups,
+          agreements: snapshot.agreements,
           custom: snapshot.custom,
         }
       : fields;

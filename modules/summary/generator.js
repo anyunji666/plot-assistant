@@ -386,14 +386,14 @@ export const runSetOffset = errorCatched(async () => {
 
 // =====================================================================================
 // === Function: 状态存档 ===
-// Relationships/Inventory/Setups：直接读取当前状态表世界书条目，不调用AI，原样存档。
+// Relationships/Inventory/Agreements：直接读取当前状态表世界书条目，不调用AI，原样存档。
 // Time：本地拼接，不调用AI——扫描世界书全部"小总结：起-止"条目，取最早条目的时间起点、
 // 最晚条目的时间止点（见 buildArchiveTimeLabel），不重新计算或推理。
 // Overview：唯一的AI调用点——把全部小总结正文按顺序拼进 <story_history> 标签交给AI二次提炼，
 // 生成一份不超过1000字的剧情总览（见 buildArchiveOverviewInstruction/buildArchiveOverviewUserContent）。
 // 外壳仍然是 <details><summary>摘要</summary>...</details>，因为新对话第0层要靠
 // parseFloorSummaryFields 识别出这是一层"摘要模块"，首次触发 rebuildStatusTableFromChat
-// 全量重放时把 Relationships/Inventory/Setups 解析合并回状态表；Time 顺带能被
+// 全量重放时把 Relationships/Inventory/Agreements 解析合并回状态表；Time 顺带能被
 // findNearestAnchorFloor 当作新对话里逐层还原摘要时的上文时间锚点使用。
 // 世界书里没有任何"小总结"条目时（比如刚开局就存档），跳过AI调用，Time/Overview 都留空，
 // 其余逻辑不受影响。
@@ -403,7 +403,7 @@ export const runAutoLargeSummary = errorCatched(async () => {
 
   const proceed = await confirmAction(
     "状态存档",
-    "状态存档会读取当前状态表（人物关系/物品/伏笔）和已有的小总结（时间线/剧情总览），生成可粘贴到新对话第0层的存档内容，用于新对话接续时恢复进度。<br><br>存档成功后会自动关闭本次读取到的小总结条目（若 Overview 生成失败则不关闭）。<br><br>是否继续？",
+    "状态存档会读取当前状态表（人物关系/物品/约定）和已有的小总结（时间线/剧情总览），生成可粘贴到新对话第0层的存档内容，用于新对话接续时恢复进度。<br><br>存档成功后会自动关闭本次读取到的小总结条目（若 Overview 生成失败则不关闭）。<br><br>是否继续？",
   );
   if (!proceed) {
     notify("info", "已取消。");
@@ -422,9 +422,9 @@ export const runAutoLargeSummary = errorCatched(async () => {
   const inventorySnapshot = convertInventorySnapshotToHardset(
     extractLabelLine(statusTableText, "Inventory"),
   );
-  const setupsSnapshot = extractLabelLine(statusTableText, "Setups");
+  const agreementsSnapshot = extractLabelLine(statusTableText, "Agreements");
 
-  if (!relationshipsSnapshot && !inventorySnapshot && !setupsSnapshot) {
+  if (!relationshipsSnapshot && !inventorySnapshot && !agreementsSnapshot) {
     notify("warning", "当前状态表是空的，没有可存档的内容。");
     return;
   }
@@ -461,7 +461,7 @@ export const runAutoLargeSummary = errorCatched(async () => {
     `Time: ${timeLabel}`,
     `Relationships: ${relationshipsSnapshot}`,
     `Inventory: ${inventorySnapshot}`,
-    `Setups: ${setupsSnapshot}`,
+    `Agreements: ${agreementsSnapshot}`,
     `Overview: ${overview}`,
     "</details>",
   ].join("\n");
@@ -541,7 +541,7 @@ export async function ensureSummaryLorebookOnLoad() {
     const emptyState = {
       relationships: new Map(),
       inventory: new Map(),
-      setups: new Map(),
+      agreements: new Map(),
     };
     await saveOrOverwriteLorebookEntry(
       readyLorebookName,
@@ -617,7 +617,7 @@ export function registerLorebookAutoCreate() {
 }
 
 
-// 状态表LLM 独立提取 Inventory / Setups 的编排逻辑（含自动更新监听注册）已搬到
+// 状态表LLM 独立提取 Inventory / Agreements 的编排逻辑（含自动更新监听注册）已搬到
 // status-llm/extract.js，跟 status-llm/api.js、status-llm/prompts.js、status-llm/store.js
 // 归到同一个子文件夹，按"状态表LLM"整体查找。此处不再保留，仅留这条索引注释。
 
