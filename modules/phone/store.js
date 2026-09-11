@@ -65,7 +65,11 @@ export function setPhoneFabVisibleSetting(visible) {
 // ==== 手机私信系统：本地对话缓存存取（忙/闲缓存 + 待注入私信槽位标记）====
 
 // 读取"当前对话"的手机私信状态记录，不存在则就地初始化一份默认结构并返回（引用，改了要记得调用 persistChatMetadata）。
-// 结构：{ busy: {角色名: true}, idleFloor: {角色名: 楼层号}, pendingInjection: {角色名: true/false},
+// 结构：{ busy: {角色名: true} —— 忙标记，由私信LLM的合并判断打上，只能被正文LLM（状态表 Busy: 角色名: [REMOVE]）取消，
+//          不跟随楼层号，一旦置上就一直生效，直到被外部显式清除；
+//        judgedFloor: {角色名: 楼层号} —— 闲标记缓存，跟随楼层号：记录"这个角色在这一楼层已经判过闲"，
+//          命中就跳过合并判断、直接走简化模板生成回复，楼层一变就要重新判断（前提是这时 busy 不是 true）；
+//        pendingInjection: {角色名: true/false},
 //        pendingInventoryChanges: {"所有者·物品名": {quantity} 或 {deleted:true}},
 //        pendingInventorySplice: null 或 {floorIdx, snapshot} —— 记录"待生效改动最近一次被拼进了哪一层楼（floorIdx）、
 //          拼的是哪份快照（snapshot，见 peekPendingInventoryChangeSegments）"，用于楼层"翻篇"后判断哪些条目可以真正清空 }
@@ -77,7 +81,7 @@ export function getPhoneChatState() {
   ) {
     store[PHONE_CHAT_META_KEY] = {
       busy: {},
-      idleFloor: {},
+      judgedFloor: {},
       pendingInjection: {},
       pendingInventoryChanges: {},
       pendingInventorySplice: null,
@@ -85,7 +89,12 @@ export function getPhoneChatState() {
   }
   const s = store[PHONE_CHAT_META_KEY];
   if (!s.busy || typeof s.busy !== "object") s.busy = {};
-  if (!s.idleFloor || typeof s.idleFloor !== "object") s.idleFloor = {};
+  // 兼容旧版本字段名 idleFloor：迁移一次性搬到 judgedFloor，之后不再写入/读取 idleFloor。
+  if (!s.judgedFloor || typeof s.judgedFloor !== "object") {
+    s.judgedFloor =
+      s.idleFloor && typeof s.idleFloor === "object" ? s.idleFloor : {};
+  }
+  delete s.idleFloor;
   if (!s.pendingInjection || typeof s.pendingInjection !== "object")
     s.pendingInjection = {};
   if (

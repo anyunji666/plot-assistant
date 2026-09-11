@@ -41,13 +41,59 @@ export async function buildPrivateLetterBody(characterName) {
 }
 
 
-// becauseFreedReply=true 表示"角色刚从忙碌里变闲，主动补发一条回复"，此时没有用户刚发的新消息可以针对性回复，
-// 走"补聊"语气；false 表示针对 userText 这条新消息正常回复。
-export async function generateCharacterPhoneReply(
-  characterName,
-  userText,
-  becauseFreedReply,
-) {
+// 忙碌哨兵：合并判断命中"忙"分支时的约定输出。选一句不太可能出现在正常私信回复里的完整短句，
+// 而不是单字「忙」，避免角色正常回复里恰好带到"忙"字（比如"今天有点忙，晚点聊~"）被误判成忙碌分支。
+const PHONE_BUSY_SENTINEL = "忙碌中~现在没空回复私信。";
+
+// === Helper: 剥掉AI输出首尾常见的引号/书名号/标点/星号（markdown加粗）等包装符号，
+// 给下面两处"判断输出是不是某个约定哨兵/关键词"的场景共用，避免格式包装导致精确匹配失败。===
+function stripWrappingPunctuation(raw) {
+  return (raw || "")
+    .trim()
+    .replace(/^[「」『』【】《》（）()""''"'*＊．.。！!,，:：\s]+/, "")
+    .replace(/[「」『』【】《》（）()""''"'*＊．.。！!,，:：\s]+$/, "");
+}
+
+
+// === 简化模板：纯粹"以角色口吻回复{{user}}的私信"，不做忙闲/已读/抄录判断，也不带 <Latest_plot>。
+// 两处共用：①同一楼层已经判过"闲"、后续新消息直接走这里；②角色没出现在最新正文里。
+// 这两种场景下角色都是"单纯有空看手机"，且这条新消息不可能已经被"更早生成"的正文回复或已读，
+// 已读😊/抄录正文这两条规则天然不会命中，没有必要再带正文进去判断（省 token，也避免节外生枝套用正文情节）。
+export async function generateSimplePhoneReply(characterName, userText) {
+  const cardBody = await getPhoneContactCardBody(characterName);
+  const presetContent = loadPhonePresetContent();
+  const letterBody = await buildPrivateLetterBody(characterName);
+
+  const systemPrompt = [
+    presetContent,
+    `你负责扮演角色"${characterName}"，根据<private_letter>历史聊天内容，给{{user}}回一条私信。`,
+    "你会收到以下几部分输入：\n" +
+      `1. <character_information>：角色"${characterName}"的角色卡资料（性别、性格背景等）。\n` +
+      "2. <private_letter>：{{user}}和该角色迄今为止的私信记录，包含时间和当前俩人关系阶段。",
+    `<character_information character="${characterName}">\n${
+      cardBody || "gender: \nother: "
+    }\n</character_information>`,
+    `<private_letter name="${characterName}">\n{{user}}和${characterName}的私信：\n${letterBody}\n</private_letter>`,
+    "正常编一条符合角色语气、针对最新这条私信内容的回复。\n" +
+      "输出格式要求：只输出这一条私信正文本身——第一人称、符合角色说话习惯的一两句话，可以带口语化的语气词/表情。\n" +
+      "不要加任何前缀，不要写「角色名：」这种称呼前缀，不要加动作/心理描写的括号说明，不要输出多余的解释。",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const userContent = `{{user}}刚发来的新消息：${userText}\n请以「${characterName}」的身份回复这条消息。`;
+
+  const reply = await generateSummaryRaw(systemPrompt, userContent);
+  return (reply || "").trim();
+}
+
+
+// === 补聊模板：状态表检测到角色 Busy 被 [REMOVE]（正文里判定角色变闲）后专用。
+// 跟上面的简化模板不同，这里必须带 <Latest_plot>——角色是刚从忙碌解除，正文里很可能就是
+// "角色变闲的那个动作/场景"，里面有不小概率已经当面回复过用户私信里最新的内容（比如原本在忙，
+// 后来忙完了在正文里转头回了一句），这种情况要抄录正文原话，而不是凭空再编一条重复的回复；
+// 没有当面回过，才走"主动补聊"生成一条新的。===
+export async function generateFreedPhoneReply(characterName) {
   const cardBody = await getPhoneContactCardBody(characterName);
   const presetContent = loadPhonePresetContent();
   const { mes: lastAiMes } = getLastAiFloor();
@@ -55,10 +101,10 @@ export async function generateCharacterPhoneReply(
 
   const systemPrompt = [
     presetContent,
-    `你负责扮演角色"${characterName}"，根据<private_letter>历史聊天内容，并结合<Latest_plot>的最新故事进展，给{{user}}回一条私信。`,
+    `你负责扮演角色"${characterName}"，ta刚从忙碌中脱身，需要给{{user}}回一条私信。`,
     "你会收到以下几部分输入：\n" +
       `1. <character_information>：角色"${characterName}"的角色卡资料（性别、性格背景等）。\n` +
-      "2. <Latest_plot>：酒馆正文最后一层AI楼层原文，代表\"当前时刻\"实际发生的事。\n" +
+      "2. <Latest_plot>：酒馆正文最后一层AI楼层原文，代表\"当前时刻\"实际发生的事（角色刚变闲的那个场景）。\n" +
       "3. <private_letter>：{{user}}和该角色迄今为止的私信记录，包含时间和当前俩人关系阶段。",
     `<character_information character="${characterName}">\n${
       cardBody || "gender: \nother: "
@@ -66,62 +112,85 @@ export async function generateCharacterPhoneReply(
     `<Latest_plot>\n${lastAiMes || "（暂无正文）"}\n</Latest_plot>`,
     `<private_letter name="${characterName}">\n{{user}}和${characterName}的私信：\n${letterBody}\n</private_letter>`,
     "判断规则（依次检查，命中哪条就按哪条执行，不要同时套用多条）：\n" +
-      "1. 如果 <Latest_plot> 里角色已经当面/在场景中回复过这条私信的内容：\n" +
+      "1. 如果 <Latest_plot> 里角色已经当面/在场景中回复过 {{user}} 最新这条私信的内容：\n" +
       "   直接原样照抄正文里角色说的那句话，作为私信回复输出。\n" +
-      "2. 否则，如果 <Latest_plot> 结尾角色正和 {{user}} 处于同一场景中互动/聊天（人在场，已经知道私信内容）：\n" +
-      "   只输出「😊」这一个表情符号代表\"已读\"，不输出任何其它文字（不受下面输出格式要求约束）。\n" +
-      "3. 否则（角色没有和 {{user}} 处于同一场景互动，就是单纯有空看手机）：\n" +
-      "   正常编一条符合角色语气、针对这条私信内容的回复，遵循下面的输出格式要求。",
-    "输出格式要求（仅适用于命中规则1、3的情况）：\n" +
+      "2. 否则（正文里没有当面回过）：\n" +
+      "   正常编一条符合角色语气、主动补聊的回复，遵循下面的输出格式要求。",
+    "输出格式要求（仅适用于命中规则2的情况）：\n" +
       "只输出这一条私信正文本身——第一人称、符合角色说话习惯的一两句话，可以带口语化的语气词/表情。\n" +
       "不要加任何前缀，不要写「角色名：」这种称呼前缀，不要加动作/心理描写的括号说明，不要输出多余的解释。",
   ]
     .filter(Boolean)
     .join("\n\n");
 
-  const userContent = becauseFreedReply
-    ? `{{user}}之前给你发过消息，需要你输出回复，` +
-      `请以「${characterName}」的身份，用一两句话主动回复{{user}}之前的消息（要像真实私信的样子）。`
-    : `{{user}}刚发来的新消息：${userText}\n请以「${characterName}」的身份回复这条消息。`;
+  const userContent =
+    `{{user}}之前给你发过消息，需要你输出回复，` +
+    `请以「${characterName}」的身份判断并输出结果。`;
 
   const reply = await generateSummaryRaw(systemPrompt, userContent);
   return (reply || "").trim();
 }
 
 
-// === Helper: 角色名出现在最后一层正文里时，调用AI判断这个角色此刻有没有空看/回私信。
-// 返回 true=有空（按闲处理，正常生成回复）/false=没空（按忙处理，走 Busy 流程）。
-// AI 判断调用失败或解析不出明确结果时，保守按"没空"处理，避免误判打断状态表的 Busy 记录逻辑。===
-export async function judgeCharacterHasTimeForPhone(characterName, lastAiMes) {
+
+
+// === 合并 5 分支判断：只在"新楼层、角色出现在正文里、这一层还没判过"时调用，一次调用同时完成
+// 忙闲判断 + 已读/抄录/正常回复的生成，取代原来"先判忙闲、闲了再单独生成回复"的两次调用。
+// 返回 { busy: true } 表示命中忙碌分支；否则返回 { busy: false, reply }。
+// AI 判断调用失败时，保守按"没空"处理，避免误判打断状态表的 Busy 记录逻辑。===
+export async function judgeAndGeneratePhoneReply(characterName, userText) {
+  const cardBody = await getPhoneContactCardBody(characterName);
+  const presetContent = loadPhonePresetContent();
+  const { mes: lastAiMes } = getLastAiFloor();
+  const letterBody = await buildPrivateLetterBody(characterName);
   const relationshipStage =
     await getRelationshipStageForCharacter(characterName);
+
   const systemPrompt = [
-    `你负责判断角色"${characterName}"此刻是否有空回复{{user}}的私信。`,
+    presetContent,
+    `你负责扮演角色"${characterName}"，判断ta此刻要怎么处理{{user}}刚发来的这条私信，并直接给出最终要发送的内容。`,
+    "你会收到以下几部分输入：\n" +
+      `1. <character_information>：角色"${characterName}"的角色卡资料（性别、性格背景等）。\n` +
+      "2. <Latest_plot>：酒馆正文最后一层AI楼层原文，代表\"当前时刻\"实际发生的事。\n" +
+      "3. <private_letter>：{{user}}和该角色迄今为止的私信记录，包含时间和当前俩人关系阶段。",
+    `<character_information character="${characterName}">\n${
+      cardBody || "gender: \nother: "
+    }\n</character_information>`,
     relationshipStage
       ? `{{user}}与该角色当前关系阶段：${relationshipStage}`
       : "",
     `<Latest_plot>\n${lastAiMes || "（暂无正文）"}\n</Latest_plot>`,
-    "只根据以上正文里这个角色的所处场合和正在做的事，判断ta此刻方不方便看通讯器/回私信。" +
-      "方便就输出「是」，不方便就输出「否」，只输出一个字：是/否，不要输出任何其它内容。",
+    `<private_letter name="${characterName}">\n{{user}}和${characterName}的私信：\n${letterBody}\n</private_letter>`,
+    "判断规则（依次检查，命中哪条就按哪条执行，不要同时套用多条）：\n" +
+      "1. 如果角色没有出现在 <Latest_plot> 里（不在最新正文场景中）：\n" +
+      "   以角色口吻对{{user}}的私信内容输出正常回复，遵循下面的输出格式要求。\n" +
+      "2. 否则，如果<Latest_plot> 里这个角色此刻正忙于某事，没空看/回通讯器：\n" +
+      `   只输出这一句固定内容，不要输出任何其它文字：${PHONE_BUSY_SENTINEL}\n` +
+      "3. 否则，如果 <Latest_plot> 角色已经知晓{{user}}的私信内容但未回复{{user}}：\n" +
+      "   只输出「😊」这一个表情符号代表\"已读\"，不输出任何其它文字。\n" +
+      "4. 否则，如果 <Latest_plot> 里角色已经在场景中回复过这条私信的内容：\n" +
+      "   直接照抄正文里角色的回复内容原样输出。\n" +
+      "5. 否则（角色在正文里出现，就是单纯有空看手机，默认ta阅读到了这条私信）：\n" +
+      "   以角色口吻对{{user}}的私信内容输出正常回复，遵循下面的输出格式要求。",
+    "输出格式要求（仅适用于命中规则1、5的情况）：\n" +
+      "只输出这一条私信正文本身——第一人称、符合角色说话习惯的一两句话，可以带口语化的语气词/表情。\n" +
+      "不要加任何前缀，不要写「角色名：」这种称呼前缀，不要加动作/心理描写的括号说明，不要输出多余的解释。",
   ]
     .filter(Boolean)
     .join("\n\n");
-  const userContent = `请判断"${characterName}"现在是否有空回私信，只回答"是"或"否"。`;
+
+  const userContent = `{{user}}刚发来的新消息：${userText}\n请以「${characterName}」的身份判断并输出结果。`;
 
   try {
     const raw = (await generateSummaryRaw(systemPrompt, userContent)) || "";
-    // AI 有时会照抄 prompt 里示范用的引号/书名号格式，输出「是」"否"这类带符号的结果，
-    // 先剥掉首尾常见的引号/书名号/标点/星号（markdown加粗）再匹配，避免被误判成"解析不出结果"。
-    const trimmed = raw
-      .trim()
-      .replace(/^[「」『』【】《》（）()""''"'*＊．.。！!,，:：\s]+/, "")
-      .replace(/[「」『』【】《》（）()""''"'*＊．.。！!,，:：\s]+$/, "");
-    if (/^是/.test(trimmed) || /有空|方便/.test(trimmed)) return true;
-    if (/^否/.test(trimmed) || /没空|没有空|不方便/.test(trimmed)) return false;
-    return false; // 解析不出明确结果，保守按"没空"处理
+    const trimmed = stripWrappingPunctuation(raw);
+    if (trimmed === stripWrappingPunctuation(PHONE_BUSY_SENTINEL)) {
+      return { busy: true };
+    }
+    return { busy: false, reply: raw.trim() };
   } catch (error) {
-    console.error("[剧情助手] 忙闲AI判断失败:", error);
-    return false; // 调用失败同样保守按"没空"处理
+    console.error("[剧情助手] 私信合并判断失败:", error);
+    return { busy: true }; // 调用失败保守按"没空"处理，不误判打断状态表的 Busy 记录逻辑
   }
 }
 
@@ -129,7 +198,11 @@ export async function judgeCharacterHasTimeForPhone(characterName, lastAiMes) {
 // ==== 手机私信系统：核心流程 ====
 
 // 用户在手机聊天页给某角色发一条消息，返回 { status: "replied", reply } 或 { status: "busy" }。
-// 忙/闲判定：楼层号缓存命中就沿用上次"闲"的判断（不重新做文本匹配）；否则按"角色名是否出现在最后一层AI正文里"判定。
+// 忙/闲判定：
+// - 忙标记（busy）只由下面的合并判断打上，不跟随楼层，一直生效到被状态表联动清除（handleCharacterBecameFree），
+//   所以只要 busy[characterName] 为 true 就直接静默返回，不再调用任何 AI。
+// - 闲标记（judgedFloor）跟随楼层号：同一楼层内判过一次闲，后续新消息直接走简化模板，跳过合并判断；
+//   楼层一变就要重新走一次完整的合并判断（前提是这时 busy 不是 true）。
 export async function sendPhoneMessageToCharacter(characterName, payload) {
   // payload 兼容两种形式：纯文本字符串（原有用法），或 { text, stickerId }（发图片用）。
   const msg = typeof payload === "string" ? { text: payload } : payload || {};
@@ -146,31 +219,27 @@ export async function sendPhoneMessageToCharacter(characterName, payload) {
   await refreshPhoneChatViewIfOpen(characterName); // 先把用户自己发的这条显示出来，再去判断忙闲状态
 
   const phoneState = getPhoneChatState();
-  const { idx: lastAiIdx, mes: lastAiMes } = getLastAiFloor();
 
-  let treatAsIdle;
-  if (lastAiIdx !== -1 && phoneState.idleFloor[characterName] === lastAiIdx) {
-    treatAsIdle = true; // 楼层没变，沿用上次"闲"的判断，跳过重新判断
-  } else if (!characterActiveInText(characterName, lastAiMes)) {
-    treatAsIdle = true; // 正文没出现这个角色名，直接判"闲"，不调用AI
-  } else {
-    // 正文里出现了角色名，调用AI判断ta此刻有没有空看/回私信，而不是直接判"忙"
-    treatAsIdle = await judgeCharacterHasTimeForPhone(characterName, lastAiMes);
+  // 忙标记只受状态表联动控制，跟楼层无关：只要还没被解除，就一直静默返回，不调用任何 AI。
+  if (phoneState.busy[characterName]) {
+    markPhoneUpdatedToday(characterName);
+    await persistChatMetadata();
+    return { status: "busy" };
   }
 
-  markPhoneUpdatedToday(characterName);
+  const { idx: lastAiIdx, mes: lastAiMes } = getLastAiFloor();
+  const alreadyJudgedThisFloor =
+    lastAiIdx !== -1 && phoneState.judgedFloor[characterName] === lastAiIdx;
+  const characterActive = characterActiveInText(characterName, lastAiMes);
 
-  if (treatAsIdle) {
-    phoneState.idleFloor[characterName] = lastAiIdx;
-    delete phoneState.busy[characterName];
-    await persistChatMetadata();
-    setPhoneTypingIndicator(characterName, true); // 确认要调用AI生成回复了，顶部换成"对方正在输入…"
-    try {
-      const reply = await generateCharacterPhoneReply(
-        characterName,
-        text,
-        false,
-      );
+  markPhoneUpdatedToday(characterName);
+  setPhoneTypingIndicator(characterName, true); // 确认要调用AI了，顶部换成"对方正在输入…"
+  try {
+    if (alreadyJudgedThisFloor || !characterActive) {
+      // 同层已判过闲，或角色压根没出现在最新正文里：都是"单纯有空看手机"，直接用简化模板生成回复，不必再走合并判断。
+      phoneState.judgedFloor[characterName] = lastAiIdx;
+      await persistChatMetadata();
+      const reply = await generateSimplePhoneReply(characterName, text);
       await appendPhoneMessage(characterName, {
         from: PHONE_MESSAGE_FROM.CHARACTER,
         text: reply || "（对方没有回复任何内容）",
@@ -180,35 +249,55 @@ export async function sendPhoneMessageToCharacter(characterName, payload) {
       markPhoneUpdatedToday(characterName);
       await persistChatMetadata();
       return { status: "replied", reply };
-    } catch (error) {
-      console.error("[剧情助手] 生成私信回复失败:", error);
-      notify("error", "私信回复生成失败，请稍后重试。");
-      return { status: "error" };
-    } finally {
-      setPhoneTypingIndicator(characterName, false); // 无论成功/失败，都把顶部标题换回联系人名字
     }
-  }
 
-  // 忙碌分支：写入本地缓存的 busy 表，楼层缓存作废（下次变闲要重新走一次完整判断），
-  // 立即重算一次状态表把 Busy 行刷进去，不用等下一层新的 AI 楼层。
-  phoneState.busy[characterName] = true;
-  delete phoneState.idleFloor[characterName];
-  await persistChatMetadata();
-  await rebuildStatusTableFromChat();
-  return { status: "busy" };
-}
+    // 新楼层、角色在场、这一层还没判过：走合并判断，一次调用同时给出忙/闲结果和（如果闲）最终回复内容。
+    const result = await judgeAndGeneratePhoneReply(characterName, text);
+    if (result.busy) {
+      // 忙碌分支：写入本地缓存的 busy 表，立即重算一次状态表把 Busy 行刷进去，不用等下一层新的 AI 楼层。
+      phoneState.busy[characterName] = true;
+      await persistChatMetadata();
+      await rebuildStatusTableFromChat();
+      return { status: "busy" };
+    }
 
-
-// 状态表重算时检测到某角色 Busy 被正文 AI 标记 [REMOVE]（即"变闲"）后调用：自动补发一条该角色的回复。
-export async function handleCharacterBecameFree(characterName) {
-  try {
-    const reply = await generateCharacterPhoneReply(characterName, null, true);
+    phoneState.judgedFloor[characterName] = lastAiIdx;
+    await persistChatMetadata();
+    const reply = result.reply;
     await appendPhoneMessage(characterName, {
       from: PHONE_MESSAGE_FROM.CHARACTER,
       text: reply || "（对方没有回复任何内容）",
       ts: Date.now(),
       storyTime: getCurrentStoryTime(),
     });
+    markPhoneUpdatedToday(characterName);
+    await persistChatMetadata();
+    return { status: "replied", reply };
+  } catch (error) {
+    console.error("[剧情助手] 生成私信回复失败:", error);
+    notify("error", "私信回复生成失败，请稍后重试。");
+    return { status: "error" };
+  } finally {
+    setPhoneTypingIndicator(characterName, false); // 无论成功/失败，都把顶部标题换回联系人名字
+  }
+}
+
+
+// 状态表重算时检测到某角色 Busy 被正文 AI 标记 [REMOVE]（即"变闲"）后调用：自动补发一条该角色的回复。
+// 用专门的补聊模板（带 <Latest_plot>，内含"抄录/主动补聊"两分支），不复用合并判断的 5 分支模板；
+// 生成完之后把这一层记为"已判过闲"，避免用户紧接着在同一楼层继续私信时又触发一次合并判断。
+export async function handleCharacterBecameFree(characterName) {
+  try {
+    const reply = await generateFreedPhoneReply(characterName);
+    await appendPhoneMessage(characterName, {
+      from: PHONE_MESSAGE_FROM.CHARACTER,
+      text: reply || "（对方没有回复任何内容）",
+      ts: Date.now(),
+      storyTime: getCurrentStoryTime(),
+    });
+    const { idx: lastAiIdx } = getLastAiFloor();
+    const phoneState = getPhoneChatState();
+    if (lastAiIdx !== -1) phoneState.judgedFloor[characterName] = lastAiIdx;
     markPhoneUpdatedToday(characterName);
     await persistChatMetadata();
     notify("info", `「来自${characterName}」的新消息～`);
