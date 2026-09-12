@@ -399,8 +399,14 @@ export function groupPhoneInventoryByOwner(baseMap, pendingChanges, contactNames
 
 // ==== 手机私信系统：本地 IndexedDB（按"角色名::日期"存储，独立于地图图片库）====
 
+// 数据库连接单例：原来每次读写都重新 indexedDB.open() 一次，一次发送流程里会被连续调用好几遍，
+// 白白多付一轮连接开销。这里缓存同一个 open 请求的 Promise，后续调用直接复用已经建立好的连接；
+// 连接被意外关闭（如浏览器回收、其他标签页升级了数据库版本）时清空缓存，下次调用会自动重新打开。
+let _phoneDbPromise = null;
+
 export function openPhoneDB() {
-  return new Promise((resolve, reject) => {
+  if (_phoneDbPromise) return _phoneDbPromise;
+  _phoneDbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(PHONE_IDB_NAME, 3);
     req.onupgradeneeded = () => {
       const db = req.result;
@@ -417,9 +423,19 @@ export function openPhoneDB() {
         db.createObjectStore(PHONE_BACKGROUND_STORE);
       }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onclose = () => {
+        _phoneDbPromise = null;
+      };
+      resolve(db);
+    };
+    req.onerror = () => {
+      _phoneDbPromise = null;
+      reject(req.error);
+    };
   });
+  return _phoneDbPromise;
 }
 
 
@@ -847,14 +863,17 @@ export async function appendPhoneMessage(characterName, msg) {
 
 
 // 按日期分组返回某联系人的全部聊天记录：[{ dateKey, msgs }]，按时间升序。
+// 原来是 for...of + await 挨个日期串行读库，聊得越久（日期越多）这一步越慢；
+// 改成 Promise.all 并行发起所有读请求，日期数量不再线性拖慢这一步。
 export async function getAllPhoneMessages(characterName) {
   const dateIndex = await getPhoneDateIndex(characterName);
-  const result = [];
-  for (const dateKey of dateIndex) {
-    const msgs = await getPhoneMessagesForDate(characterName, dateKey);
-    if (msgs.length > 0) result.push({ dateKey, msgs });
-  }
-  return result;
+  const groups = await Promise.all(
+    dateIndex.map(async (dateKey) => ({
+      dateKey,
+      msgs: await getPhoneMessagesForDate(characterName, dateKey),
+    })),
+  );
+  return groups.filter((g) => g.msgs.length > 0);
 }
 
 

@@ -500,14 +500,15 @@ export function applyNumericMapUpdates(
 // 写的必然是当前人格名。这里在合并进状态表前统一转换回 {{user}}，让状态表内部数据保持
 // extractOtherPartyName / 背包页 PHONE_INVENTORY_SELF_KEY 等下游代码一直依赖的那个约定，
 // 不用在每处消费逻辑里都重新适配"真实人格名"。
-// 只在紧跟着 "·"（Inventory/Agreements 的 owner 分隔符）或 "→"（Relationships 的关系箭头）时才替换，
+// 只在紧跟着 "·"（Inventory/Agreements 的 owner 分隔符）、"→"（Relationships 的关系箭头）
+// 或 "&"（Agreements 多参与者之间的连接符，如 "{{user}}&角色A·关键词"）时才替换，
 // 避免误伤人格名恰好出现在物品名、Agreements 简介等自由文本内容里的情况。
 export function normalizeSelfNameToLiteral(text) {
   if (!text) return text;
   const personaName = getCtx().name1;
   if (!personaName || personaName === "{{user}}") return text;
   const escaped = personaName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = new RegExp(`(^|[；;])\\s*${escaped}(?=\\s*[·→])`, "g");
+  const pattern = new RegExp(`(^|[；;&])\\s*${escaped}(?=\\s*[·→&])`, "g");
   return text.replace(pattern, (_match, prefix) => `${prefix}{{user}}`);
 }
 
@@ -648,7 +649,8 @@ export function serializeStatusTableContent(state, busyMap) {
 
 
 // === Helper: 把某一层解析出的摘要字段合并进状态表（Relationships/Inventory/Agreements 按 key 增删改；Time/Location 不写入状态表；
-// 角色在 Relationships 里被 [REMOVE]（死亡/永久退场）时，联动清理 Inventory/Agreements 中"角色名·xxx"格式的相关条目）===
+// 角色在 Relationships 里被 [REMOVE]（死亡/永久退场）时，联动清理 Inventory 中"角色名·xxx"格式、
+// 以及 Agreements 中"参与者1&参与者2·xxx"格式（退场角色在参与者列表任意位置都算）的相关条目）===
 // warnings 为可选的数组，传入时会收集本次合并中发现的所有格式问题（不合规的部分会被跳过、不写入状态表，
 // 但不会阻断其余合法字段的正常合并）。不传 warnings 时行为与之前完全一致，仅静默跳过不合规内容。
 // removedOut 为可选的数组，传入时会把本层新death/离场（Relationships被标[REMOVE]）的角色名追加进去，
@@ -763,8 +765,13 @@ export function mergeFloorIntoStatusTable(state, floorFields, warnings, removedO
     Array.from(state.inventory.keys()).forEach((key) => {
       if (key.startsWith(prefix)) state.inventory.delete(key);
     });
+    // Agreements 的 key 是 "参与者1&参与者2·关键词" 多参与者格式（不像 Inventory 只有单一 owner），
+    // 不能再用简单的前缀匹配，要把 "·" 之前的参与者列表按 "&" 拆开，看退场角色是否在其中任意一个位置。
     Array.from(state.agreements.keys()).forEach((key) => {
-      if (key.startsWith(prefix)) state.agreements.delete(key);
+      const dotIdx = key.indexOf("·");
+      const ownerPart = dotIdx === -1 ? key : key.slice(0, dotIdx);
+      const participants = ownerPart.split("&").map((s) => s.trim());
+      if (participants.includes(name)) state.agreements.delete(key);
     });
     // 角色维度的附加字段也联动清理：key 就是角色名本身，精确匹配删除（不是前缀匹配）。
     Object.values(state.customChar).forEach((map) => {

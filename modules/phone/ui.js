@@ -1463,9 +1463,12 @@ export async function openPhoneChat(characterName) {
     sendBtn.disabled = true;
     input.disabled = true;
     try {
+      // 乐观更新：点发送的瞬间先把气泡画出来，不等 IndexedDB 落库和"是否调用AI"的判断跑完，
+      // 发送观感是即时的；真实记录写库后 renderPhoneChatMessages 会自动把占位气泡换成正式气泡。
+      appendOptimisticPhoneMessage(characterName, text);
       await sendPhoneMessageToCharacter(characterName, text);
       if (phoneUIState.activeChatCharacter === characterName) {
-        await renderPhoneChatMessages(characterName);
+        await renderPhoneChatMessages(characterName, { incremental: true });
       }
     } finally {
       sendBtn.disabled = false;
@@ -1534,12 +1537,14 @@ export async function sendPhoneStickerToCharacter(characterName, sticker) {
   if (sendBtn) sendBtn.disabled = true;
   if (input) input.disabled = true;
   try {
+    // 乐观更新：点表情包的瞬间先把图片气泡画出来，不等 IndexedDB 落库，跟文字消息的发送体验保持一致。
+    appendOptimisticPhoneMessage(characterName, `[图片:${sticker.name}]`, sticker);
     await sendPhoneMessageToCharacter(characterName, {
       text: `[图片:${sticker.name}]`,
       stickerId: sticker.id,
     });
     if (phoneUIState.activeChatCharacter === characterName) {
-      await renderPhoneChatMessages(characterName);
+      await renderPhoneChatMessages(characterName, { incremental: true });
     }
   } finally {
     if (sendBtn) sendBtn.disabled = false;
@@ -1549,66 +1554,162 @@ export async function sendPhoneStickerToCharacter(characterName, sticker) {
 
 
 // 重新渲染聊天页消息列表（发送/收到新消息后调用），并自动滚到底部。
-export async function renderPhoneChatMessages(characterName) {
+// 每个联系人聊天页当前已经画到 DOM 里的消息 id 集合 + 最后一组的 dateKey，用于增量渲染时
+// 判断"这条消息是不是已经画过了"“要不要另起一条日期分割线”。只在内存里存，切换/关闭聊天页不用管，
+// 下次打开该联系人时 renderPhoneChatMessages 走一次全量分支会自动重建这两份记录。
+const phoneRenderedMsgIds = new Map(); // characterName -> Set<messageId>
+const phoneRenderedLastDateKey = new Map(); // characterName -> dateKey
+
+// 单条消息气泡的 HTML，抽出来给"全量渲染"和"增量追加"共用，避免两处各写一份、改一处忘改另一处。
+function buildPhoneMessageRowHtml(m, stickerMap) {
+  const storyParts = splitStoryTime(m.storyTime);
+  const timeStr = storyParts.time || new Date(m.ts).toTimeString().slice(0, 5);
+  const side =
+    m.from === PHONE_MESSAGE_FROM.USER ? "pa-phone-msg-right" : "pa-phone-msg-left";
+  const sticker = m.stickerId ? stickerMap.get(m.stickerId) : null;
+  const bubbleClass = sticker
+    ? "pa-phone-msg-bubble pa-phone-msg-bubble-sticker"
+    : "pa-phone-msg-bubble";
+  const bubbleInner = sticker
+    ? `<img class="pa-phone-msg-sticker-img" src="${sticker.dataUrl}" alt="${escapeHtml(sticker.name)}" />`
+    : escapeHtml(m.text);
+  return `
+  <div class="pa-phone-msg-row ${side}" data-id="${escapeHtml(m.id)}" data-text="${escapeHtml(m.text)}">
+    <div class="pa-phone-msg-bubble-line">
+      <div class="${bubbleClass}">${bubbleInner}</div>
+      <button class="pa-phone-msg-more-btn" title="编辑/删除">⋯</button>
+    </div>
+    <div class="pa-phone-msg-actions pa-phone-hidden">
+      <button class="pa-phone-msg-edit-btn">编辑</button>
+      <button class="pa-phone-msg-delete-btn">删除</button>
+    </div>
+    <div class="pa-phone-msg-time">${timeStr}</div>
+  </div>`;
+}
+
+// 一组（某一天）消息的日期分割线 + 气泡列表 HTML，用于全量渲染。
+function buildPhoneDateGroupHtml(g, stickerMap) {
+  // 分割线：取这一组消息里第一条带 storyTime 的日期部分；这组里没有任何消息带 storyTime（旧数据）时，退回显示现实日期。
+  const firstStoryDate = g.msgs
+    .map((m) => splitStoryTime(m.storyTime).date)
+    .find((d) => d);
+  const dividerText = firstStoryDate || g.dateKey;
+  return `
+  <div class="pa-phone-date-divider">${escapeHtml(dividerText)}</div>
+  ${g.msgs.map((m) => buildPhoneMessageRowHtml(m, stickerMap)).join("")}`;
+}
+
+// opts.incremental=true 时：只把还没画过的新消息追加到已有 DOM 后面，不重新拉取/重建整段历史，
+// 发消息越多、聊天记录越长，相比"每次全量重建"的性能差距越明显。
+// 首次打开某联系人的聊天页（DOM 是"加载中..."占位）、或者内存里的增量记录丢失（比如页面被刷新过）时，
+// 会自动退回全量重建，保证内容始终正确，增量只是"有条件时的性能优化"，不是必须依赖的路径。
+export async function renderPhoneChatMessages(characterName, opts = {}) {
+  const { incremental = false } = opts;
   const list = document.getElementById("pa-phone-chat-messages");
   if (!list) return;
+
+  // 不管走哪条分支，先把之前"乐观更新"插入的占位气泡清掉——真实数据这就要落地了，
+  // 占位气泡完成了它的使命（发送瞬间先给个反馈），留着会跟真实记录重复显示。
+  list
+    .querySelectorAll('.pa-phone-msg-row[data-optimistic="1"]')
+    .forEach((el) => el.remove());
+
   const groups = await getAllPhoneMessages(characterName);
-  if (groups.length === 0) {
-    list.innerHTML = `<div class="pa-phone-empty">还没有聊天记录，发第一条消息试试吧～</div>`;
-    return;
-  }
   // 一次性把图片库读出来建个 id -> 记录的索引，气泡渲染时按 stickerId 查图；
   // 图片后来被删了查不到时，退化成显示 [图片:xxx] 文字标记，不会渲染出坏图标。
   const stickerMap = new Map(
     (await getPhoneStickerList()).map((s) => [s.id, s]),
   );
-  list.innerHTML = groups
-    .map((g) => {
-      // 分割线：取这一组消息里第一条带 storyTime 的日期部分；这组里没有任何消息带 storyTime（旧数据）时，退回显示现实日期。
-      const firstStoryDate = g.msgs
+
+  if (groups.length === 0) {
+    list.innerHTML = `<div class="pa-phone-empty">还没有聊天记录，发第一条消息试试吧～</div>`;
+    phoneRenderedMsgIds.set(characterName, new Set());
+    phoneRenderedLastDateKey.delete(characterName);
+    return;
+  }
+
+  const renderedIds = phoneRenderedMsgIds.get(characterName);
+  const canAppendIncrementally =
+    incremental && renderedIds && !list.querySelector(".pa-phone-empty");
+
+  if (!canAppendIncrementally) {
+    // 全量重建：首次打开这个联系人的聊天页，或者上面判断增量条件不满足时的兜底。
+    list.innerHTML = groups
+      .map((g) => buildPhoneDateGroupHtml(g, stickerMap))
+      .join("");
+    const idSet = new Set();
+    groups.forEach((g) => g.msgs.forEach((m) => idSet.add(m.id)));
+    phoneRenderedMsgIds.set(characterName, idSet);
+    phoneRenderedLastDateKey.set(characterName, groups[groups.length - 1].dateKey);
+    list.scrollTop = list.scrollHeight;
+    bindPhoneChatMessageActions(list, characterName);
+    return;
+  }
+
+  // 增量追加：只把 renderedIds 里还没有的消息拼成 HTML 追加到列表末尾。
+  let appendedHtml = "";
+  let lastDateKey = phoneRenderedLastDateKey.get(characterName);
+  groups.forEach((g) => {
+    const newMsgs = g.msgs.filter((m) => !renderedIds.has(m.id));
+    if (newMsgs.length === 0) return;
+    if (g.dateKey !== lastDateKey) {
+      const firstStoryDate = newMsgs
         .map((m) => splitStoryTime(m.storyTime).date)
         .find((d) => d);
-      const dividerText = firstStoryDate || g.dateKey;
-      return `
-      <div class="pa-phone-date-divider">${escapeHtml(dividerText)}</div>
-      ${g.msgs
-        .map((m) => {
-          const storyParts = splitStoryTime(m.storyTime);
-          const timeStr =
-            storyParts.time || new Date(m.ts).toTimeString().slice(0, 5);
-          const side =
-            m.from === PHONE_MESSAGE_FROM.USER ? "pa-phone-msg-right" : "pa-phone-msg-left";
-          const sticker = m.stickerId ? stickerMap.get(m.stickerId) : null;
-          const bubbleClass = sticker
-            ? "pa-phone-msg-bubble pa-phone-msg-bubble-sticker"
-            : "pa-phone-msg-bubble";
-          const bubbleInner = sticker
-            ? `<img class="pa-phone-msg-sticker-img" src="${sticker.dataUrl}" alt="${escapeHtml(sticker.name)}" />`
-            : escapeHtml(m.text);
-          return `
-          <div class="pa-phone-msg-row ${side}" data-id="${escapeHtml(m.id)}" data-text="${escapeHtml(m.text)}">
-            <div class="pa-phone-msg-bubble-line">
-              <div class="${bubbleClass}">${bubbleInner}</div>
-              <button class="pa-phone-msg-more-btn" title="编辑/删除">⋯</button>
-            </div>
-            <div class="pa-phone-msg-actions pa-phone-hidden">
-              <button class="pa-phone-msg-edit-btn">编辑</button>
-              <button class="pa-phone-msg-delete-btn">删除</button>
-            </div>
-            <div class="pa-phone-msg-time">${timeStr}</div>
-          </div>`;
-        })
-        .join("")}`;
-    })
-    .join("");
-  list.scrollTop = list.scrollHeight;
+      appendedHtml += `<div class="pa-phone-date-divider">${escapeHtml(firstStoryDate || g.dateKey)}</div>`;
+      lastDateKey = g.dateKey;
+    }
+    newMsgs.forEach((m) => {
+      appendedHtml += buildPhoneMessageRowHtml(m, stickerMap);
+      renderedIds.add(m.id);
+    });
+  });
+
+  if (appendedHtml) {
+    list.insertAdjacentHTML("beforeend", appendedHtml);
+    phoneRenderedLastDateKey.set(characterName, lastDateKey);
+    list.scrollTop = list.scrollHeight;
+  }
+  // 已绑定过的行会被 dataset.bound 标记跳过，这里只是把新追加的几行补上事件，不会重复绑定整份列表。
   bindPhoneChatMessageActions(list, characterName);
 }
 
+// 乐观更新：用户点"发送"的瞬间先把这条消息的气泡画出来，不等 IndexedDB 落库、也不等
+// "要不要调用 AI"的判断跑完。真实记录写库后，renderPhoneChatMessages 开头会自动清掉这个占位气泡，
+// 换上带真实 id、可编辑/删除的正式气泡，用户不会感知到这个替换过程。
+// sticker 参数可选：不传就是普通文字气泡；传了就渲染成图片气泡（发图片时用），跟正式渲染的
+// pa-phone-msg-bubble-sticker 样式保持一致，避免占位气泡和正式气泡替换瞬间样式跳变。
+function appendOptimisticPhoneMessage(characterName, text, sticker = null) {
+  const list = document.getElementById("pa-phone-chat-messages");
+  if (!list) return;
+  const emptyHint = list.querySelector(".pa-phone-empty");
+  if (emptyHint) emptyHint.remove();
+  const timeStr = new Date().toTimeString().slice(0, 5);
+  const bubbleClass = sticker
+    ? "pa-phone-msg-bubble pa-phone-msg-bubble-sticker"
+    : "pa-phone-msg-bubble";
+  const bubbleInner = sticker
+    ? `<img class="pa-phone-msg-sticker-img" src="${sticker.dataUrl}" alt="${escapeHtml(sticker.name)}" />`
+    : escapeHtml(text);
+  const html = `
+  <div class="pa-phone-msg-row pa-phone-msg-right" data-optimistic="1" data-text="${escapeHtml(text)}">
+    <div class="pa-phone-msg-bubble-line">
+      <div class="${bubbleClass}">${bubbleInner}</div>
+    </div>
+    <div class="pa-phone-msg-time">${timeStr}</div>
+  </div>`;
+  list.insertAdjacentHTML("beforeend", html);
+  list.scrollTop = list.scrollHeight;
+}
 
-// 给每条消息挂"···"展开/收起、编辑、删除的交互；每次 renderPhoneChatMessages 重绘后重新绑定一遍。
+
+// 给每条消息挂"···"展开/收起、编辑、删除的交互。
+// 全量渲染时列表是全新 DOM，每行都要绑一遍；增量渲染时列表里混着"早就绑过"的旧行和"刚追加"的新行，
+// 用 dataset.bound 标记跳过已绑定的行，避免同一行被重复 addEventListener（否则点一下会触发好几次）。
 export function bindPhoneChatMessageActions(list, characterName) {
   list.querySelectorAll(".pa-phone-msg-row").forEach((row) => {
+    if (row.dataset.bound === "1") return;
+    row.dataset.bound = "1";
     const actions = row.querySelector(".pa-phone-msg-actions");
 
     row
@@ -1686,11 +1787,13 @@ export function bindPhoneChatMessageActions(list, characterName) {
 
 // 角色"变闲"自动补发回复后，如果手机聊天页当前正好开着这个联系人，实时刷新一下。
 // 返回渲染的 Promise，方便调用方 await，确保消息真正上屏后再继续后续流程（避免和其他 DOM 更新抢跑）。
+// 所有调用点都是"刚追加了一条新消息，把它显示出来"这一种场景，走增量渲染即可，
+// 不需要每次都把这个联系人从第一天到现在的历史重新拉一遍、整个列表重新拼一遍 HTML。
 export function refreshPhoneChatViewIfOpen(characterName) {
   const overlay = document.getElementById("pa-phone-modal-overlay");
   if (!overlay || !overlay.open) return Promise.resolve();
   if (phoneUIState.activeChatCharacter !== characterName) return Promise.resolve();
-  return renderPhoneChatMessages(characterName);
+  return renderPhoneChatMessages(characterName, { incremental: true });
 }
 
 
